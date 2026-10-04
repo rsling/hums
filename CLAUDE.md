@@ -1,8 +1,26 @@
-# CLAUDE.md — Hums (The Humane MIDI Sequencer) 
+# CLAUDE.md — MIDI Sequencer
 
-**This file is authoritative for behaviour and architecture; `docs/SCHEMA.md` is authoritative for the document model.** Read both before touching anything under `src/`. If they disagree, stop and ask.
+Working title: none yet. Call it "the sequencer" until Roland picks a name.
 
-Revised 3 Oct 2026 after an external design review; quantisation contract, Transform slot and live-thru non-goal tightened the same day; later the same day: mute/solo and transport-loop command paths, the std-only render core, `EditContext` as a gesture object, retrigger at the step-clip loop point, chase tables, recorded input converted to ticks on the engine.
+**Authority.** This file and the behaviour docs in `docs/` (`ARCHITECTURE.md`, `RENDERING.md`, `EDITING.md`, `GUARDRAILS.md`) are authoritative for behaviour and architecture; `docs/SCHEMA.md` is authoritative for the document model; `docs/DECISIONS.md` is authoritative for the status of every default and open question. If any of them disagree, stop and ask.
+
+**Defaults.** A **[Dn]** tag marks a decision taken by proposal that still needs Roland's explicit yes. Its status lives only in `docs/DECISIONS.md`. A pending default is binding until he answers; never re-ask one that is decided; when he answers, update its status there in the same session.
+
+Revised 3 Oct 2026 after an external design review; quantisation contract, Transform slot and live-thru non-goal tightened the same day; later the same day: mute/solo and transport-loop command paths, the std-only render core, `EditContext` as a gesture object, retrigger at the step-clip loop point, chase tables, recorded input converted to ticks on the engine. Split 4 Oct 2026 into this file plus path-scoped docs (`.claude/rules/` loads them when matching files are touched); the `(default — confirm)` markers became [Dn] tags tracked in `docs/DECISIONS.md`.
+
+## Where things live
+
+| doc | what | read it when |
+|---|---|---|
+| `docs/SCHEMA.md` | ValueTree schema, invariants 1–12, load/save, canonical form, migrations | before touching `src/model/`, `src/io/`, or any fixture (auto-loaded there) |
+| `docs/EDITING.md` | refcount gate, make-unique, split, resize, conversions, quantisation, recording, knobs | before touching `src/model/` or `src/views/` (auto-loaded) |
+| `docs/RENDERING.md` | pipeline, note windows, equal-tick order, step clips, same-pitch, automation merge, chase, SMF export/import | before touching `src/render/`, SMF I/O, render tests (auto-loaded) |
+| `docs/ARCHITECTURE.md` | threads, snapshot lifetime, MIDI input, timing, clock out, session/transport state | before touching `src/engine/`, `TransportFacade.h`, `tools/miditiming` (auto-loaded) |
+| `docs/GUARDRAILS.md` | full contract of the five guardrails, golden case list, manual checks, external review | before touching `tools/`, `tests/guardrails/`, golden files (auto-loaded) |
+| `docs/MILESTONES.md` | milestones 0–7 with demo and pass criteria | when starting, planning or closing a milestone |
+| `docs/DECISIONS.md` | status of every [Dn] default and open question | when a task depends on one; when Roland answers one |
+
+When a task spans areas, read every doc whose area it touches, not only the ones auto-loaded so far.
 
 ## What this is
 
@@ -51,8 +69,15 @@ Fill in as the build system lands. Expected shape:
 CMakeLists.txt
 CLAUDE.md
 TOOLCHAIN.md           pinned versions, written at milestone 0
+.claude/rules/         path-scoped pointers that load the docs below when matching files are touched
 docs/
   SCHEMA.md            ValueTree schema (authoritative)
+  EDITING.md           editing semantics
+  RENDERING.md         rendering rules, SMF export/import
+  ARCHITECTURE.md      threads, timing, transport and session state
+  GUARDRAILS.md        guardrail contract, golden case list
+  MILESTONES.md        milestone plan
+  DECISIONS.md         status of defaults and open questions
   MANUAL_CHECKS.md     GUI interaction checklist, run at milestone boundaries
 libs/
   JUCE/                submodule, pinned tag
@@ -134,66 +159,38 @@ Use these words exactly, in code, comments, tests, and conversation.
 - **Step Sequencer** — 960 / SQ-10 workflow over a single melodic Lane: one knob per column for pitch, extra rows for per-cell CC values, on/off, skip, reset. Any other grid shape is shown read-only. Needn't look vintage, must *work* vintage.
 - **Automation Recorder** — play the arrangement, turn Track knobs, record the CC moves into an AutomationLane placement from punch-in to punch-out.
 
-## Editing semantics
+## Architecture
 
-- Clips are **shared by reference** by default. Refcount gate on every mutation of a clip with refcount > 1. Policy comes from a persistent toolbar toggle (`UiState.sharedEditPolicy`), not a modal per edit. Clips with refcount > 1 show a badge (`×3`) in every view. A clip with refcount 1 is simply edited; undo is the safety net.
-- **Make unique** acts on the edit context. The view creates one `EditContext` at gesture start, right after `beginNewTransaction`, and passes it to every clip-mutating command of the gesture. The first command that mutates a clip with refcount > 1 under `makeUnique` clones the clip (new UUIDs for the clip and every descendant with an id), redirects exactly the references in the context to the clone, records the clone's id in the context, then applies; every later command in the gesture finds that id and targets the clone. The context dies with the gesture; handing one to a later gesture is a programming error and asserts. A multi-selection of references gets one shared clone. Pool-level editing with no reference selected is "update all" by definition. The original clip stays in the pool (refcount may drop to 0; "remove unused clips" cleans up).
-- **Split** defaults to splitting the *placement*: two placements, same clip, the second with an offset. The pool is untouched and playback is unchanged, held notes included. "Crop to new clip" is the explicit command that creates a new clip from a placement's window: notes starting inside the window are kept with their full length, notes starting before it are dropped, events are rebased; `loopLength` = window length.
-- **Resize** repeats or trims the loop. No time-stretch exists.
-- **Loop-length changes** (step count, skip, reset, step length, event-clip loop length) renormalise every referencing placement's offset in the same transaction. A change that would leave no audible column is rejected. How a `stepCount` change treats cells, `skipMask` and `resetAt` is in `docs/SCHEMA.md → Grid`.
-- **StepClip → EventClip** is an explicit, one-way conversion, subject to the gate. **EventClip → StepClip** is an explicit lossy import (quantise to the grid, one pitch per cell per lane) with a preview of what is dropped. Conversion creates a new clip; under "update all" every reference of the old clip is redirected to it, under "make unique" only the context's references. The old clip stays in the pool.
-- StepClips are editable only in the step sequencer and drum views; EventClips only in the piano roll. Everything created in the step sequencer and drum views is a StepClip.
-- **StepClip playback:** off cells are rests (time passes, their CC values are still sent); skipped columns take no time; `resetAt` is the loop end. Cells past `resetAt` and in skipped columns keep their data.
-- **Quantisation:** `Clip.quantise` on an EventClip quantises note onsets at playback and export without touching the stored ticks; `applyQuantise` makes it permanent (gate applies). Both are shown in the piano roll and arrangement. The grid is measured from clip tick 0, never from the arrangement; the exact candidate-line and wrap rule is in `docs/SCHEMA.md → ClipPool / Clip`. It is applied once, when the ClipTemplate is built, and every later rendering rule sees only the quantised onset.
-- **Session recording** produces a Take: one EventClip per source track that emitted output, captured after session selection, automation merge, mute/solo and live knobs, before physical-port availability. Takes land on new take tracks that copy the source's Player, channel and name, placed at the record start. Clock and transport messages are not part of a take. The take's own playback is never captured.
-- **Recording in general** (details written before milestone 6): takes are buffered on the message thread and committed at record stop as one undo transaction, never per incoming event; held notes get note-offs at the stop tick; looped recording overdubs into the same take; a knob recorded into a StepClip stores, per column, the knob's value at that column's start; a knob move always reaches hardware immediately, recording or not; unmatched note-offs are dropped and reported.
-- **Knobs:** `Track.Knobs` assigns CC numbers. In clip views a knob move records into the currently playing clip; in the Automation Recorder it records into an AutomationLane placement. With nothing playing a knob only controls hardware.
-- **PadMap** is input configuration under `Routing`, undoable. Remapping a pad never rewrites clips. An incoming note on the pad Performer matches a pad by `inputPitch`.
+### Layers and dependencies
+
+Five source layers, and a std-only core inside `render/`:
+
+| layer | may include |
+|---|---|
+| `model/` | `model/`, JUCE, std |
+| `io/` | `io/`, `model/`, `render/`, JUCE, std |
+| `render/` | `render/`, `model/`, JUCE, std — except the **render core** (`render/snapshot/`, `TempoMap`, `Kernel`, `NoteTracker`, headers and sources alike), which includes only std and other render-core files |
+| `engine/` | `engine/`, the render core, JUCE, std — never `model/`, never any other `render/` file |
+| `views/` | `views/`, `model/`, `app/TransportFacade.h`, JUCE, std |
+| `app/` | anything |
+
+The render core is std-only so that the engine's dependency on it is transitively clean by construction: `check_layers.py` checks the core's own includes, not paths through them. The core therefore never reads the document itself — `SnapshotBuilder` turns the Timeline into TempoMap data and clips into templates and chase tables on the message thread, and `io/` does the same for export.
+
+`TransportFacade.h` must not transitively include any other `engine/` header; it exposes an interface class and plain types. Include graphs cannot prove thread behaviour, so the engine additionally asserts in debug builds that it is never called on the message thread with a `ValueTree` in scope — in practice: the engine simply cannot name the type.
+
+Thread model, snapshot handoff, timing and transport behaviour: `docs/ARCHITECTURE.md`. Three things never travel in the Snapshot — mute/solo, the transport loop, live knob values; they reach the engine as live commands.
 
 ## Guardrails
 
-Roland is the only maintainer and will not read every line. Structure therefore has to be enforced by the test run, not by review. These checks exist so that drift fails loudly while nobody is watching. They land in milestone 1, before there is anything to protect, and run on every `ctest`. Every script has a fixture in `tools/fixtures/` that must make it fail; that negative run is itself a test.
+Roland is the only maintainer and will not read every line, so structure is enforced by the test run. Full contract in `docs/GUARDRAILS.md`. In short:
 
-### 1. Schema names live only in `Ids.h`
+1. **Schema names live only in `Ids.h`** — `tools/check_identifiers.py`; exceptions are listed explicitly in the script, never wildcarded.
+2. **Layer rules** — `tools/check_layers.py` enforces the table above, including the std-only render core and `TransportFacade.h`.
+3. **Invariants as property tests** — random valid documents × random valid and invalid commands; Validator, undo/redo XML identity, canonical save→load→save byte identity. Seeds printed; failures shrunk into named regression tests.
+4. **Render golden files** — one fixture + hand-reasoned expected event list per rendering rule, in emission order. Regenerated only via the `regenerate_golden` target, and the diff is read before committing.
+5. **Loading is a wall** — every malformed, too-new or invalid fixture is refused with the current document and source file untouched.
 
-`tools/check_identifiers.py` parses `src/model/Ids.h`, collects every string literal used to construct a `juce::Identifier`, and scans the rest of `src/` for those literals **inside Identifier construction and property/child APIs** (`juce::Identifier (`, `getProperty (`, `setProperty (`, `getChildWithName (`, `hasType (`, `ValueTree (` and friends). A bare word like `name` in a comment or a UI label is not a hit. Any hit outside `Ids.h` fails the check with `file:line`.
-
-Allowed exceptions, and only these: `src/io/Migrations.cpp`, which by definition must name properties that no longer exist, and `tests/io/fixtures/`. Both are listed explicitly in the script — not matched by a wildcard. View-state identifiers under `UiState` are not an exception; they live in `Ids.h` too.
-
-### 2. The layer rules are checked, not just documented
-
-`tools/check_layers.py` walks the `#include` lines under `src/`, resolves quoted relative paths, and enforces the table under *Layers and dependencies*, including the render-core std-only rule (`render/snapshot/`, `TempoMap`, `Kernel`, `NoteTracker` include only std and each other, so the engine's dependency on them is transitively clean without a transitive check) and the transitive check that `app/TransportFacade.h` pulls in no other `engine/` header. `views/` including any other `engine/` header, `engine/` including anything from `model/` or from `render/` outside the core, and a render-core file including JUCE, are the failures this check exists for.
-
-### 3. Invariants as property tests, not examples
-
-`tests/guardrails/` holds a small generator that builds random *valid* documents (a few tracks, clips of both kinds, placements, lanes, slots, automation lanes) and applies random sequences of commands from `model/commands/` — valid ones *and* deliberately invalid ones (overlapping placements, zero-length loops, notes into an automation clip). After every command it asserts all twelve invariants from `docs/SCHEMA.md` via the Validator, plus:
-
-- a valid command fully applies; an invalid one leaves the undoable subtree XML-identical and the undo history unchanged;
-- undo restores the undoable subtree to an XML-identical state, and redo returns to the post-command state (`UiState` excluded from the comparison);
-- canonical save → load → canonical save is byte-identical;
-- clip ids referenced before a command still reference a clip of the same `kind` after it, or the command was a conversion.
-
-Seeds are printed on failure and reproducible. When the generator finds a failure, shrink it to a minimal document and add that as a named regression test.
-
-### 4. Render golden files
-
-Every rendering rule above gets a pair in `tests/render/golden/`: a fixture project (XML, real UUIDs) and the expected event list, plain text, one event per line, `tick track channel type a b [data]`, **in emission order, not re-sorted**, SysEx with the full payload. The render test runs Kernel + NoteTracker over the fixture's full range and diffs against the file. Expected files are reasoned out by hand from the rules, never produced by the renderer under test on first creation.
-
-Required cases, at minimum: skipped column; `resetAt` shorter than `stepCount`; `gate > 1.0` into a different pitch; `gate > 1.0` into the same pitch (merge); gate reaching into a skipped column; gate across the loop point into a different pitch, and into the same pitch (retrigger, not merge); `fixedPitch` lane ignoring cell pitch; off-cell CC values; placement `offset`; placement shorter and longer than the clip loop; two placements of one clip restarting (offset 0) and phase-continuous (merged); split during a held note; same-pitch overlap on one track and across two tracks on one destination; bank-select → program change → note at one tick; note-off and note-on of one pitch at one tick; AutomationLane overriding, passing through, and restoring the underlying value at exit; a lane whose first event comes after its placement start; two lanes overriding the same CC; event-clip note crossing `loopLength`; content past `loopLength` silent; `quantise` at `1/8` and `1/8T`; `quantise` moving an onset across the loop point (wraps to 0) in a loop that is not a multiple of the grid; two notes of one pitch quantised onto one tick; transport loop wrap with a held note; chase at a seek target: value found in the current placement, in an earlier iteration of it, in an earlier placement, and no value at all; export range cutting a note; a track with no Player rendering normally.
-
-Golden files are regenerated only through the `regenerate_golden` target, and the diff is read before it is committed. A silently regenerated golden file is worse than no test — it turns a behaviour change into a green build.
-
-### 5. Loading is a wall
-
-`tests/io/` loads every fixture in `fixtures/` through the real load path: valid files install; files with a higher `schemaVersion`, malformed XML, invariant violations, and a fixture whose migration throws are all refused with the current document and the source file untouched. Save failure (read-only target) leaves the previous file intact.
-
-### Manual checks
-
-`docs/MANUAL_CHECKS.md` is a short script run at each milestone boundary: selection, dragging, undo across tabs, focus and keyboard shortcuts, tab switching during playback, device unplug/replug during playback, sleep/wake, close with unsaved changes, recovery-file offer. Not automated; not optional.
-
-### External review
-
-Optional, at milestone boundaries only, never per commit. Give the reviewer a read-only checkout, `docs/SCHEMA.md`, this file, and a fixed question list; do not tell it what the code is supposed to do beyond those documents, and never say the code is believed correct — a reviewer primed that way stops finding things. Ask for a ranked, capped list. Findings that matter become guardrail tests; the rest is discarded, not archived.
+Every script ships a fixture that must fail it. Never weaken, skip or `// NOLINT` a guardrail to make a feature land (rule 12). Manual checks: `docs/MANUAL_CHECKS.md`, at milestone boundaries.
 
 ## Conventions
 
@@ -206,5 +203,7 @@ Optional, at milestone boundaries only, never per commit. Give the reviewer a re
 - `juce::` prefix explicit. No `using namespace juce` in headers.
 - Prefer `std::` types; JUCE containers only at JUCE API boundaries. Nothing from JUCE in `render/snapshot/`.
 - Tests: one file per model type, one per IO format, one per rendering rule.
-- When unsure about a JUCE API, read libs/JUCE/modules; never guess.
-- If you want to deviate from SCHEMA.md or CLAUDE.md, stop and ask; if agreed, edit the doc in the same commit.
+
+## Non-goals (for now)
+
+Audio, plugins, MIDI 2.0 / MPE, notation, external clock sync (clock master only), tempo-change UI (the Timeline stores a map; v1 UI edits a single tempo), synth editor panels and a SysEx patch librarian (a later idea — the design must not prevent it: events are generic, SysEx is an Event kind), internal modulators such as an arpeggiator or chord player (later idea — reserved as a per-track Transform; constraints in `docs/RENDERING.md → Transform slot`), live MIDI thru and input effects — Performer → Player monitoring, input quantisation, live arpeggiation of what is being played (the document never sees these; the engine has no input → output path, only input → recording), Linux, Windows, scripting.

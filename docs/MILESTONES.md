@@ -1,0 +1,14 @@
+# Milestones
+
+Authoritative, together with `CLAUDE.md` (rules, glossary, layers) and `docs/SCHEMA.md` (document model). Items tagged **[Dn]** are defaults whose status is in `docs/DECISIONS.md`.
+
+Each milestone names a demonstration and its pass criterion. Do not start UI for a later milestone early.
+
+0. **Timing spike and toolchain.** Pin JUCE, Catch2, Xcode, CMake, deployment target. Build `tools/miditiming`. Demo: a loopback report on Roland's interface. Pass: targets under `docs/ARCHITECTURE.md → Timing` [D1] met or renegotiated with numbers in hand. Decides timer + send path for the engine.
+1. **Validated model.** Schema ids, typed wrappers, commands with edit context, Validator, canonical XML writer, atomic save, migrations skeleton, guardrails 1, 2, 3, 5 with negative fixtures. Demo: `ctest` green, property generator through 10,000 seeds. Pass: all guardrails present and known to fail on their fixtures.
+2. **Render kernel and interchange.** ClipTemplate, Snapshot, Kernel, NoteTracker, TempoMap; guardrail 4 with the full case list; SMF import/export with the policy table. Demo: import a .mid, export it, show the musical diff is empty and the loss report lists what was dropped. Pass: all goldens green.
+3. **First musical slice.** App shell, Routing tab, engine (transport, snapshot handoff, FIFOs, clock out), minimal arrangement display. Demo: open the Berlin fixture or an imported file, play it to hardware, stop, seek, loop, unplug and re-plug the interface, save, quit, reopen. Pass: no stuck notes, timing within targets, recovery file works.
+4. **Step sequencer and drum view** (first editor **[D8]**), with enough arrangement to place a clip per track and press play. Demo: build the 5-step bass against 16-step drums from scratch, free-running, knob values recorded into cells. Pass: everything in SCHEMA's example reproducible by hand.
+5. **Arrangement and session.** Placements (move, resize, split, crop), slots and scenes, launch rules, refcount gate with badge and make-unique, session recording to take tracks. Demo: jam a scene, record the take, play the take back against the original. Pass: take replays each destination identically.
+6. **Piano roll and recording.** EventClip editing, recording from a Performer, quantise and `applyQuantise`, both conversions with loss preview. Demo: record a line, quantise it non-destructively, convert a step clip and edit it.
+7. **AutomationLanes and Automation Recorder.** Ownership, exit restoration, lane priority, punch-in/out recording. Demo: record a filter sweep over a looping clip, seek into and out of it, export and verify the CC stream.
