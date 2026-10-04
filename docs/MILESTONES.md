@@ -2,7 +2,7 @@
 
 Authoritative, together with `CLAUDE.md` (rules, glossary, layers) and `docs/SCHEMA.md` (document model). Items tagged **[Dn]** are defaults whose status is in `docs/DECISIONS.md`.
 
-Each milestone names a demonstration and its pass criterion. Do not start UI for a later milestone early.
+Each milestone names a demonstration and its pass criterion. Do not start UI for a later milestone early. Each milestone lives on its own branch; see `CLAUDE.md → Git and done`.
 
 0. **Timing spike and toolchain.** Pin JUCE, Catch2, Xcode, CMake, deployment target. Build `tools/miditiming` (send-and-measure mode, and a listen mode for milestone 3). Demo: reports from the software loopback and from at least two hardware interfaces at the three traffic densities, quiet and under tester-produced load (`docs/ARCHITECTURE.md → Timing`). Pass: targets under `docs/ARCHITECTURE.md → Timing` [D1] met or renegotiated with numbers in hand. Decides timer + send path for the engine.
 1. **Validated model.** Schema ids, typed wrappers, commands with edit context, Validator, canonical XML writer, atomic save, migrations skeleton, guardrails 1, 2, 3, 5 with negative fixtures. Demo: `ctest` green, property generator through 10,000 seeds. Pass: all guardrails present and known to fail on their fixtures.

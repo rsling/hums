@@ -65,6 +65,12 @@ Fill in as the build system lands. Expected shape:
 - Timing check against the app (M3+): `build/tools/miditiming --listen --in "<port>" --reference <export.mid>`
 - Run: `open build/Hums_artefacts/Debug/Hums.app`
 
+## Git and done
+
+- One branch per milestone (`m0-timing`, `m1-model`, …), merged into `main` when the milestone's pass criteria in `docs/MILESTONES.md` are met. One commit per task. Never force-push, never rewrite pushed history.
+- Roland reviews through the tests: `git log -p -- tests/` shows every change to the contract. A commit that changes behaviour without touching `tests/` is suspect. A commit that changes a golden file or a guardrail fixture needs its reason in the message.
+- Claude may not say a task is "done" until it has pasted the final `ctest` summary line (e.g. `100% tests passed, 0 tests failed out of N`) from a run against that commit. If any test fails, Claude pastes the failure output instead.
+
 ## Repository layout
 
 ```
