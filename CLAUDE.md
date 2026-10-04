@@ -1,10 +1,8 @@
-# CLAUDE.md — MIDI Sequencer
-
-Working title: none yet. Call it "the sequencer" until Roland picks a name.
+# CLAUDE.md — Hums (The Humane MIDI Sequencer) 
 
 **This file is authoritative for behaviour and architecture; `docs/SCHEMA.md` is authoritative for the document model.** Read both before touching anything under `src/`. If they disagree, stop and ask.
 
-Revised 3 Oct 2026 after an external design review; quantisation contract, Transform slot and live-thru non-goal tightened the same day; later the same day: mute/solo and transport-loop command paths, the std-only render core, `EditContext` as a gesture object, retrigger at the step-clip loop point, chase tables, recorded input converted to ticks on the engine. Decisions marked **(default — confirm)** were taken by proposal and still need Roland's explicit yes; treat them as binding until he says otherwise.
+Revised 3 Oct 2026 after an external design review; quantisation contract, Transform slot and live-thru non-goal tightened the same day; later the same day: mute/solo and transport-loop command paths, the std-only render core, `EditContext` as a gesture object, retrigger at the step-clip loop point, chase tables, recorded input converted to ticks on the engine.
 
 ## What this is
 
@@ -136,59 +134,6 @@ Use these words exactly, in code, comments, tests, and conversation.
 - **Step Sequencer** — 960 / SQ-10 workflow over a single melodic Lane: one knob per column for pitch, extra rows for per-cell CC values, on/off, skip, reset. Any other grid shape is shown read-only. Needn't look vintage, must *work* vintage.
 - **Automation Recorder** — play the arrangement, turn Track knobs, record the CC moves into an AutomationLane placement from punch-in to punch-out.
 
-## Architecture
-
-### Layers and dependencies
-
-Five source layers, and a std-only core inside `render/`:
-
-| layer | may include |
-|---|---|
-| `model/` | `model/`, JUCE, std |
-| `io/` | `io/`, `model/`, `render/`, JUCE, std |
-| `render/` | `render/`, `model/`, JUCE, std — except the **render core** (`render/snapshot/`, `TempoMap`, `Kernel`, `NoteTracker`, headers and sources alike), which includes only std and other render-core files |
-| `engine/` | `engine/`, the render core, JUCE, std — never `model/`, never any other `render/` file |
-| `views/` | `views/`, `model/`, `app/TransportFacade.h`, JUCE, std |
-| `app/` | anything |
-
-The render core is std-only so that the engine's dependency on it is transitively clean by construction: `check_layers.py` checks the core's own includes, not paths through them. The core therefore never reads the document itself — `SnapshotBuilder` turns the Timeline into TempoMap data and clips into templates and chase tables on the message thread, and `io/` does the same for export.
-
-`TransportFacade.h` must not transitively include any other `engine/` header; it exposes an interface class and plain types. Include graphs cannot prove thread behaviour, so the engine additionally asserts in debug builds that it is never called on the message thread with a `ValueTree` in scope — in practice: the engine simply cannot name the type.
-
-### Threads
-
-**Message thread** owns the ValueTree. All edits, all undo, all file I/O happen here. After any change to the undoable subtree, a rebuild produces a new Snapshot and hands it to the engine: debounced at 30 ms, with a hard ceiling of 100 ms between document change and published snapshot during continuous edits, so a knob drag never starves playback of updates. Changes under `UiState` never trigger a rebuild. Three things bypass the Snapshot and go to the engine as commands the moment they change: `Track.mute` and `Track.solo` (an `app/` ValueTree listener forwards every change, including those made by undo and redo, as a live command keyed by track id; the Snapshot carries no mute/solo state), the transport loop (`UiState.loopStart/loopEnd/loopEnabled`, forwarded by the settings path), and live knob values. Export reads mute/solo from the document and passes the audible-track set to the Kernel exactly as the engine passes its live state. Rendering ClipTemplates for large event clips may move to a background thread later; the ValueTree stays on the message thread regardless.
-
-**Engine thread** runs the clock, drains MIDI in, runs the Kernel per look-ahead window, schedules MIDI out, sends MIDI clock. It sees:
-- the current Snapshot as a raw pointer plus generation number, received through the command queue;
-- a lock-free SPSC command queue from the message thread (transport including loop points, slot launch/stop with generation, mute/solo keyed by track id, live knob values, snapshot publish);
-- one lock-free SPSC FIFO per MIDI input, filled on CoreMIDI's thread, drained here;
-- an SPSC event FIFO back to the message thread: recorded input events (already converted to ticks), playhead, snapshot acknowledgements, overflow counters.
-
-**Rules on the engine thread:** no allocation, no deallocation, no locks, no ValueTree, no logging, no JUCE message-thread APIs. `std::atomic<std::shared_ptr>` is not used; its lock-freedom is implementation-defined and in libc++ it isn't.
-
-**Snapshot lifetime.** The message thread owns every Snapshot. It publishes generation *n* through the command queue; the engine switches at the next window boundary and acknowledges *n* through the event FIFO; the message thread retires every snapshot older than the last acknowledged one. On shutdown the engine is stopped and joined before any snapshot is released. A snapshot switch does not interrupt sounding notes: the NoteTracker holds pending note-offs by physical destination, independent of which snapshot produced the note-on. Events already handed to the output for the current window are committed and never recalled.
-
-**MIDI input** arrives on CoreMIDI's thread via `MidiInputCallback`. Each input pushes into its own FIFO with the host timestamp; nothing else happens there. SysEx payloads go into a per-input byte ring (64 KB); a message over 4 KB is dropped and counted. FIFO overflow drops the event, increments a counter visible on the message thread, and marks any running take incomplete. Capacities are fixed at engine start; nothing resizes while producers run.
-
-### Timing
-
-Milestone 0 builds `tools/miditiming` and measures, on Roland's actual interface and Mac, with a loopback cable: scheduler wake-up jitter, output lateness relative to intended time, drift over five minutes, and drop count, under dense sixteenths on four tracks with CC traffic, with the GUI being dragged and a save in progress. Reported as median, p99, max. **Targets (default — confirm):** p99 lateness ≤ 1 ms, max ≤ 2 ms, zero drops. If `HighResolutionTimer` + `MidiOutput::sendMessageNow` can't hit them, the engine sends CoreMIDI packets with future host-time timestamps through a small shim in `engine/`. `MidiOutput::sendBlockOfMessages` is not assumed to schedule anything; whatever is used is measured on the pinned JUCE.
-
-`TempoMap` converts host monotonic time ↔ ticks through the Timeline. The engine's clock is anchored by a (host time, tick) pair set at play start and at every seek; a tempo change during playback re-anchors at the current tick, so the tick count never jumps. Recorded input timestamps are converted to ticks once, on the engine thread as the input FIFOs are drained, against the current anchor, rounded to the nearest tick — a tempo edit in the middle of a take therefore puts each event where the playhead was when it arrived. The event FIFO carries ticks, never host times. The clock emits `0xF8` every 40 ticks.
-
-**MIDI clock out** per physical port that has any `sendClock` Player: clock pulses run continuously while the app has the port, so synth LFOs and arpeggiators stay locked while stopped **(default — confirm)**; Start on play from 0, Continue on play from elsewhere (preceded by Song Position Pointer), Stop on stop. The app is clock master only; external sync is a non-goal.
-
-### Session and transport state
-
-- One active source per track: a launched slot replaces that track's arrangement playback until "back to arrangement" (per track, and one global button). Automation lanes keep playing either way.
-- Launching a scene launches every track's slot in that scene; an empty slot stops the track. Retriggering a playing slot restarts it at the next launch boundary.
-- Launch quantise is a fixed tick grid from tick 0 (`Session.launchQuantise`), applied to launch, stop and retrigger; 0 = immediate.
-- A launched clip starts at phase 0 at the launch tick and free-runs.
-- Seek, loop wrap and stop: no note chase (notes that would be sounding are not restarted); pending note-offs are sent; controllers are chased — for every track and CC with a known value before the target tick (clip CC, or automation if an owning placement covers it) the engine sends that value before the first event of the new position; program changes are chased the same way. Chase reads the Snapshot's chase tables (*Rendering rules → Chase*); it is bounded by the number of placements and allocates nothing, so it runs on the engine thread at the seek. Stop also sends all pending note-offs; panic sends All Notes Off and All Sound Off on every used channel.
-- Live mute/solo/knob commands carry no snapshot generation and apply immediately; a later snapshot never undoes them — it cannot, the Snapshot carries no mute/solo state. Undoing a mute arrives as one more live command through the same listener. Slot launch commands carry the generation they were issued against and are dropped if stale.
-- Unplugging a bound port: pending note-offs for that destination are discarded, the Player shows "unassigned", playback continues elsewhere. Re-plugging re-binds by identifier and sends nothing retroactively.
-
 ## Editing semantics
 
 - Clips are **shared by reference** by default. Refcount gate on every mutation of a clip with refcount > 1. Policy comes from a persistent toolbar toggle (`UiState.sharedEditPolicy`), not a modal per edit. Clips with refcount > 1 show a badge (`×3`) in every view. A clip with refcount 1 is simply edited; undo is the safety net.
@@ -200,53 +145,10 @@ Milestone 0 builds `tools/miditiming` and measures, on Roland's actual interface
 - StepClips are editable only in the step sequencer and drum views; EventClips only in the piano roll. Everything created in the step sequencer and drum views is a StepClip.
 - **StepClip playback:** off cells are rests (time passes, their CC values are still sent); skipped columns take no time; `resetAt` is the loop end. Cells past `resetAt` and in skipped columns keep their data.
 - **Quantisation:** `Clip.quantise` on an EventClip quantises note onsets at playback and export without touching the stored ticks; `applyQuantise` makes it permanent (gate applies). Both are shown in the piano roll and arrangement. The grid is measured from clip tick 0, never from the arrangement; the exact candidate-line and wrap rule is in `docs/SCHEMA.md → ClipPool / Clip`. It is applied once, when the ClipTemplate is built, and every later rendering rule sees only the quantised onset.
-- **Session recording** produces a Take: one EventClip per source track that emitted output, captured after session selection, automation merge, mute/solo and live knobs, before physical-port availability. Takes land on new take tracks that copy the source's Player, channel and name, placed at the record start **(default — confirm)**. Clock and transport messages are not part of a take. The take's own playback is never captured.
-- **Recording in general** (details written before milestone 6): takes are buffered on the message thread and committed at record stop as one undo transaction, never per incoming event; held notes get note-offs at the stop tick; looped recording overdubs into the same take **(default — confirm)**; a knob recorded into a StepClip stores, per column, the knob's value at that column's start **(default — confirm)**; a knob move always reaches hardware immediately, recording or not; unmatched note-offs are dropped and reported.
+- **Session recording** produces a Take: one EventClip per source track that emitted output, captured after session selection, automation merge, mute/solo and live knobs, before physical-port availability. Takes land on new take tracks that copy the source's Player, channel and name, placed at the record start. Clock and transport messages are not part of a take. The take's own playback is never captured.
+- **Recording in general** (details written before milestone 6): takes are buffered on the message thread and committed at record stop as one undo transaction, never per incoming event; held notes get note-offs at the stop tick; looped recording overdubs into the same take; a knob recorded into a StepClip stores, per column, the knob's value at that column's start; a knob move always reaches hardware immediately, recording or not; unmatched note-offs are dropped and reported.
 - **Knobs:** `Track.Knobs` assigns CC numbers. In clip views a knob move records into the currently playing clip; in the Automation Recorder it records into an AutomationLane placement. With nothing playing a knob only controls hardware.
 - **PadMap** is input configuration under `Routing`, undoable. Remapping a pad never rewrites clips. An incoming note on the pad Performer matches a pad by `inputPitch`.
-
-## Rendering rules (document → MIDI)
-
-Implemented once in `src/render/`, used by the engine Snapshot and by SMF export. Tested exhaustively — see *Guardrails → 4. Render golden files*.
-
-**Pipeline.** `model → ClipTemplate` (per clip, one loop period, quantisation applied, step grids expanded, chase tables derived; message thread) → `Snapshot` (templates + per-track placement plans + automation ownership bitsets + TempoMap) → `Kernel(snapshot, audibleTracks, window)` (loop arithmetic, placement merging, automation merge; engine or export) → `NoteTracker` (same-pitch ownership, pending note-offs per physical destination) → output. `audibleTracks` is the mute/solo result: the engine's live state, or the document's values at export. Export runs Kernel + NoteTracker over `[0, exportLength)` with a one-shot in-memory output.
-
-**Per track.** Adjacent placements of the same clip whose phase is continuous (`next.offset == (prev.offset + prev.length) mod loopLength`, `next.start == prev.start + prev.length`) are merged into one before rendering. For each (merged) placement, loop the clip within `[start, start + length)` applying `offset`; emit enabled notes and events; channel = the Track's channel. Rendering ignores `playerId`.
-
-**Note windows.** A note is emitted if its onset falls inside the placement window; a note whose onset precedes the window (before `offset`, or in a previous iteration) is not chased. A note plays its full length across the clip's loop boundary. Placement end truncates: note-off at `start + length`. Content at `tick ≥ loopLength` is never played.
-
-**Equal-tick order** on one track: note-offs falling due, then non-note events in child order, then note-ons in child order. Within the non-note group nothing is reordered — an imported bank-select → program change sequence stays as imported. Across tracks that share a destination, tracks are processed in child order. The golden format records this order; it is not re-sorted.
-
-**StepClip:** iterate columns in order, skip columns with the skip flag, stop at `resetAt`. Each column's `CcValue`s are emitted at the column start, on and off cells alike, before any note-on of that column. Note length = `round(gate × stepLength)` ticks, ≥ 1, in audible time. A lane with `fixedPitch` ignores cell pitches. **Consecutive on-cells in one lane with the same pitch, where the earlier gate reaches the later cell's start, merge into one note** ending where the later note would have ended (tie); a gate that doesn't reach the next cell retriggers. Overlap between *different* pitches is plain overlap (legato on a monosynth). **The merge never crosses the loop point** **(default — confirm)**: a ClipTemplate is one loop period, so the last audible column's gate runs into the next iteration as plain overlap under the note-window rule, and when the first column has the same pitch the same-pitch rule retriggers it (note-off immediately before the note-on). A lane of equal pitches with long gates therefore retriggers once per loop instead of droning. Tying across the loop point would be a renderer change (a "continues" flag on the last note, suppression of the first note-on on later iterations, offset handling), not a schema change, if it is ever wanted.
-
-**Same-pitch overlap** on one physical destination (port, channel, pitch), any number of tracks: the pending note-off of the earlier note is emitted immediately before the new note-on, and the earlier note's original note-off is cancelled. No stuck notes, no double note-ons, ever. Export applies the same tracker, so the file never contains an overlapping same-pitch pair either.
-
-**AutomationLane merge:** a lane placement owns the set of CC numbers that occur as enabled `cc` events with `tick < loopLength` in its clip, over the whole placement. While owned, the track's clip CC events for those numbers are suppressed and the lane's events are emitted; later lanes win over earlier ones per CC. At placement end, and when seeking out of it, the engine sends the underlying value: the last suppressed clip CC for that number before that tick, if one exists; otherwise nothing. Seeking into an owned interval sends the lane's last value before the seek point. Live knob movements are sent regardless of ownership.
-
-**Transport loop:** at `loopEnd` pending note-offs are sent, then controllers are chased for `loopStart` and playback continues there.
-
-**Chase.** Each ClipTemplate carries, per CC number and for program change, its enabled events of that kind as a sorted (tick, value) list over one loop period. To chase a track at arrangement tick *t*, walk its placements backwards from *t*: inside a placement, "last value before phase *p*" is a binary search in the table; an earlier complete iteration contributes the table's final entry; then the previous placement, and so on. Stop at the first hit per CC. Automation ownership is consulted first — an owning lane placement answers from its own clip's table, and when leaving one the underlying value is the track's own chase result at that tick. Cost is bounded by placements × log events and allocates nothing, which is why the engine may do it at a seek. The same walk serves the transport loop and automation exit; SMF export never needs it, it renders from tick 0.
-
-**SMF export:** type 1, PPQ 960, track 0 = conductor (tempo map, time signatures, markers), one SMF track per Track in track order, track-name meta event, channel from the Track, Players irrelevant. Range `[0, exportLength)` (0 = arrangement end, defined in `docs/SCHEMA.md → UiState`); notes crossing the end get their note-off at the end. Follows the document's current mute/solo, handed to the Kernel as `audibleTracks` **(default — confirm)**. Automation lanes are merged in. No structure in meta events.
-
-**SMF import policies:**
-
-| case | policy |
-|---|---|
-| PPQ ≠ 960 | rational rescale, round to nearest tick, zero-length notes get length 1, reported |
-| SMPTE time division | refused with explanation |
-| type 0 | accepted, split by channel like any mixed track |
-| type 2 | refused |
-| mixed channels in one track | one Track per channel; channel-less SysEx goes to the lowest-numbered channel's Track, once |
-| note-on velocity 0 | note-off |
-| unmatched note-on / note-off | note-on without off ends at the next same-pitch on or at End-of-Track; orphan offs dropped; reported |
-| overlapping same pitch | earlier note truncated at the later onset |
-| End-of-Track | clip `loopLength` = EOT tick rounded up to a whole bar of the time signature at tick 0 |
-| tempo / time signature / markers | merged into the Timeline from any track |
-| other meta events, SMF SysEx packets/escapes | dropped and reported |
-| Players | left unassigned (rendering unaffected) |
-
-Imported content becomes one EventClip per Track, placed at tick 0 with `length = loopLength`.
 
 ## Guardrails
 
@@ -293,19 +195,6 @@ Golden files are regenerated only through the `regenerate_golden` target, and th
 
 Optional, at milestone boundaries only, never per commit. Give the reviewer a read-only checkout, `docs/SCHEMA.md`, this file, and a fixed question list; do not tell it what the code is supposed to do beyond those documents, and never say the code is believed correct — a reviewer primed that way stops finding things. Ask for a ranked, capped list. Findings that matter become guardrail tests; the rest is discarded, not archived.
 
-## Milestones
-
-Each milestone names a demonstration and its pass criterion. Do not start UI for a later milestone early.
-
-0. **Timing spike and toolchain.** Pin JUCE, Catch2, Xcode, CMake, deployment target. Build `tools/miditiming`. Demo: a loopback report on Roland's interface. Pass: targets under *Timing* met or renegotiated with numbers in hand. Decides timer + send path for the engine.
-1. **Validated model.** Schema ids, typed wrappers, commands with edit context, Validator, canonical XML writer, atomic save, migrations skeleton, guardrails 1, 2, 3, 5 with negative fixtures. Demo: `ctest` green, property generator through 10,000 seeds. Pass: all guardrails present and known to fail on their fixtures.
-2. **Render kernel and interchange.** ClipTemplate, Snapshot, Kernel, NoteTracker, TempoMap; guardrail 4 with the full case list; SMF import/export with the policy table. Demo: import a .mid, export it, show the musical diff is empty and the loss report lists what was dropped. Pass: all goldens green.
-3. **First musical slice.** App shell, Routing tab, engine (transport, snapshot handoff, FIFOs, clock out), minimal arrangement display. Demo: open the Berlin fixture or an imported file, play it to hardware, stop, seek, loop, unplug and re-plug the interface, save, quit, reopen. Pass: no stuck notes, timing within targets, recovery file works.
-4. **Step sequencer and drum view** (first editor **— default — confirm**), with enough arrangement to place a clip per track and press play. Demo: build the 5-step bass against 16-step drums from scratch, free-running, knob values recorded into cells. Pass: everything in SCHEMA's example reproducible by hand.
-5. **Arrangement and session.** Placements (move, resize, split, crop), slots and scenes, launch rules, refcount gate with badge and make-unique, session recording to take tracks. Demo: jam a scene, record the take, play the take back against the original. Pass: take replays each destination identically.
-6. **Piano roll and recording.** EventClip editing, recording from a Performer, quantise and `applyQuantise`, both conversions with loss preview. Demo: record a line, quantise it non-destructively, convert a step clip and edit it.
-7. **AutomationLanes and Automation Recorder.** Ownership, exit restoration, lane priority, punch-in/out recording. Demo: record a filter sweep over a looping clip, seek into and out of it, export and verify the CC stream.
-
 ## Conventions
 
 - One class per file, file name = class name. One namespace per layer (`model`, `io`, `render`, `engine`, `views`).
@@ -317,17 +206,5 @@ Each milestone names a demonstration and its pass criterion. Do not start UI for
 - `juce::` prefix explicit. No `using namespace juce` in headers.
 - Prefer `std::` types; JUCE containers only at JUCE API boundaries. Nothing from JUCE in `render/snapshot/`.
 - Tests: one file per model type, one per IO format, one per rendering rule.
-
-## Non-goals (for now)
-
-Audio, plugins, MIDI 2.0 / MPE, notation, external clock sync (clock master only), tempo-change UI (the Timeline stores a map; v1 UI edits a single tempo), synth editor panels and a SysEx patch librarian (a later idea — the design must not prevent it: events are generic, SysEx is an Event kind), internal modulators such as an arpeggiator or chord player (later idea — they would sit as a per-track Transform between Kernel output and NoteTracker, so the Kernel's output stays a plain event stream and nothing in the document assumes otherwise; because the engine runs the Kernel per look-ahead window, a Transform there must carry its state across windows, allocate nothing, reset its state on seek, loop wrap and stop, and seed any randomness from the document so export and goldens stay deterministic; adding one means adding its header to the `engine/` row of the layer table and to `check_layers.py` on purpose; a later "freeze" command would render Kernel + Transform output back into a new EventClip, which "crop to new clip" does not do because it reads the document, not Kernel output), live MIDI thru and input effects — Performer → Player monitoring, input quantisation, live arpeggiation of what is being played (the document never sees these; the engine has no input → output path, only input → recording; the Transform slot above is render-side and does not cover them), Linux, Windows, scripting.
-
-## Open questions
-
-- Session layout: Ableton grid (tracks × scenes) or tracker-style rows? `Slots` + `Scenes` support the grid; UI undecided.
-- CC envelopes: store discrete events only (current decision; a line tool writes many events) or breakpoints rendered at export?
-- Performer channel filter: the schema has it; the UI may hide it.
-- Whether tempo changes get any UI in v1.
-- Guardrail 3: handwritten generator or a property-testing library (rapidcheck)? Start handwritten; revisit if the generator grows past a file.
-- Launch quantise: fixed tick grid is v1. Meter-aware bars if varying meters ever matter.
-- Everything marked **(default — confirm)** above: clock while stopped, timing targets, take tracks, overdub on looped recording, knob-to-step sampling, export honouring mute/solo, step sequencer as first editor.
+- When unsure about a JUCE API, read libs/JUCE/modules; never guess.
+- If you want to deviate from SCHEMA.md or CLAUDE.md, stop and ask; if agreed, edit the doc in the same commit.
