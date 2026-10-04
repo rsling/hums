@@ -1,12 +1,12 @@
-# CLAUDE.md — MIDI Sequencer
+# CLAUDE.md — Hums, the Humane MIDI Sequencer
 
-Working title: none yet. Call it "the sequencer" until Roland picks a name.
+**Name.** The software is **Hums**, short for **The Humane MIDI Sequencer**. This entry is authoritative for the name. When Roland says "Hums" he means this project, the app built from this repository. Use "Hums" in conversation, docs, the app bundle and window title. "Step sequencer" always means the Step Sequencer tab or a 960-style StepClip, never the app as a whole. Don't call the app "the sequencer". No other file may rename it. `README.md` repeats the name for readers and must stay consistent with this entry.
 
-**Authority.** This file and the behaviour docs in `docs/` (`ARCHITECTURE.md`, `RENDERING.md`, `EDITING.md`, `GUARDRAILS.md`) are authoritative for behaviour and architecture; `docs/SCHEMA.md` is authoritative for the document model; `docs/DECISIONS.md` is authoritative for the status of every default and open question. If any of them disagree, stop and ask. If a change you are about to make would deviate from this file, `docs/SCHEMA.md` or any doc listed under *Where things live*, stop immediately and ask before writing it. If Roland agrees, edit the doc in the same commit as the code (and, for a [Dn] item, its status in `docs/DECISIONS.md`).
+**Authority.** This file and the behaviour docs in `docs/` (`ARCHITECTURE.md`, `RENDERING.md`, `EDITING.md`, `GUARDRAILS.md`) are authoritative for behaviour and architecture; `docs/SCHEMA.md` is authoritative for the document model; `docs/DECISIONS.md` is authoritative for the status of every default and open question; this file alone is authoritative for the project's name (see *Name*). If any of them disagree, stop and ask. If a change you are about to make would deviate from this file, `docs/SCHEMA.md` or any doc listed under *Where things live*, stop immediately and ask before writing it. If Roland agrees, edit the doc in the same commit as the code (and, for a [Dn] item, its status in `docs/DECISIONS.md`).
 
 **Defaults.** A **[Dn]** tag marks a decision taken by proposal that still needs Roland's explicit yes. Its status lives only in `docs/DECISIONS.md`. A pending default is binding until he answers; never re-ask one that is decided; when he answers, update its status there in the same session.
 
-Revised 3 Oct 2026 after an external design review; quantisation contract, Transform slot and live-thru non-goal tightened the same day; later the same day: mute/solo and transport-loop command paths, the std-only render core, `EditContext` as a gesture object, retrigger at the step-clip loop point, chase tables, recorded input converted to ticks on the engine. Split 4 Oct 2026 into this file plus path-scoped docs (`.claude/rules/` loads them when matching files are touched); the `(default — confirm)` markers became [Dn] tags tracked in `docs/DECISIONS.md`. Later on 4 Oct 2026: timing measurement split across M0 (software vs hardware, tester load) and M3 (real-app load, listen mode); rule 13 (JUCE source over guessing) and the doc-deviation rule.
+Revised 3 Oct 2026 after an external design review; quantisation contract, Transform slot and live-thru non-goal tightened the same day; later the same day: mute/solo and transport-loop command paths, the std-only render core, `EditContext` as a gesture object, retrigger at the step-clip loop point, chase tables, recorded input converted to ticks on the engine. Split 4 Oct 2026 into this file plus path-scoped docs (`.claude/rules/` loads them when matching files are touched); the `(default — confirm)` markers became [Dn] tags tracked in `docs/DECISIONS.md`. Later on 4 Oct 2026: timing measurement split across M0 (software vs hardware, tester load) and M3 (real-app load, listen mode); rule 13 (JUCE source over guessing) and the doc-deviation rule. Named *Hums* on 4 Oct 2026; the working-title note was retired.
 
 ## Where things live
 
@@ -24,7 +24,7 @@ When a task spans areas, read every doc whose area it touches, not only the ones
 
 ## What this is
 
-A MIDI-only sequencer for macOS, built with JUCE. It implements one person's (Roland's) personal workflow for sequencing analog hardware synths over MIDI. No audio, no plugins. It has to be reliable enough to be used in real music-making for years, so maintainability beats cleverness and feature count.
+Hums is a MIDI-only sequencer for macOS, built with JUCE. It implements one person's (Roland's) personal workflow for sequencing analog hardware synths over MIDI. No audio, no plugins. It has to be reliable enough to be used in real music-making for years, so maintainability beats cleverness and feature count.
 
 The app is a set of tabs, each a different way of looking at and entering the *same* musical data: a classic piano roll, an Ableton-style clip arrangement, an MPC-style drum grid, a 1970s-style analog step sequencer (Moog 960 / ARP 2500 / Korg SQ-10 workflow), and a parameter recorder for CC sweeps. Plus a Routing tab that maps physical MIDI ports to stable logical names.
 
@@ -63,7 +63,7 @@ Fill in as the build system lands. Expected shape:
 - Regenerate render golden files: `cmake --build build --target regenerate_golden` (sets `SEQ_REGENERATE_GOLDEN=1` and runs the render test binary) — then read the diff before committing it. CTest does not forward arguments to tests; never rely on `ctest -- flag`.
 - Timing diagnostic: `build/tools/miditiming --out "<port>" --in "<port>" --minutes 5`
 - Timing check against the app (M3+): `build/tools/miditiming --listen --in "<port>" --reference <export.mid>`
-- Run: `open build/<AppName>_artefacts/Debug/<AppName>.app`
+- Run: `open build/Hums_artefacts/Debug/Hums.app`
 
 ## Repository layout
 
