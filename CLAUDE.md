@@ -49,6 +49,7 @@ The app is a set of tabs, each a different way of looking at and entering the *s
 - JUCE 8.x, pinned to an exact release tag (recorded in `libs/JUCE_VERSION`), as a git submodule in `libs/JUCE`. Built via JUCE's CMake API. No Projucer. Current master docs are reference, never a reason to move the pin; for API questions read `libs/JUCE/modules` (rule 13).
 - C++20, Xcode's clang. Pinned Xcode, CMake and macOS deployment target recorded in `TOOLCHAIN.md` when milestone 0 lands.
 - Tests: Catch2 v3 via CMake `FetchContent`, pinned. Tests cover model, IO, rendering, and engine logic. GUI is not unit-tested; it has a manual checklist (`docs/MANUAL_CHECKS.md`).
+- Build shape: each layer (`model`, `io`, the render core, the rest of `render`, `engine`) is a static library target, and the app links them. Test executables link only the layer libraries they test plus the JUCE modules those layers use; they never link the app target or `juce_gui_*`. Render-core tests link no JUCE at all. This keeps an edit-build-test iteration, Roland's or an agent's, from paying the full JUCE and app link. `ccache` is the compiler launcher; its version and wiring are recorded in `TOOLCHAIN.md`.
 - Guardrail checks are plain scripts in `tools/`, registered as CTest tests so `ctest` fails on a violation. Each script ships a fixture that must *fail* it, and that negative test runs too. No separate CI is assumed; the local test run is the gate.
 - `clang-format` config checked in. Decide the style once, then never discuss it again.
 
@@ -59,6 +60,7 @@ Fill in as the build system lands. Expected shape:
 - Configure: `cmake -B build -G Xcode` (or `-G Ninja` for CLI-only builds)
 - Build: `cmake --build build --config Debug`
 - Test: `ctest --test-dir build -C Debug --output-on-failure` (includes the guardrail checks; always read-only)
+- Fast loop (no app build): `cmake --build build --target hums_tests && ctest --test-dir build -C Debug --output-on-failure` — `hums_tests` builds every test executable and nothing of the app. Use a Ninja build directory for this; the Xcode one is for GUI debugging.
 - Guardrails only: `ctest --test-dir build -C Debug -R guardrail --output-on-failure`
 - Regenerate render golden files: `cmake --build build --target regenerate_golden` (sets `SEQ_REGENERATE_GOLDEN=1` and runs the render test binary) — then read the diff before committing it. CTest does not forward arguments to tests; never rely on `ctest -- flag`.
 - Timing diagnostic: `build/tools/miditiming --out "<port>" --in "<port>" --minutes 5`
