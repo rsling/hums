@@ -13,7 +13,7 @@ Rules for Claude:
 
 | id | default | applies in | status |
 |---|---|---|---|
-| D1 | Timing targets: p99 output lateness ≤ 1 ms, max ≤ 2 ms, zero drops (loopback, dense load, GUI busy, save in progress) | `docs/ARCHITECTURE.md → Timing`, milestone 0 | pending |
+| D1 | Timing targets: p99 output lateness ≤ 1 ms, max ≤ 2 ms, zero drops (software loopback and hardware net of wire time; dense load; tester-produced load in M0, the app's own GUI and save load in M3) | `docs/ARCHITECTURE.md → Timing`, milestones 0 and 3 | pending |
 | D2 | MIDI clock pulses run continuously while the app has the port, also while stopped, so synth LFOs and arpeggiators stay locked | `docs/ARCHITECTURE.md → Timing` | pending |
 | D3 | The step-clip same-pitch merge (tie) never crosses the loop point: a lane of equal pitches with long gates retriggers once per loop instead of droning | `docs/RENDERING.md → StepClip` | pending |
 | D4 | Session recording lands takes on new take tracks that copy the source's Player, channel and name, placed at the record start | `docs/EDITING.md → Session recording` | pending |

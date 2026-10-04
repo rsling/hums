@@ -6,7 +6,7 @@ Working title: none yet. Call it "the sequencer" until Roland picks a name.
 
 **Defaults.** A **[Dn]** tag marks a decision taken by proposal that still needs Roland's explicit yes. Its status lives only in `docs/DECISIONS.md`. A pending default is binding until he answers; never re-ask one that is decided; when he answers, update its status there in the same session.
 
-Revised 3 Oct 2026 after an external design review; quantisation contract, Transform slot and live-thru non-goal tightened the same day; later the same day: mute/solo and transport-loop command paths, the std-only render core, `EditContext` as a gesture object, retrigger at the step-clip loop point, chase tables, recorded input converted to ticks on the engine. Split 4 Oct 2026 into this file plus path-scoped docs (`.claude/rules/` loads them when matching files are touched); the `(default — confirm)` markers became [Dn] tags tracked in `docs/DECISIONS.md`.
+Revised 3 Oct 2026 after an external design review; quantisation contract, Transform slot and live-thru non-goal tightened the same day; later the same day: mute/solo and transport-loop command paths, the std-only render core, `EditContext` as a gesture object, retrigger at the step-clip loop point, chase tables, recorded input converted to ticks on the engine. Split 4 Oct 2026 into this file plus path-scoped docs (`.claude/rules/` loads them when matching files are touched); the `(default — confirm)` markers became [Dn] tags tracked in `docs/DECISIONS.md`. Later on 4 Oct 2026: timing measurement split across M0 (software vs hardware, tester load) and M3 (real-app load, listen mode).
 
 ## Where things live
 
@@ -61,6 +61,7 @@ Fill in as the build system lands. Expected shape:
 - Guardrails only: `ctest --test-dir build -C Debug -R guardrail --output-on-failure`
 - Regenerate render golden files: `cmake --build build --target regenerate_golden` (sets `SEQ_REGENERATE_GOLDEN=1` and runs the render test binary) — then read the diff before committing it. CTest does not forward arguments to tests; never rely on `ctest -- flag`.
 - Timing diagnostic: `build/tools/miditiming --out "<port>" --in "<port>" --minutes 5`
+- Timing check against the app (M3+): `build/tools/miditiming --listen --in "<port>" --reference <export.mid>`
 - Run: `open build/<AppName>_artefacts/Debug/<AppName>.app`
 
 ## Repository layout
@@ -85,7 +86,7 @@ tools/
   check_identifiers.py Ids.h is the only place schema names appear in property APIs
   check_layers.py      include graph obeys the layer rules
   fixtures/            one deliberately violating file per check
-  miditiming/          loopback jitter measurement (JUCE console app, kept)
+  miditiming/          loopback timing measurement, send and listen modes (JUCE console app, kept)
 src/
   app/                 Main, MainWindow, tab host, application-level wiring
     TransportFacade.h  the only door from views to engine

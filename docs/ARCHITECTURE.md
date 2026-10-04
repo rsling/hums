@@ -20,7 +20,19 @@ Authoritative, together with `CLAUDE.md` (rules, glossary, layers) and `docs/SCH
 
 ## Timing
 
-Milestone 0 builds `tools/miditiming` and measures, on Roland's actual interface and Mac, with a loopback cable: scheduler wake-up jitter, output lateness relative to intended time, drift over five minutes, and drop count, under dense sixteenths on four tracks with CC traffic, with the GUI being dragged and a save in progress. Reported as median, p99, max. **Targets [D1]:** p99 lateness ≤ 1 ms, max ≤ 2 ms, zero drops. If `HighResolutionTimer` + `MidiOutput::sendMessageNow` can't hit them, the engine sends CoreMIDI packets with future host-time timestamps through a small shim in `engine/`. `MidiOutput::sendBlockOfMessages` is not assumed to schedule anything; whatever is used is measured on the pinned JUCE.
+Milestone 0 builds `tools/miditiming` and measures, on Roland's Mac, scheduler wake-up jitter, output lateness relative to intended time, drift over five minutes, and drop count, under dense sixteenths on four tracks with CC traffic. Reported as median, p99, max, per run. Runs cover:
+
+- **Software loopback** (IAC bus): no wire, no interface. This isolates the software path (timer, send call, CoreMIDI).
+- **At least two hardware interfaces**, each with an output cabled back to an input.
+- **Three traffic densities** on hardware: single notes; four note-ons at one tick on one port; the same four spread over separate ports. DIN MIDI moves one byte every 0.32 ms, so notes at one tick on one port queue behind each other. For hardware runs the report gives raw lateness and lateness minus the computed wire time of the bytes queued ahead of each message. The difference between the hardware figures and the software loopback is the interface's own overhead.
+
+A loopback measures the input path as well as the output path, so hardware figures overstate what a synth sees. That errs on the safe side.
+
+In milestone 0 there is no app GUI. The tester produces busy-machine load by hand, outside the tool: dragging and resizing other apps' windows and copying a large file during the run. The report records which runs had this load. The binding check under the app's own load is milestone 3: the real app plays a dense fixture project into the loopback while its GUI is dragged and a save runs, and `miditiming --listen` compares what arrives against the SMF export of the same project. That export is rendered by the same Kernel, so it is exactly what the engine meant to send.
+
+**Targets [D1]:** p99 lateness ≤ 1 ms, max ≤ 2 ms, zero drops. They apply to the software loopback and to hardware lateness net of computed wire time. Raw hardware figures are reported, not judged. Zero drops applies to every run.
+
+If `HighResolutionTimer` + `MidiOutput::sendMessageNow` can't hit them, the engine sends CoreMIDI packets with future host-time timestamps through a small shim in `engine/`. `MidiOutput::sendBlockOfMessages` is not assumed to schedule anything; whatever is used is measured on the pinned JUCE.
 
 `TempoMap` converts host monotonic time ↔ ticks through the Timeline. The engine's clock is anchored by a (host time, tick) pair set at play start and at every seek; a tempo change during playback re-anchors at the current tick, so the tick count never jumps. Recorded input timestamps are converted to ticks once, on the engine thread as the input FIFOs are drained, against the current anchor, rounded to the nearest tick — a tempo edit in the middle of a take therefore puts each event where the playhead was when it arrived. The event FIFO carries ticks, never host times. The clock emits `0xF8` every 40 ticks.
 
