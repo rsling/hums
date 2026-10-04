@@ -2,11 +2,11 @@
 
 Working title: none yet. Call it "the sequencer" until Roland picks a name.
 
-**Authority.** This file and the behaviour docs in `docs/` (`ARCHITECTURE.md`, `RENDERING.md`, `EDITING.md`, `GUARDRAILS.md`) are authoritative for behaviour and architecture; `docs/SCHEMA.md` is authoritative for the document model; `docs/DECISIONS.md` is authoritative for the status of every default and open question. If any of them disagree, stop and ask.
+**Authority.** This file and the behaviour docs in `docs/` (`ARCHITECTURE.md`, `RENDERING.md`, `EDITING.md`, `GUARDRAILS.md`) are authoritative for behaviour and architecture; `docs/SCHEMA.md` is authoritative for the document model; `docs/DECISIONS.md` is authoritative for the status of every default and open question. If any of them disagree, stop and ask. If a change you are about to make would deviate from this file, `docs/SCHEMA.md` or any doc listed under *Where things live*, stop immediately and ask before writing it. If Roland agrees, edit the doc in the same commit as the code (and, for a [Dn] item, its status in `docs/DECISIONS.md`).
 
 **Defaults.** A **[Dn]** tag marks a decision taken by proposal that still needs Roland's explicit yes. Its status lives only in `docs/DECISIONS.md`. A pending default is binding until he answers; never re-ask one that is decided; when he answers, update its status there in the same session.
 
-Revised 3 Oct 2026 after an external design review; quantisation contract, Transform slot and live-thru non-goal tightened the same day; later the same day: mute/solo and transport-loop command paths, the std-only render core, `EditContext` as a gesture object, retrigger at the step-clip loop point, chase tables, recorded input converted to ticks on the engine. Split 4 Oct 2026 into this file plus path-scoped docs (`.claude/rules/` loads them when matching files are touched); the `(default — confirm)` markers became [Dn] tags tracked in `docs/DECISIONS.md`. Later on 4 Oct 2026: timing measurement split across M0 (software vs hardware, tester load) and M3 (real-app load, listen mode).
+Revised 3 Oct 2026 after an external design review; quantisation contract, Transform slot and live-thru non-goal tightened the same day; later the same day: mute/solo and transport-loop command paths, the std-only render core, `EditContext` as a gesture object, retrigger at the step-clip loop point, chase tables, recorded input converted to ticks on the engine. Split 4 Oct 2026 into this file plus path-scoped docs (`.claude/rules/` loads them when matching files are touched); the `(default — confirm)` markers became [Dn] tags tracked in `docs/DECISIONS.md`. Later on 4 Oct 2026: timing measurement split across M0 (software vs hardware, tester load) and M3 (real-app load, listen mode); rule 13 (JUCE source over guessing) and the doc-deviation rule.
 
 ## Where things live
 
@@ -42,10 +42,11 @@ The app is a set of tabs, each a different way of looking at and entering the *s
 10. **No throw-away code.** Every model mutation goes through a command function that takes an `UndoManager&`. Every schema change bumps `schemaVersion` and ships a migration plus a test.
 11. **Ask rather than guess at workflow.** Roland has strong, specific opinions about how sequencing should feel. A wrong assumption costs more than a question. Ask in plain terms; he has not written GUI or C++ in ten years and does not know JUCE in depth.
 12. **The guardrails are not optional.** A change that makes a guardrail test fail is wrong until the guardrail itself has been discussed and changed on purpose. Never weaken, skip, or `// NOLINT` a guardrail to make a feature land. See *Guardrails*.
+13. **Never guess at a JUCE API.** When unsure of a class, signature, threading guarantee or behaviour, read the source under `libs/JUCE/modules` at the pinned tag; it is the authority, not memory, web docs or current master. If `libs/JUCE` is not checked out, say so and stop rather than guess.
 
 ## Toolchain
 
-- JUCE 8.x, pinned to an exact release tag (recorded in `libs/JUCE_VERSION`), as a git submodule in `libs/JUCE`. Built via JUCE's CMake API. No Projucer. Current master docs are reference, never a reason to move the pin.
+- JUCE 8.x, pinned to an exact release tag (recorded in `libs/JUCE_VERSION`), as a git submodule in `libs/JUCE`. Built via JUCE's CMake API. No Projucer. Current master docs are reference, never a reason to move the pin; for API questions read `libs/JUCE/modules` (rule 13).
 - C++20, Xcode's clang. Pinned Xcode, CMake and macOS deployment target recorded in `TOOLCHAIN.md` when milestone 0 lands.
 - Tests: Catch2 v3 via CMake `FetchContent`, pinned. Tests cover model, IO, rendering, and engine logic. GUI is not unit-tested; it has a manual checklist (`docs/MANUAL_CHECKS.md`).
 - Guardrail checks are plain scripts in `tools/`, registered as CTest tests so `ctest` fails on a violation. Each script ships a fixture that must *fail* it, and that negative test runs too. No separate CI is assumed; the local test run is the gate.
