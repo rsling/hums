@@ -21,11 +21,20 @@ Started 20 Nov 2026 with the versions installed on Roland's Mac. Completed at mi
 
 Development host at the time of pinning: macOS 27.0.1, Apple silicon (arm64).
 
+## Sanitizer support (checked 20 Nov 2026)
+
+| sanitizer | Xcode 27.0 clang | notes |
+|---|---|---|
+| AddressSanitizer + UBSan | shipped | `HUMS_SANITIZE=address`; canaries `guardrail_canary_asan_use_after_free`, `guardrail_canary_ubsan_signed_overflow` |
+| ThreadSanitizer | shipped | `HUMS_SANITIZE=thread`; canary `guardrail_canary_tsan_data_race` |
+| LeakSanitizer | **not shipped** | `clang++: error: unsupported option '-fsanitize=leak' for target 'arm64-apple-darwin27.0.0'`. Leaks stay with JUCE's leak detector (Debug) |
+| RealtimeSanitizer | **not shipped** | `unsupported option '-fsanitize=realtime'`. The `[[clang::nonblocking]]` attribute and `-Wfunction-effects` (compile-time check) do compile. Bears on `docs/DECISIONS.md` Q7 |
+
+On macOS the sanitizers `abort()` after a report by default; the canary tests set `abort_on_error=0` so CTest judges them by their output.
+
 ## To be filled in at milestone 0
 
 | item | value |
 |---|---|
-| LeakSanitizer on Xcode 27.0 clang | — (expected: not shipped) |
-| RealtimeSanitizer on Xcode 27.0 clang | — (decides `docs/DECISIONS.md` Q7) |
 | Clean build time, Debug, Ninja | — |
 | Incremental `hums_tests` rebuild after touching one render-core source | — |

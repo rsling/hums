@@ -17,3 +17,7 @@ target_compile_definitions(guardrail_toolchain_juce PRIVATE
     JUCE_USE_CURL=0
     JUCE_WEB_BROWSER=0)
 catch_discover_tests(guardrail_toolchain_juce TEST_PREFIX "guardrail.toolchain_juce.")
+
+if(HUMS_SANITIZE)
+    add_subdirectory(canaries)
+endif()
