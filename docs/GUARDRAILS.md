@@ -12,7 +12,7 @@ Allowed exceptions, and only these: `src/io/Migrations.cpp`, which by definition
 
 ## 2. The layer rules are checked, not just documented
 
-`tools/check_layers.py` walks the `#include` lines under `src/`, resolves quoted relative paths, and enforces the table under `CLAUDE.md → Layers and dependencies`, including the render-core std-only rule (`render/snapshot/`, `TempoMap`, `Kernel`, `NoteTracker` include only std and each other, so the engine's dependency on them is transitively clean without a transitive check) and the transitive check that `app/TransportFacade.h` pulls in no other `engine/` header. `views/` including any other `engine/` header, `engine/` including anything from `model/` or from `render/` outside the core, and a render-core file including JUCE, are the failures this check exists for.
+`tools/check_layers.py` walks the `#include` lines under `src/`, resolves quoted relative paths, and enforces the table under `CLAUDE.md → Layers and dependencies`, including the render-core std-only rule (`render/snapshot/`, `TempoMap`, `Kernel`, `NoteTracker` include only std and each other, so the engine's dependency on them is transitively clean without a transitive check) and the transitive check that `app/TransportFacade.h` pulls in no other `engine/` header. It also enforces the platform rule: OS headers (`CoreMIDI/`, `CoreFoundation/`, `CoreAudio/`, `mach/`, `Cocoa/`, `AppKit/`, `Foundation/`, `objc/`, and any angle-bracket include that is neither std nor JUCE) may appear only under `src/platform/mac/`; `.mm` files exist only under `src/platform/mac/`; `platform/` interface headers include only std and each other; nothing outside `app/` and tests includes `platform/mac/`. `views/` including any other `engine/` header, `engine/` including anything from `model/` or from `render/` outside the core, a render-core file including JUCE, and an OS header outside `platform/mac/`, are the failures this check exists for.
 
 ## 3. Invariants as property tests, not examples
 
@@ -31,15 +31,33 @@ Every rendering rule in `docs/RENDERING.md` gets a pair in `tests/render/golden/
 
 Required cases, at minimum: skipped column; `resetAt` shorter than `stepCount`; `gate > 1.0` into a different pitch; `gate > 1.0` into the same pitch (merge); gate reaching into a skipped column; gate across the loop point into a different pitch, and into the same pitch (retrigger, not merge); `fixedPitch` lane ignoring cell pitch; off-cell CC values; placement `offset`; placement shorter and longer than the clip loop; two placements of one clip restarting (offset 0) and phase-continuous (merged); split during a held note; same-pitch overlap on one track and across two tracks on one destination; bank-select → program change → note at one tick; note-off and note-on of one pitch at one tick; AutomationLane overriding, passing through, and restoring the underlying value at exit; a lane whose first event comes after its placement start; two lanes overriding the same CC; event-clip note crossing `loopLength`; content past `loopLength` silent; `quantise` at `1/8` and `1/8T`; `quantise` moving an onset across the loop point (wraps to 0) in a loop that is not a multiple of the grid; two notes of one pitch quantised onto one tick; transport loop wrap with a held note; chase at a seek target: value found in the current placement, in an earlier iteration of it, in an earlier placement, and no value at all; export range cutting a note; a track with no Player rendering normally.
 
-Golden files are regenerated only through the `regenerate_golden` target, and the diff is read before it is committed. A silently regenerated golden file is worse than no test — it turns a behaviour change into a green build.
+Golden files are regenerated only through the `regenerate_golden` target (which sets `HUMS_REGENERATE_GOLDEN=1`), and the diff is read before it is committed. A silently regenerated golden file is worse than no test — it turns a behaviour change into a green build.
 
 ## 5. Loading is a wall
 
 `tests/io/` loads every fixture in `fixtures/` through the real load path: valid files install; files with a higher `schemaVersion`, malformed XML, invariant violations, and a fixture whose migration throws are all refused with the current document and the source file untouched. Save failure (read-only target) leaves the previous file intact.
 
+## Sanitizer builds
+
+C++ compiles lifetime and threading bugs without complaint, and the likeliest ones here — a listener outliving its `ValueTree`, a `Component` deleted inside its own callback, a Snapshot retired while the engine still reads it — can run fine for weeks. So the test suite runs in three configurations, and `tools/gate.sh` runs them in sequence:
+
+- **plain** Debug — the fast inner loop, `ctest` as before;
+- **ASan + UBSan** (`HUMS_SANITIZE=address`) — the whole suite, built with `-fsanitize=address,undefined -fno-sanitize-recover=all`, so a UBSan finding fails the test instead of printing and carrying on;
+- **TSan** (`HUMS_SANITIZE=thread`) — the engine tests: FIFOs, command queue, snapshot handoff and retirement. These tests run real producer and consumer threads; a single-threaded simulation gives TSan nothing to see.
+
+The flags are set once at the top of `CMakeLists.txt`, before JUCE and Catch2 are added, so everything in the binary is instrumented. The instrumented configurations are single-config Ninja builds in `build-asan` and `build-tsan`.
+
+- A sanitizer report is a failing test. `no_sanitize` attributes and suppressions for code under `src/` or `tests/` count as weakening a guardrail (`CLAUDE.md` rule 12). If the pinned JUCE itself trips a sanitizer, the suppression names that one JUCE symbol in `tools/sanitizers/`, with a comment saying why.
+- **Canaries.** `tests/guardrails/` holds three tiny programs with one planted bug each — heap use-after-free, signed overflow, data race — built only in the instrumented configurations. Each passes only when its sanitizer reports the planted bug, so a build that has silently lost its `-fsanitize` flags fails the gate. Same idea as the negative fixtures for the scripts.
+- The full gate runs before every commit **[D9]**; plain `ctest` is for the loop in between. The property generator may run fewer seeds in the instrumented configurations than in the plain one.
+- Sanitizers find only what gets executed, and the GUI is not in the test suite. The manual checklist is therefore run on the ASan + UBSan build of the app.
+- Timing is never measured on an instrumented build: `miditiming` and the milestone 0 and 3 numbers come from a plain Release build.
+- Xcode's clang is not expected to ship LeakSanitizer; leaks stay with JUCE's leak detector, which is on in Debug. Verify on the pinned Xcode at milestone 0 and record the result in `TOOLCHAIN.md`.
+- RealtimeSanitizer could check the engine thread's no-allocation / no-lock rule mechanically; whether it becomes a fourth configuration is open question **Q7** in `docs/DECISIONS.md`.
+
 ## Manual checks
 
-`docs/MANUAL_CHECKS.md` is a short script run at each milestone boundary: selection, dragging, undo across tabs, focus and keyboard shortcuts, tab switching during playback, device unplug/replug during playback, sleep/wake, close with unsaved changes, recovery-file offer. Not automated; not optional.
+`docs/MANUAL_CHECKS.md` is a short script run at each milestone boundary: selection, dragging, undo across tabs, focus and keyboard shortcuts, tab switching during playback, device unplug/replug during playback, sleep/wake, close with unsaved changes, recovery-file offer. Run on the ASan + UBSan build of the app (*Sanitizer builds*). Not automated; not optional.
 
 ## External review
 

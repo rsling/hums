@@ -21,6 +21,7 @@ Rules for Claude:
 | D6 | A knob recorded into a StepClip stores, per column, the knob's value at that column's start | `docs/EDITING.md → Recording in general` | pending |
 | D7 | SMF export follows the document's current mute/solo | `docs/RENDERING.md → SMF export` | pending |
 | D8 | The step sequencer and drum view are the first editor (milestone 4), before the arrangement and piano roll | `docs/MILESTONES.md` | pending |
+| D9 | The full gate (`tools/gate.sh`: plain, ASan + UBSan, TSan) runs before every commit; plain `ctest` is for the loop in between | `CLAUDE.md → Git and done`, `docs/GUARDRAILS.md → Sanitizer builds` | pending |
 
 ## Open questions
 
@@ -32,3 +33,4 @@ Rules for Claude:
 | Q4 | Whether tempo changes get any UI in v1. | open |
 | Q5 | Guardrail 3: handwritten generator or a property-testing library (rapidcheck)? Start handwritten; revisit if the generator grows past a file. | open |
 | Q6 | Launch quantise: fixed tick grid is v1. Meter-aware bars if varying meters ever matter. | open |
+| Q7 | RealtimeSanitizer (`-fsanitize=realtime` with `[[clang::nonblocking]]`, upstream since Clang 20) would check the engine thread's no-allocation / no-lock rule mechanically. If the pinned Xcode's clang ships it (checked at milestone 0), does it become a fourth gate configuration for the engine tests? | open |

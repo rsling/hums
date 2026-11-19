@@ -1,6 +1,6 @@
 # Architecture: threads, timing, transport
 
-Authoritative, together with `CLAUDE.md` (rules, glossary, layers) and `docs/SCHEMA.md` (document model). Items tagged **[Dn]** are defaults whose status is in `docs/DECISIONS.md`. The layer table and its guardrail stay in `CLAUDE.md → Layers and dependencies`.
+Authoritative, together with `CLAUDE.md` (rules, glossary, layers) and `docs/SCHEMA.md` (document model). Items tagged **[Dn]** are defaults whose status is in `docs/DECISIONS.md`. The layer table (including the `platform/` layer) and its guardrail stay in `CLAUDE.md → Layers and dependencies`.
 
 ## Threads
 
@@ -12,7 +12,7 @@ Authoritative, together with `CLAUDE.md` (rules, glossary, layers) and `docs/SCH
 - one lock-free SPSC FIFO per MIDI input, filled on CoreMIDI's thread, drained here;
 - an SPSC event FIFO back to the message thread: recorded input events (already converted to ticks), playhead, snapshot acknowledgements, overflow counters.
 
-**Rules on the engine thread:** no allocation, no deallocation, no locks, no ValueTree, no logging, no JUCE message-thread APIs. `std::atomic<std::shared_ptr>` is not used; its lock-freedom is implementation-defined and in libc++ it isn't.
+**Rules on the engine thread:** no allocation, no deallocation, no locks, no ValueTree, no logging, no JUCE message-thread APIs, no direct OS calls — the OS is reached only through the `platform/` interfaces (`MidiScheduler`, `MonotonicClock`, `RealtimeThread`). `std::atomic<std::shared_ptr>` is not used; its lock-freedom is implementation-defined and in libc++ it isn't.
 
 **Snapshot lifetime.** The message thread owns every Snapshot. It publishes generation *n* through the command queue; the engine switches at the next window boundary and acknowledges *n* through the event FIFO; the message thread retires every snapshot older than the last acknowledged one. On shutdown the engine is stopped and joined before any snapshot is released. A snapshot switch does not interrupt sounding notes: the NoteTracker holds pending note-offs by physical destination, independent of which snapshot produced the note-on. Events already handed to the output for the current window are committed and never recalled.
 
@@ -32,7 +32,9 @@ In milestone 0 there is no app GUI. The tester produces busy-machine load by han
 
 **Targets [D1]:** p99 lateness ≤ 1 ms, max ≤ 2 ms, zero drops. They apply to the software loopback and to hardware lateness net of computed wire time. Raw hardware figures are reported, not judged. Zero drops applies to every run.
 
-If `HighResolutionTimer` + `MidiOutput::sendMessageNow` can't hit them, the engine sends CoreMIDI packets with future host-time timestamps through a small shim in `engine/`. `MidiOutput::sendBlockOfMessages` is not assumed to schedule anything; whatever is used is measured on the pinned JUCE.
+If `HighResolutionTimer` + `MidiOutput::sendMessageNow` can't hit them, the engine sends packets with future timestamps through `platform::MidiScheduler`, whose implementation `platform/mac/CoreMidiScheduler` hands CoreMIDI packets with host-time timestamps to the driver. Either way the engine sees only the interface: time crosses it as nanoseconds on a monotonic clock (`platform::MonotonicClock`), and the CoreMIDI backend converts to and from mach host time internally. A JUCE-based send path, if milestone 0 picks one, is wrapped in the same interface. `MidiOutput::sendBlockOfMessages` is not assumed to schedule anything; whatever is used is measured on the pinned JUCE. The engine thread's real-time priority is set the same way, through `platform::RealtimeThread`. `miditiming` is built against the same interfaces, so one harness compares backends.
+
+Timing is never measured on an instrumented build: `miditiming` and the milestone 0 and 3 numbers come from a plain Release build (`docs/GUARDRAILS.md → Sanitizer builds`).
 
 `TempoMap` converts host monotonic time ↔ ticks through the Timeline. The engine's clock is anchored by a (host time, tick) pair set at play start and at every seek; a tempo change during playback re-anchors at the current tick, so the tick count never jumps. Recorded input timestamps are converted to ticks once, on the engine thread as the input FIFOs are drained, against the current anchor, rounded to the nearest tick — a tempo edit in the middle of a take therefore puts each event where the playhead was when it arrived. The event FIFO carries ticks, never host times. The clock emits `0xF8` every 40 ticks.
 
