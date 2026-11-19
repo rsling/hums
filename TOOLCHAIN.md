@@ -28,7 +28,7 @@ Development host at the time of pinning: macOS 27.0.1, Apple silicon (arm64).
 | AddressSanitizer + UBSan | shipped | `HUMS_SANITIZE=address`; canaries `guardrail_canary_asan_use_after_free`, `guardrail_canary_ubsan_signed_overflow` |
 | ThreadSanitizer | shipped | `HUMS_SANITIZE=thread`; canary `guardrail_canary_tsan_data_race` |
 | LeakSanitizer | **not shipped** | `clang++: error: unsupported option '-fsanitize=leak' for target 'arm64-apple-darwin27.0.0'`. Leaks stay with JUCE's leak detector (Debug) |
-| RealtimeSanitizer | **not shipped** | `unsupported option '-fsanitize=realtime'`. The `[[clang::nonblocking]]` attribute and `-Wfunction-effects` (compile-time check) do compile. Bears on `docs/DECISIONS.md` Q7 |
+| RealtimeSanitizer | **not shipped** | `unsupported option '-fsanitize=realtime'`. The `[[clang::nonblocking]]` attribute and `-Wfunction-effects` (compile-time check) do compile. No RTSan configuration in v1 **[D10]** |
 
 On macOS the sanitizers `abort()` after a report by default; the canary tests set `abort_on_error=0` so CTest judges them by their output.
 

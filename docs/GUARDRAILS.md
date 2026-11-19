@@ -53,7 +53,7 @@ The flags are set once at the top of `CMakeLists.txt`, before JUCE and Catch2 ar
 - Sanitizers find only what gets executed, and the GUI is not in the test suite. The manual checklist is therefore run on the ASan + UBSan build of the app.
 - Timing is never measured on an instrumented build: `miditiming` and the milestone 0 and 3 numbers come from a plain Release build.
 - Xcode's clang is not expected to ship LeakSanitizer; leaks stay with JUCE's leak detector, which is on in Debug. Verify on the pinned Xcode at milestone 0 and record the result in `TOOLCHAIN.md`.
-- RealtimeSanitizer could check the engine thread's no-allocation / no-lock rule mechanically; whether it becomes a fourth configuration is open question **Q7** in `docs/DECISIONS.md`.
+- RealtimeSanitizer is not shipped by the pinned Xcode, so there is no fourth configuration **[D10]**. A possible later guardrail for the engine thread's no-allocation / no-lock rule is compile-time: `[[clang::nonblocking]]` on the engine-thread entry points and `-Wfunction-effects` promoted to an error for `engine/` and the render core. Adding it is a guardrail change and is discussed with Roland first.
 
 ## Manual checks
 
