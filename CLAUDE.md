@@ -65,15 +65,16 @@ Exact versions live in `TOOLCHAIN.md`; this list says what is pinned and how.
 
 Fill in as the build system lands. Expected shape:
 
-- Configure: `cmake -B build -G Xcode` (or `-G Ninja` for CLI-only builds)
-- Build: `cmake --build build --config Debug`
-- Test: `ctest --test-dir build -C Debug --output-on-failure` (includes the guardrail checks; always read-only)
-- Fast loop (no app build): `cmake --build build --target hums_tests && ctest --test-dir build -C Debug --output-on-failure` — `hums_tests` builds every test executable and nothing of the app. Use a Ninja build directory for this; the Xcode one is for GUI debugging.
-- Guardrails only: `ctest --test-dir build -C Debug -R guardrail --output-on-failure`
+- Build directories: `build-ninja` (plain Debug, Ninja — the fast loop and the gate's plain run), `build-asan`, `build-tsan` (instrumented, Ninja), `build` (Xcode, for GUI debugging only). All are ignored by git.
+- Configure: `cmake -B build-ninja -G Ninja -DCMAKE_BUILD_TYPE=Debug`; Xcode: `cmake -B build -G Xcode`
+- Fast loop (no app build): `cmake --build build-ninja --target hums_tests && ctest --test-dir build-ninja --output-on-failure` — `hums_tests` builds every test executable and nothing of the app.
+- Build everything (once an app target exists): `cmake --build build-ninja`; in Xcode `cmake --build build --config Debug`
+- Test: `ctest --test-dir build-ninja --output-on-failure` (includes the guardrail checks; always read-only)
+- Guardrails only: `ctest --test-dir build-ninja -R guardrail --output-on-failure`
 - ASan + UBSan: `cmake -B build-asan -G Ninja -DCMAKE_BUILD_TYPE=Debug -DHUMS_SANITIZE=address`, `cmake --build build-asan`, `ctest --test-dir build-asan --output-on-failure`
 - TSan: the same with `build-tsan` and `-DHUMS_SANITIZE=thread`; test run `ctest --test-dir build-tsan -R "engine|canary" --output-on-failure`
 - Full gate: `tools/gate.sh` (plain, then ASan + UBSan, then TSan; stops at the first failure)
-- Regenerate render golden files: `cmake --build build --target regenerate_golden` (sets `HUMS_REGENERATE_GOLDEN=1` and runs the render test binary) — then read the diff before committing it. CTest does not forward arguments to tests; never rely on `ctest -- flag`.
+- Regenerate render golden files: `cmake --build build-ninja --target regenerate_golden` (sets `HUMS_REGENERATE_GOLDEN=1` and runs the render test binary) — then read the diff before committing it. CTest does not forward arguments to tests; never rely on `ctest -- flag`.
 - Timing diagnostic: `build/tools/miditiming --out "<port>" --in "<port>" --minutes 5` (plain Release build only)
 - Timing check against the app (M3+): `build/tools/miditiming --listen --in "<port>" --reference <export.mid>`
 - Run: `open build/Hums_artefacts/Debug/Hums.app`
