@@ -53,6 +53,30 @@ endif()
 # Third-party code: JUCE (pinned submodule) and Catch2 (pinned FetchContent tag).
 add_subdirectory(libs/JUCE EXCLUDE_FROM_ALL)
 
+# hums_juce: the pinned JUCE modules, compiled once. JUCE modules are INTERFACE
+# libraries that add their sources to whatever links them, and must be linked
+# PRIVATE (libs/JUCE/docs/CMake API.md -> juce_add_module); linking them into
+# several layer libraries would build one copy per layer into each binary.
+# So only hums_juce links them, and it re-exports their include paths and
+# definitions to the layers and tests that link it. The linker pulls in only the
+# modules a binary uses. Modules are added here as layers need them; never a
+# juce_gui_* module (tests must not link GUI code).
+add_library(hums_juce STATIC)
+target_link_libraries(hums_juce
+    PRIVATE
+        juce::juce_core
+        juce::juce_data_structures
+    PUBLIC
+        juce::juce_recommended_config_flags)
+target_compile_definitions(hums_juce PUBLIC
+    JUCE_STANDALONE_APPLICATION=1
+    JUCE_USE_CURL=0
+    JUCE_WEB_BROWSER=0)
+target_include_directories(hums_juce INTERFACE
+    $<TARGET_PROPERTY:hums_juce,INCLUDE_DIRECTORIES>)
+target_compile_definitions(hums_juce INTERFACE
+    $<TARGET_PROPERTY:hums_juce,COMPILE_DEFINITIONS>)
+
 include(FetchContent)
 FetchContent_Declare(Catch2
     GIT_REPOSITORY https://github.com/catchorg/Catch2.git
@@ -62,6 +86,10 @@ FetchContent_Declare(Catch2
 FetchContent_MakeAvailable(Catch2)
 list(APPEND CMAKE_MODULE_PATH "${catch2_SOURCE_DIR}/extras")
 include(Catch)
+
+# ---------------------------------------------------------------------------
+# The layer libraries.
+add_subdirectory(src)
 
 # ---------------------------------------------------------------------------
 # Tests. hums_tests builds every test executable and nothing of the app.
