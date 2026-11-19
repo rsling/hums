@@ -15,6 +15,9 @@ Started 20 Nov 2026 with the versions installed on Roland's Mac. Completed at mi
 | CMake | 3.31.12 | |
 | Ninja | 1.13.2 | for the CLI and sanitizer build directories |
 | C++ standard | C++20 | |
+| macOS deployment target | 15.0 | `CMAKE_OSX_DEPLOYMENT_TARGET`, set before `project()`; arm64 only. Chosen 20 Nov 2026 to leave room for an older studio Mac |
+| Catch2 | v3.16.1 | `FetchContent`, `GIT_TAG v3.16.1`, shallow; newest v3 tag on 20 Nov 2026 |
+| ccache | 4.13.1 | MacPorts (`/opt/local/bin/ccache`). Required: `find_program(... REQUIRED)` sets `CMAKE_{C,CXX,OBJC,OBJCXX}_COMPILER_LAUNCHER` |
 
 Development host at the time of pinning: macOS 27.0.1, Apple silicon (arm64).
 
@@ -22,9 +25,6 @@ Development host at the time of pinning: macOS 27.0.1, Apple silicon (arm64).
 
 | item | value |
 |---|---|
-| macOS deployment target | — |
-| Catch2 v3 tag (FetchContent) | — |
-| ccache version and wiring (`CMAKE_<LANG>_COMPILER_LAUNCHER`) | — (not installed on the host yet) |
 | LeakSanitizer on Xcode 27.0 clang | — (expected: not shipped) |
 | RealtimeSanitizer on Xcode 27.0 clang | — (decides `docs/DECISIONS.md` Q7) |
 | Clean build time, Debug, Ninja | — |
