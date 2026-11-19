@@ -8,7 +8,7 @@ Started 20 Nov 2026 with the versions installed on Roland's Mac. Completed at mi
 
 | component | version | notes |
 |---|---|---|
-| JUCE | **9.0.6** | git submodule `libs/JUCE` at the `9.0.6` release tag; also in `libs/JUCE_VERSION`. Pinned for the whole Hums v1 cycle |
+| JUCE | **9.0.6** | git submodule `libs/JUCE` at the `9.0.6` release tag (commit `654bdbc7a9db`); also in `libs/JUCE_VERSION`. Pinned for the whole Hums v1 cycle. Newest JUCE release on GitHub when checked on 20 Nov 2026. Requires CMake ≥ 3.22 and a deployment target ≥ macOS 10.11 (`libs/JUCE/CMakeLists.txt`, `juce_TargetPlatform.h`) |
 | Xcode | 27.0 (build 27A266a) | `/Applications/Xcode.app` |
 | Apple clang | 21.0.0 (clang-2100.3.34.2) | ships with Xcode 27.0; target `arm64-apple-darwin` |
 | macOS SDK | 27.0 | ships with Xcode 27.0 |
