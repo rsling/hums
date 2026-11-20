@@ -18,3 +18,25 @@ messages sent 29040, received 29040, dropped 0, unexpected 0, send() refused 0, 
 
 targets [D1] on raw lateness: p99 <= 1 ms, max <= 2 ms, zero drops -> MET
 
+== miditiming report ==
+started: 21 Nov 2026 0:29:03
+send path: CoreMidiScheduler (CoreMIDI, future timestamps)
+pattern: stacked: 4 track(s), sixteenths at 121 bpm, CC 74 + note-on per step, note-off at half step
+loop: U6MIDI Pro Port 1 -> U6MIDI Pro Port 1 (DIN)
+length: 5.00 min
+sender: window 2.00 ms, look-ahead 10.00 ms, real-time priority granted
+load: quiet; after the milestone 0 code review changed the send path
+system: Mac OSX 27.0.1, Apple M1 Ultra, JUCE v9.0.6
+build: Release
+arrival time: MonotonicClock read in the input callback (includes CoreMIDI delivery)
+
+wake-up lateness (sender thread)   median    0.015 ms   p99    0.049 ms   max    0.174 ms   (min 0.002, n = 149970)
+hand-over lead (intended - send()) median    8.984 ms   p99    9.967 ms   max    9.999 ms   (min 7.950, n = 29040)
+lateness, raw                      median    4.593 ms   p99    9.128 ms   max    9.363 ms   (min 1.856, n = 29040)
+lateness, net of DIN wire time     median    1.292 ms   p99    1.580 ms   max    2.244 ms   (min 0.804, n = 29040)
+drift (net): -0.0030 ms per minute; median first minute 1.292 ms, last minute 1.287 ms
+messages sent 29040, received 29040, dropped 0, unexpected 0, send() refused 0, input overflow 0, handed to backend after intended time 0
+
+targets [D1] on net lateness: p99 <= 2 ms, max <= 3 ms, zero drops -> MET
+(wire time = the message's own bytes plus the bytes queued ahead of it on the same DIN line, 0.32 ms per byte)
+

@@ -91,9 +91,11 @@ namespace
     // much later; what was handed to CoreMIDI in between is lost either way.
     constexpr auto watchPeriod = std::chrono::milliseconds (100);
 
-    // A destination is gone when CoreMIDI no longer lists it among the
-    // destinations (which is also when JUCE stops listing it), or lists it
-    // but as offline.
+    // A destination is gone when CoreMIDI lists it as offline or no longer
+    // lists it at all. An unplugged USB interface does the first: its
+    // endpoint stays in the list and turns offline about 0.1 s after the
+    // cable is pulled (measured with the U6MIDI Pro, docs/TIMING.md). A
+    // removed virtual port does the second.
     bool hasGone (MIDIEndpointRef endpoint)
     {
         const auto count = MIDIGetNumberOfDestinations();
