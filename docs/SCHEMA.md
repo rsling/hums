@@ -109,7 +109,7 @@ Two Players bound to the same physical port both sending clock would emit duplic
 
 SMF conductor-track equivalent. Global, never per track. **The Timeline is the single authority for tick ↔ time conversion**; the engine, the recorder and SMF I/O all go through `render/TempoMap`, never through ad-hoc arithmetic.
 
-**TempoEvent** — `tick` (int64), `bpm` (double, finite, > 0). One at tick 0 is required. At most one per tick; the loader keeps the last and reports the duplicate. v1 UI edits only the one at tick 0; an imported tempo map stays in effect for playback and export until the user flattens it explicitly.
+**TempoEvent** — `tick` (int64), `bpm` (double, finite, > 0). One at tick 0 is required. At most one per tick; the loader keeps the last and reports the duplicate. The document stores `bpm` as entered; `TempoMap` plays and exports it as `round(60 000 000 / bpm)` whole microseconds per quarter note, which is all an SMF can hold **[D13]** (`docs/ARCHITECTURE.md → Timing`). v1 UI edits only the one at tick 0; an imported tempo map stays in effect for playback and export until the user flattens it explicitly.
 
 **TimeSigEvent** — `tick`, `numerator` (int, 1–32), `denominator` (int, power of two, 1–64). One at tick 0 is required. Same duplicate rule.
 
