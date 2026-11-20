@@ -6,7 +6,7 @@
 
 **Defaults.** A **[Dn]** tag marks a decision taken by proposal that still needs Roland's explicit yes. Its status lives only in `docs/DECISIONS.md`. A pending default is binding until he answers; never re-ask one that is decided; when he answers, update its status there in the same session.
 
-Revised 3 Oct 2026 after an external design review; quantisation contract, Transform slot and live-thru non-goal tightened the same day; later the same day: mute/solo and transport-loop command paths, the std-only render core, `EditContext` as a gesture object, retrigger at the step-clip loop point, chase tables, recorded input converted to ticks on the engine. Split 4 Oct 2026 into this file plus path-scoped docs (`.claude/rules/` loads them when matching files are touched); the `(default — confirm)` markers became [Dn] tags tracked in `docs/DECISIONS.md`. Later on 4 Oct 2026: timing measurement split across M0 (software vs hardware, tester load) and M3 (real-app load, listen mode); rule 13 (JUCE source over guessing) and the doc-deviation rule. Named *Hums* on 4 Oct 2026; the working-title note was retired. Revised 18 Nov 2026: platform decision — macOS-only build, portable by construction (`platform/` layer, guardrail 2 extended to OS headers); iPad assessed and rejected. Revised 19 Nov 2026: language decision — C++ stays, Rust assessed and rejected; sanitizer builds and the three-configuration gate added. Revised 20 Nov 2026: Linux and Windows both "possible later"; JUCE pinned to 9.0.6 for the v1 cycle; `TOOLCHAIN.md` started.
+Revised 3 Oct 2026 after an external design review; quantisation contract, Transform slot and live-thru non-goal tightened the same day; later the same day: mute/solo and transport-loop command paths, the std-only render core, `EditContext` as a gesture object, retrigger at the step-clip loop point, chase tables, recorded input converted to ticks on the engine. Split 4 Oct 2026 into this file plus path-scoped docs (`.claude/rules/` loads them when matching files are touched); the `(default — confirm)` markers became [Dn] tags tracked in `docs/DECISIONS.md`. Later on 4 Oct 2026: timing measurement split across M0 (software vs hardware, tester load) and M3 (real-app load, listen mode); rule 13 (JUCE source over guessing) and the doc-deviation rule. Named *Hums* on 4 Oct 2026; the working-title note was retired. Revised 18 Nov 2026: platform decision — macOS-only build, portable by construction (`platform/` layer, guardrail 2 extended to OS headers); iPad assessed and rejected. Revised 19 Nov 2026: language decision — C++ stays, Rust assessed and rejected; sanitizer builds and the three-configuration gate added. Revised 20 Nov 2026: Linux and Windows both "possible later"; JUCE pinned to 9.0.6 for the v1 cycle; `TOOLCHAIN.md` started. Later on 20 Nov 2026, after the milestone 0 code review: licence changed to AGPLv3; `TempoMap` realises tempo as an SMF holds it [D13]; JUCE assertion and leak reports fail a test, the canaries notice a lost `-fno-sanitize-recover`, the gate builds `miditiming`; a port is open at most once and a vanished port refuses sends; `hums_io`'s dependency on `hums_render` postponed to milestone 2.
 
 ## Where things live
 
@@ -27,6 +27,8 @@ When a task spans areas, read every doc whose area it touches, not only the ones
 ## What this is
 
 Hums is a MIDI-only sequencer for macOS, built with JUCE. It implements one person's (Roland's) personal workflow for sequencing analog hardware synths over MIDI. No audio, no plugins. It has to be reliable enough to be used in real music-making for years, so maintainability beats cleverness and feature count.
+
+**Licence (decided 20 Nov 2026).** Hums is licensed under the GNU AGPL, version 3 (`LICENSE`), because JUCE 9 is available only under the AGPLv3 or a commercial licence and Hums uses it under the AGPLv3. Any further dependency must have a licence compatible with that; ask Roland before adding one.
 
 **Platform stance (decided 18 Nov 2026, Windows added 20 Nov 2026).** macOS is the only platform that is built, tested and shipped. Linux and Windows versions may be developed later, once everything works on macOS; neither is a target now. The code is written so that such a port would need new backends and a theme, not a redesign: everything that touches the OS sits behind the small `platform/` interfaces (rule 1, *Layers*, guardrail 2). JUCE draws its own widgets inside a native window and is not expected to blend into macOS, GNOME, Windows or any other desktop; multimedia UIs rarely do, and that is accepted. iPad was assessed and dropped (see *Non-goals*).
 
@@ -57,9 +59,9 @@ Exact versions live in `TOOLCHAIN.md`; this list says what is pinned and how.
 - JUCE **9.0.6**, pinned for the whole Hums v1 cycle (recorded in `libs/JUCE_VERSION` and `TOOLCHAIN.md`), as a git submodule in `libs/JUCE` checked out at the `9.0.6` release tag. Built via JUCE's CMake API. No Projucer. Current master docs are reference, never a reason to move the pin; for API questions read `libs/JUCE/modules` (rule 13). Moving the pin within v1 is a decision for Roland, not a maintenance task.
 - C++20, Xcode's clang. Pinned Xcode, CMake, Ninja and macOS deployment target recorded in `TOOLCHAIN.md`.
 - Tests: Catch2 v3 via CMake `FetchContent`, pinned. Tests cover model, IO, rendering, and engine logic. GUI is not unit-tested; it has a manual checklist (`docs/MANUAL_CHECKS.md`).
-- Build shape: each layer (`platform` with its `platform/mac/` backends, `model`, `io`, the render core, the rest of `render`, `engine`) is a static library target, and the app links them. Every layer is declared in `src/` from the start; it becomes a target with its first source (`hums_add_layer` in `src/CMakeLists.txt`). The JUCE modules are compiled once, into `hums_juce`, which the JUCE-using layers link; JUCE modules must be linked `PRIVATE` and only once per binary. Test executables link only the layer libraries they test plus the JUCE modules those layers use; they never link the app target or `juce_gui_*`. Render-core tests link no JUCE at all. This keeps an edit-build-test iteration, Roland's or an agent's, from paying the full JUCE and app link. `ccache` is the compiler launcher; its version and wiring are recorded in `TOOLCHAIN.md`.
+- Build shape: each layer (`platform` with its `platform/mac/` backends, `model`, `io`, the render core, the rest of `render`, `engine`) is a library target, and the app links them: a static library, or an INTERFACE library while the layer holds only headers, as the `platform/` interfaces do. Every layer is declared in `src/` from the start; it becomes a target with its first source (`hums_add_layer` in `src/CMakeLists.txt`). The JUCE modules are compiled once, into `hums_juce`, which the JUCE-using layers link; JUCE modules must be linked `PRIVATE` and only once per binary. Test executables link only the layer libraries they test plus the JUCE modules those layers use; they never link the app target or `juce_gui_*`. Render-core tests link no JUCE at all. This keeps an edit-build-test iteration, Roland's or an agent's, from paying the full JUCE and app link. `ccache` is the compiler launcher; its version and wiring are recorded in `TOOLCHAIN.md`.
 - Guardrail checks are plain scripts in `tools/`, registered as CTest tests so `ctest` fails on a violation. Each script ships a fixture that must *fail* it, and that negative test runs too. No separate CI is assumed; the local test run is the gate.
-- Sanitizers: besides the plain Debug build there are two instrumented configurations, ASan + UBSan and TSan, selected by the CMake option `HUMS_SANITIZE` (`address` / `thread`), each in its own build directory. `tools/gate.sh` runs all three; that script, not a bare `ctest`, is the full gate. See `docs/GUARDRAILS.md → Sanitizer builds`.
+- Sanitizers: besides the plain Debug build there are two instrumented configurations, ASan + UBSan and TSan, selected by the CMake option `HUMS_SANITIZE` (`address` / `thread`), each in its own build directory. `tools/gate.sh` runs all three, and builds `tools/miditiming` in the plain one so the timing tool cannot break unnoticed; that script, not a bare `ctest`, is the full gate. In every configuration a failed `jassert` or a JUCE leak report fails the test that printed it; test executables are registered through `hums_discover_tests`, never a bare `catch_discover_tests`. See `docs/GUARDRAILS.md → Sanitizer builds`.
 - `clang-format` config checked in. Decide the style once, then never discuss it again.
 
 ## Commands
@@ -94,6 +96,7 @@ Fill in as the build system lands. Expected shape:
 CMakeLists.txt
 CLAUDE.md
 README.md
+LICENSE                GNU AGPL, version 3
 TOOLCHAIN.md           pinned versions and build-time baselines
 .claude/rules/         path-scoped pointers that load the docs below when matching files are touched
 docs/
@@ -155,7 +158,7 @@ tests/
   engine/
   platform/            the pure parts of the platform/mac/ backends (no MIDI hardware needed)
   guardrails/          invariant property tests; drives the tools/ scripts and their negative fixtures;
-                       sanitizer canaries
+                       sanitizer canaries; the two programs that prove a JUCE assertion or leak report fails a test
 ```
 
 ## Core concepts (glossary)
@@ -235,7 +238,7 @@ Roland is the only maintainer and will not read every line, so structure is enfo
 
 Every script ships a fixture that must fail it. Never weaken, skip or `// NOLINT` a guardrail to make a feature land (rule 12). Manual checks: `docs/MANUAL_CHECKS.md`, at milestone boundaries, on the ASan + UBSan build of the app.
 
-**Sanitizer builds** — the suite also runs under ASan + UBSan (all tests) and TSan (engine tests, real threads); a sanitizer report is a failing test, and three canaries with planted bugs prove the instrumentation is still there. `tools/gate.sh` runs all three configurations. Full contract in `docs/GUARDRAILS.md → Sanitizer builds`.
+**Sanitizer builds** — the suite also runs under ASan + UBSan (all tests) and TSan (engine tests, real threads); a sanitizer report is a failing test, and three canaries with planted bugs prove the instrumentation is still there. A failed `jassert` and a JUCE leak report fail a test the same way, with two planted-bug programs to prove it. `tools/gate.sh` runs all three configurations. Full contract in `docs/GUARDRAILS.md → Sanitizer builds`.
 
 ## Conventions
 
