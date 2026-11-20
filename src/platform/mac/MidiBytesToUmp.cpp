@@ -26,8 +26,13 @@ namespace
             case 0xf2: return 3; // song position pointer
             case 0xf3: return 2; // song select
             case 0xf6: return 1; // tune request
-            case 0xf0: case 0xf7: return 0; // SysEx is handled separately
-            default: return status >= 0xf8 ? 1 : 0; // real-time; f4, f5 undefined
+            case 0xf8: return 1; // timing clock
+            case 0xfa: return 1; // start
+            case 0xfb: return 1; // continue
+            case 0xfc: return 1; // stop
+            case 0xfe: return 1; // active sensing
+            case 0xff: return 1; // system reset
+            default: return 0;   // f0, f7: SysEx, handled separately; f4, f5, f9, fd: undefined
         }
     }
 

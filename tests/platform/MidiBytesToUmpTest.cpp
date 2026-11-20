@@ -36,6 +36,11 @@ TEST_CASE ("System common and real-time messages become one type-1 word", "[plat
 {
     CHECK (convert ({ 0xf8 }) == std::vector<std::uint32_t> { 0x10f80000 });
     CHECK (convert ({ 0xfa }) == std::vector<std::uint32_t> { 0x10fa0000 });
+    CHECK (convert ({ 0xfb }) == std::vector<std::uint32_t> { 0x10fb0000 });
+    CHECK (convert ({ 0xfc }) == std::vector<std::uint32_t> { 0x10fc0000 });
+    CHECK (convert ({ 0xfe }) == std::vector<std::uint32_t> { 0x10fe0000 });
+    CHECK (convert ({ 0xff }) == std::vector<std::uint32_t> { 0x10ff0000 });
+    CHECK (convert ({ 0xf6 }) == std::vector<std::uint32_t> { 0x10f60000 });
     CHECK (convert ({ 0xf2, 0x10, 0x02 }) == std::vector<std::uint32_t> { 0x10f21002 });
     CHECK (convert ({ 0xf3, 7 }) == std::vector<std::uint32_t> { 0x10f30700 });
 }
@@ -86,6 +91,9 @@ TEST_CASE ("Malformed messages are refused", "[platform]")
     CHECK (convert ({ 0xf0, 1, 2 }).empty());         // SysEx without F7
     CHECK (convert ({ 0xf0, 1, 0x90, 0xf7 }).empty()); // status inside SysEx
     CHECK (convert ({ 0xf4 }).empty());               // undefined system common
+    CHECK (convert ({ 0xf5 }).empty());               // undefined system common
+    CHECK (convert ({ 0xf9 }).empty());               // undefined real-time
+    CHECK (convert ({ 0xfd }).empty());               // undefined real-time
     CHECK (convert ({ 0xf7 }).empty());               // stray end of SysEx
 
     std::vector<std::uint8_t> tooLong (MidiBytesToUmp::maxSysexPayload + 3, 0x11);

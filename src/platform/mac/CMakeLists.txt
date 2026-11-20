@@ -4,6 +4,8 @@ hums_add_layer(hums_platform_mac
     SOURCES
         CoreMidiScheduler.cpp
         CoreMidiScheduler.h
+        DeviceIdentifier.cpp
+        DeviceIdentifier.h
         MachMonotonicClock.cpp
         MachMonotonicClock.h
         MachRealtimeThread.cpp
@@ -12,8 +14,7 @@ hums_add_layer(hums_platform_mac
         MachTime.h
         MidiBytesToUmp.cpp
         MidiBytesToUmp.h
-    LAYERS hums_platform
-    JUCE)
+    LAYERS hums_platform)
 
 target_link_libraries(hums_platform_mac PUBLIC
     "-framework CoreMIDI"
