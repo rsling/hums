@@ -1,0 +1,20 @@
+== miditiming report ==
+started: 21 Nov 2026 0:04:25
+send path: CoreMidiScheduler (CoreMIDI, future timestamps)
+pattern: stacked: 4 track(s), sixteenths at 121 bpm, CC 74 + note-on per step, note-off at half step
+loop: IAC Driver Bus 1 -> IAC Driver Bus 1 (software)
+length: 5.00 min
+sender: window 2.00 ms, look-ahead 10.00 ms, real-time priority granted
+load: quiet; after the milestone 0 code review changed the send path
+system: Mac OSX 27.0.1, Apple M1 Ultra, JUCE v9.0.6
+build: Release
+arrival time: MonotonicClock read in the input callback (includes CoreMIDI delivery)
+
+wake-up lateness (sender thread)   median    0.019 ms   p99    0.043 ms   max    0.105 ms   (min 0.003, n = 149970)
+hand-over lead (intended - send()) median    8.989 ms   p99    9.972 ms   max    9.999 ms   (min 7.952, n = 29040)
+lateness, raw                      median    0.075 ms   p99    0.114 ms   max    0.155 ms   (min 0.041, n = 29040)
+drift (raw): +0.0005 ms per minute; median first minute 0.075 ms, last minute 0.077 ms
+messages sent 29040, received 29040, dropped 0, unexpected 0, send() refused 0, input overflow 0, handed to backend after intended time 0
+
+targets [D1] on raw lateness: p99 <= 1 ms, max <= 2 ms, zero drops -> MET
+

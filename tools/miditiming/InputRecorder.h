@@ -17,6 +17,9 @@ struct ReceivedMessage
     std::int64_t timeNanoseconds = 0;
     std::array<std::uint8_t, 3> bytes {};
     std::uint8_t size = 0;
+    // Which input it arrived on, for listen mode with several inputs: arrival
+    // order means something only between messages of one input.
+    int input = 0;
 };
 
 // Records what arrives on one input. The arrival time is read from the

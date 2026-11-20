@@ -22,6 +22,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <memory>
@@ -43,12 +44,12 @@ Send mode: each --out is looped back by cable (or IAC bus) to the --in at the sa
 
 options:
   --density single|stacked|spread   (default stacked)
-  --minutes <m>              run length (default 5)
-  --bpm <n>                  tempo of the sixteenths (default 121: a sixteenth is not a whole
-                             number of milliseconds, so events don't all land at one phase of
-                             a 1 ms timer, as they would at 120)
-  --window-ms <ms>           sender wake-up period (default 2)
-  --lookahead-ms <ms>        how far ahead messages are handed over (default 10)
+  --minutes <m>              run length (default 5, at most 1440)
+  --bpm <n>                  tempo of the sixteenths, 1 to 1000 (default 121: a sixteenth is not
+                             a whole number of milliseconds, so events don't all land at one
+                             phase of a 1 ms timer, as they would at 120)
+  --window-ms <ms>           sender wake-up period, 0.001 to 1000 (default 2)
+  --lookahead-ms <ms>        how far ahead messages are handed over, 0.001 to 10000 (default 10)
   --din                      the loop is a DIN cable: also report lateness net of wire time
   --load "<text>"            what load the tester produced during the run (recorded in the report)
   --report <file>            append the report to this file
@@ -57,9 +58,13 @@ options:
 listen mode: start miditiming first, then start playback from the beginning in the other app.
 Recording begins with the first message and lasts the reference's length plus 2 s.
   --reference <file.mid>     what the other app meant to send: its SMF export of the same project
-  --din                      one --in, looped over a DIN cable: also report lateness net of wire time
+  --din                      one --in, looped over a DIN cable: also report lateness net of wire time,
+                             for the shortest and the longest wire time the line can have had
+                             (running status or not, MIDI clock or not); INCONCLUSIVE if only
+                             one of the two meets the targets
   Lateness is relative: the best-timed message is lateness 0 (the listener can't know when the
   other app meant to start). Clock, start/stop and SysEx are not compared.
+  Messages of one tick must arrive in the reference's order (checked per input).
 
 --write-reference writes the send-mode pattern as an SMF and exits, to check listen mode against
 send mode or another app. Needs a tempo whose quarter note is a whole number of microseconds
@@ -91,12 +96,18 @@ std::optional<Options> parse (int argc, char** argv)
             if (i + 1 >= argc) return std::nullopt;
             return std::string (argv[++i]);
         };
-        const auto number = [&] (double& target)
+        // The whole text has to be one number in the range: std::stod alone
+        // would take "121,5" as 121 and let "inf" through, and a value that
+        // rounds to zero nanoseconds would divide by zero further on.
+        const auto number = [&] (double& target, double lowest, double highest)
         {
             const auto v = value();
             if (! v) return false;
-            try { target = std::stod (*v); } catch (...) { return false; }
-            return target > 0;
+
+            std::size_t used = 0;
+            try { target = std::stod (*v, &used); } catch (...) { return false; }
+
+            return used == v->size() && target >= lowest && target <= highest;
         };
 
         bool ok = true;
@@ -111,10 +122,10 @@ std::optional<Options> parse (int argc, char** argv)
         else if (arg == "--reference") { auto v = value(); ok = v.has_value(); if (ok) o.referenceFile = *v; }
         else if (arg == "--write-reference") { auto v = value(); ok = v.has_value(); if (ok) o.writeReferenceFile = *v; }
         else if (arg == "--csv") { auto v = value(); ok = v.has_value(); if (ok) o.csvFile = *v; }
-        else if (arg == "--minutes") ok = number (o.minutes);
-        else if (arg == "--bpm") ok = number (o.bpm);
-        else if (arg == "--window-ms") ok = number (o.windowMs);
-        else if (arg == "--lookahead-ms") ok = number (o.lookAheadMs);
+        else if (arg == "--minutes") ok = number (o.minutes, 0.001, 1440);
+        else if (arg == "--bpm") ok = number (o.bpm, 1, 1000);
+        else if (arg == "--window-ms") ok = number (o.windowMs, 0.001, 1000);
+        else if (arg == "--lookahead-ms") ok = number (o.lookAheadMs, 0.001, 10000);
         else ok = false;
 
         if (! ok)
@@ -160,6 +171,72 @@ std::string nowText()
     return juce::Time::getCurrentTime().toString (true, true, true, true).toStdString();
 }
 
+// Timing figures count only from a plain Release build (docs/GUARDRAILS.md ->
+// Sanitizer builds), so every report says which build produced it.
+std::string buildText()
+{
+   #ifdef NDEBUG
+    return "Release";
+   #else
+    return "Debug (timing figures count only from a plain Release build)";
+   #endif
+}
+
+// Checked before a run starts, so that a mistyped path costs a message, not
+// the minutes of the run. An existing file is left as it is.
+bool canWriteOutputFiles (const Options& o)
+{
+    for (const auto* path : { &o.reportFile, &o.csvFile })
+    {
+        if (path->empty())
+            continue;
+
+        std::error_code ignored;
+        const bool existed = std::filesystem::exists (*path, ignored);
+        const bool opened = std::ofstream (*path, std::ios::app).is_open();
+
+        if (opened && ! existed)
+            std::filesystem::remove (*path, ignored);
+
+        if (! opened)
+        {
+            std::cerr << "cannot write " << *path << "\n";
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool writeTextFile (const std::string& path, const std::string& text, std::ios::openmode mode)
+{
+    std::ofstream file (path, mode);
+    file << text;
+    file.close();
+
+    if (file.fail())
+    {
+        std::cerr << "could not write " << path << "\n";
+        return false;
+    }
+
+    return true;
+}
+
+// The report is appended to --report, the per-message rows replace --csv.
+bool writeOutputFiles (const Options& o, const std::string& reportText, const std::string& csvText)
+{
+    bool written = true;
+
+    if (! o.reportFile.empty())
+        written = writeTextFile (o.reportFile, reportText + "\n", std::ios::app) && written;
+
+    if (! o.csvFile.empty())
+        written = writeTextFile (o.csvFile, csvText, std::ios::out) && written;
+
+    return written;
+}
+
 int run (const Options& o)
 {
     bool densityOk = false;
@@ -182,6 +259,9 @@ int run (const Options& o)
         std::cerr << "only --density spread uses more than one port pair\n";
         return 2;
     }
+
+    if (! canWriteOutputFiles (o))
+        return 1;
 
     const auto outputDevices = juce::MidiOutput::getAvailableDevices();
     const auto inputDevices = juce::MidiInput::getAvailableDevices();
@@ -231,7 +311,7 @@ int run (const Options& o)
         const auto handle = scheduler.open (out->identifier.toStdString());
         if (handle == platform::MidiScheduler::invalidPort)
         {
-            std::cerr << "could not open output " << o.outs[i] << "\n";
+            std::cerr << "could not open output " << o.outs[i] << " (a port can be open only once: is it given twice?)\n";
             return 1;
         }
         ports.push_back (handle);
@@ -299,25 +379,14 @@ int run (const Options& o)
         "load: " + o.load,
         "system: " + juce::SystemStats::getOperatingSystemName().toStdString() + ", "
             + juce::SystemStats::getCpuModel().toStdString() + ", " + juce::SystemStats::getJUCEVersion().toStdString(),
+        "build: " + buildText(),
         "arrival time: MonotonicClock read in the input callback (includes CoreMIDI delivery)",
     };
 
     const miditiming::TimingReport report (std::move (reportInput));
     std::cout << "\n" << report.text() << std::flush;
 
-    if (! o.reportFile.empty())
-    {
-        std::ofstream file (o.reportFile, std::ios::app);
-        file << report.text() << "\n";
-    }
-
-    if (! o.csvFile.empty())
-    {
-        std::ofstream file (o.csvFile);
-        file << report.csv();
-    }
-
-    return 0;
+    return writeOutputFiles (o, report.text(), o.csvFile.empty() ? std::string() : report.csv()) ? 0 : 1;
 }
 
 
@@ -357,6 +426,9 @@ int listen (const Options& o)
         std::cerr << "--din needs exactly one --in: wire time is computed for one line\n";
         return 2;
     }
+
+    if (! canWriteOutputFiles (o))
+        return 1;
 
     miditiming::ReferenceFile reference;
     std::string error;
@@ -436,13 +508,17 @@ int listen (const Options& o)
     reportInput.reference = &reference;
     reportInput.din = o.din;
 
-    for (auto& recorder : recorders)
+    for (std::size_t i = 0; i < recorders.size(); ++i)
     {
-        const auto received = recorder->received();
+        auto& recorder = recorders[i];
+        auto received = recorder->received();
+        for (auto& message : received)
+            message.input = static_cast<int> (i);
         reportInput.received.insert (reportInput.received.end(), received.begin(), received.end());
         reportInput.inputOverflows += recorder->overflowCount();
     }
 
+    // Stable, so the messages of one input keep the order they arrived in.
     std::stable_sort (reportInput.received.begin(), reportInput.received.end(),
                       [] (const auto& a, const auto& b) { return a.timeNanoseconds < b.timeNanoseconds; });
 
@@ -458,25 +534,14 @@ int listen (const Options& o)
         "load: " + o.load,
         "system: " + juce::SystemStats::getOperatingSystemName().toStdString() + ", "
             + juce::SystemStats::getCpuModel().toStdString() + ", " + juce::SystemStats::getJUCEVersion().toStdString(),
+        "build: " + buildText(),
         "arrival time: MonotonicClock read in the input callback (includes CoreMIDI delivery)",
     };
 
     const miditiming::ListenReport report (std::move (reportInput));
     std::cout << "\n" << report.text() << std::flush;
 
-    if (! o.reportFile.empty())
-    {
-        std::ofstream file (o.reportFile, std::ios::app);
-        file << report.text() << "\n";
-    }
-
-    if (! o.csvFile.empty())
-    {
-        std::ofstream file (o.csvFile);
-        file << report.csv();
-    }
-
-    return 0;
+    return writeOutputFiles (o, report.text(), o.csvFile.empty() ? std::string() : report.csv()) ? 0 : 1;
 }
 
 } // namespace

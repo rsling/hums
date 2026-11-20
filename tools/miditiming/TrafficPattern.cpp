@@ -1,9 +1,22 @@
 #include "TrafficPattern.h"
 
 #include <cmath>
+#include <cstdio>
 
 namespace miditiming
 {
+
+namespace
+{
+    // The tempo as given, "121" or "187.5": the pattern line is the report's
+    // only record of it, so a fractional tempo must not be cut to a whole one.
+    std::string tempoText (double bpm)
+    {
+        char buffer[32];
+        std::snprintf (buffer, sizeof (buffer), "%g", bpm);
+        return buffer;
+    }
+} // namespace
 
 TrafficPattern::TrafficPattern (Density density, int portCount, double bpm, double minutes)
 {
@@ -48,7 +61,7 @@ TrafficPattern::TrafficPattern (Density density, int portCount, double bpm, doub
     }
 
     description = nameOf (density) + ": " + std::to_string (trackCount) + " track(s), sixteenths at "
-                + std::to_string (static_cast<int> (bpm)) + " bpm, CC 74 + note-on per step, note-off at half step";
+                + tempoText (bpm) + " bpm, CC 74 + note-on per step, note-off at half step";
 
     if (density == Density::spread)
         description += ", tracks round-robin over " + std::to_string (portCount) + " port(s)";
