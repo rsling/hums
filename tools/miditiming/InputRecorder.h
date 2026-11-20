@@ -37,6 +37,8 @@ public:
     // Call only after the input has been stopped.
     std::vector<ReceivedMessage> received() const;
     int overflowCount() const { return overflows.load(); }
+    // How many messages have arrived so far; safe while the input runs.
+    std::size_t receivedCount() const { return count.load (std::memory_order_acquire); }
 
 private:
     const platform::MonotonicClock& clock;

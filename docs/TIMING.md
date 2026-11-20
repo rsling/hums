@@ -72,3 +72,28 @@ build-release/tools/miditiming/miditiming --out "U6MIDI Pro Port 1" --in "U6MIDI
 ```
 
 `--csv <file>` writes one row per message (intended, hand-over and arrival times, wire time) for closer inspection. The CSVs from these runs are not kept; they are a few MB each and rerunning reproduces them.
+
+## Listen mode (for milestone 3)
+
+`miditiming --listen` records what another app plays into a loopback and compares it with that app's SMF export of the same project, which the same Kernel renders, so it is exactly what the engine meant to send.
+
+```
+build-release/tools/miditiming/miditiming --listen --in "<port>" --reference <export.mid> [--din] \
+    --load "<what>" --report docs/timing/<date>-<what>.txt
+```
+
+Start it first, then start playback from the beginning in the app. Recording begins with the first message and lasts the reference's length plus 2 s.
+
+- **Lateness is relative.** The listener cannot know when the app meant to start, so arrivals are aligned so that the best-timed message has (net) lateness 0. Jitter, drift, drops, extra messages and wrong order all show; a constant delay does not, and on hardware the interface's own floor (0.7–0.9 ms on the U6MIDI Pro) drops out with it.
+- **Matching** is by content, each kind of message in order, within ±50 ms of its aligned time, so several `--in` ports can be merged. Note-offs match by channel and pitch; a note-on with velocity 0 counts as one, and release velocity is not compared. Clock, start/stop and SysEx are not compared; SysEx in the reference is counted.
+- **Net** (`--din`, one `--in` only): the same wire-time model as send mode, except that running status is assumed wherever the reference allows it. That gives the shortest wire time, so net lateness is if anything overstated.
+- Messages arriving more than 50 ms after the reference's last message (a panic or All Notes Off at stop) are counted as *after the end* and ignored.
+
+`--write-reference <file.mid>` writes the send-mode pattern as an SMF, so listen mode can be checked without the app. It needs a tempo whose quarter note is a whole number of microseconds (`--bpm 128`). Checked on 20 Nov 2026 by running send mode and listen mode at once on one loop:
+
+| loop | send mode (absolute) median / p99 / max | listen mode (relative) median / p99 / max |
+|---|---|---|
+| IAC, stacked, 2 min | raw 0.097 / 0.142 / 0.181 (min 0.045) | raw 0.041 / 0.085 / 0.115 |
+| U6MIDI Pro, stacked, 0.5 min | net 1.099 / 1.324 / 1.391 (min 0.769) | net 0.324 / 0.545 / 0.626 |
+
+Per message the two agree to within 0.04 ms around a constant offset. Listen mode also reported each planted fault: a reference with three tracks the sender didn't play (2304 dropped), a sender playing three tracks the reference lacked (2304 unexpected), and messages handed over late within a 4 ms window (relative lateness spread 0–4 ms).

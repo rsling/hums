@@ -4,9 +4,15 @@
 add_executable(miditiming
     InputRecorder.cpp
     InputRecorder.h
+    ListenReport.cpp
+    ListenReport.h
     Main.cpp
+    ReferenceFile.cpp
+    ReferenceFile.h
     Sender.cpp
     Sender.h
+    Statistics.cpp
+    Statistics.h
     TimingReport.cpp
     TimingReport.h
     TrafficPattern.cpp

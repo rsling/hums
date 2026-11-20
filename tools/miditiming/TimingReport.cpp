@@ -1,7 +1,8 @@
 #include "TimingReport.h"
 
+#include "Statistics.h"
+
 #include <algorithm>
-#include <cmath>
 #include <cstdio>
 #include <sstream>
 
@@ -10,47 +11,8 @@ namespace miditiming
 
 namespace
 {
-    // DIN MIDI: 31 250 baud, 10 bits per byte.
-    constexpr std::int64_t dinNanosecondsPerByte = 320'000;
-
     // How far ahead to look for the received message after a mismatch.
     constexpr std::size_t resyncWindow = 64;
-
-    struct Stats
-    {
-        std::size_t count = 0;
-        double median = 0, p99 = 0, max = 0, min = 0;
-    };
-
-    // Nearest-rank percentiles, in milliseconds.
-    Stats statsOf (std::vector<std::int64_t> values)
-    {
-        Stats s;
-        s.count = values.size();
-        if (values.empty())
-            return s;
-
-        std::sort (values.begin(), values.end());
-        const auto at = [&] (double p)
-        {
-            const auto rank = static_cast<std::size_t> (std::ceil (p * static_cast<double> (values.size())));
-            return static_cast<double> (values[std::max<std::size_t> (rank, 1) - 1]) / 1.0e6;
-        };
-
-        s.median = at (0.5);
-        s.p99 = at (0.99);
-        s.max = static_cast<double> (values.back()) / 1.0e6;
-        s.min = static_cast<double> (values.front()) / 1.0e6;
-        return s;
-    }
-
-    std::string line (const char* label, const Stats& s)
-    {
-        char buffer[200];
-        std::snprintf (buffer, sizeof (buffer), "%-34s median %8.3f ms   p99 %8.3f ms   max %8.3f ms   (min %.3f, n = %zu)",
-                       label, s.median, s.p99, s.max, s.min, s.count);
-        return buffer;
-    }
 
     bool sameBytes (const PatternMessage& sent, const ReceivedMessage& got)
     {
@@ -151,18 +113,7 @@ void TimingReport::summarise()
 
     // Drift: least-squares slope of the judged lateness over the run, and the
     // median of the first and last minute.
-    double slope = 0;
-    if (judgedOverTime.size() > 1)
-    {
-        double mx = 0, my = 0;
-        for (const auto& [x, y] : judgedOverTime) { mx += x; my += y; }
-        mx /= static_cast<double> (judgedOverTime.size());
-        my /= static_cast<double> (judgedOverTime.size());
-
-        double sxy = 0, sxx = 0;
-        for (const auto& [x, y] : judgedOverTime) { sxy += (x - mx) * (y - my); sxx += (x - mx) * (x - mx); }
-        slope = sxx > 0 ? sxy / sxx : 0;
-    }
+    const auto slope = slopeOf (judgedOverTime);
 
     const auto lengthMinutes = static_cast<double> (in.pattern->lengthNanoseconds()) / 60.0e9;
     std::vector<std::int64_t> firstMinute, lastMinute;
@@ -188,11 +139,11 @@ void TimingReport::summarise()
     for (const auto& h : in.header)
         out << h << "\n";
     out << "\n";
-    out << line ("wake-up lateness (sender thread)", statsOf (wake)) << "\n";
-    out << line ("hand-over lead (intended - send())", statsOf (handOver)) << "\n";
-    out << line ("lateness, raw", rawStats) << "\n";
+    out << statsLine ("wake-up lateness (sender thread)", statsOf (wake)) << "\n";
+    out << statsLine ("hand-over lead (intended - send())", statsOf (handOver)) << "\n";
+    out << statsLine ("lateness, raw", rawStats) << "\n";
     if (in.din)
-        out << line ("lateness, net of DIN wire time", netStats) << "\n";
+        out << statsLine ("lateness, net of DIN wire time", netStats) << "\n";
 
     char buffer[200];
     std::snprintf (buffer, sizeof (buffer), "drift (%s): %+.4f ms per minute; median first minute %.3f ms, last minute %.3f ms",
