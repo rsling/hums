@@ -84,7 +84,7 @@ build-release/tools/miditiming/miditiming --listen --in "<port>" --reference <ex
 
 Start it first, then start playback from the beginning in the app. Recording begins with the first message and lasts the reference's length plus 2 s.
 
-- **Lateness is relative.** The listener cannot know when the app meant to start, so arrivals are aligned so that the best-timed message has (net) lateness 0. Jitter, drift, drops, extra messages and wrong order all show; a constant delay does not, and on hardware the interface's own floor (0.7–0.9 ms on the U6MIDI Pro) drops out with it.
+- **Lateness is relative.** The listener cannot know when the app meant to start, so arrivals are aligned so that the best-timed message has (net) lateness 0. Jitter, drift, drops, extra messages and wrong order all show; a constant delay does not, and on hardware the interface's own floor (0.7–0.9 ms on the U6MIDI Pro) drops out with it. Whether milestone 3 adds an absolute measurement is open question Q8 (`docs/DECISIONS.md`).
 - **Matching** is by content, each kind of message in order, within ±50 ms of its aligned time, so several `--in` ports can be merged. Note-offs match by channel and pitch; a note-on with velocity 0 counts as one, and release velocity is not compared. Clock, start/stop and SysEx are not compared; SysEx in the reference is counted.
 - **Net** (`--din`, one `--in` only): the same wire-time model as send mode, except that running status is assumed wherever the reference allows it. That gives the shortest wire time, so net lateness is if anything overstated.
 - Messages arriving more than 50 ms after the reference's last message (a panic or All Notes Off at stop) are counted as *after the end* and ignored.
