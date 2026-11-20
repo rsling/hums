@@ -66,6 +66,9 @@ target_link_libraries(hums_juce
     PRIVATE
         juce::juce_core
         juce::juce_data_structures
+        juce::juce_events
+        juce::juce_audio_basics
+        juce::juce_audio_devices
     PUBLIC
         juce::juce_recommended_config_flags)
 target_compile_definitions(hums_juce PUBLIC
@@ -97,3 +100,10 @@ enable_testing()
 add_custom_target(hums_tests)
 
 add_subdirectory(tests)
+
+# ---------------------------------------------------------------------------
+# Tools. Timing is never measured on an instrumented build
+# (docs/GUARDRAILS.md -> Sanitizer builds), so miditiming isn't built there.
+if(NOT HUMS_SANITIZE)
+    add_subdirectory(tools/miditiming)
+endif()

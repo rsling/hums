@@ -1,0 +1,343 @@
+// miditiming: loopback MIDI timing measurement for milestone 0
+// (docs/ARCHITECTURE.md -> Timing). Sends a dense pattern through one of the
+// platform::MidiScheduler backends and measures what comes back in.
+// Measure only on a plain Release build, never an instrumented one.
+
+#include "InputRecorder.h"
+#include "Sender.h"
+#include "TimingReport.h"
+#include "TrafficPattern.h"
+
+#include "platform/mac/CoreMidiScheduler.h"
+#include "platform/mac/JuceTimerMidiScheduler.h"
+#include "platform/mac/MachMonotonicClock.h"
+#include "platform/mac/MachRealtimeThread.h"
+
+#include <juce_audio_devices/juce_audio_devices.h>
+#include <juce_events/juce_events.h>
+
+#include <chrono>
+#include <fstream>
+#include <iostream>
+#include <memory>
+#include <optional>
+#include <string>
+#include <thread>
+#include <vector>
+
+namespace
+{
+
+const char* usage = R"(usage:
+  miditiming --list
+  miditiming --out <port> --in <port> [--out <port> --in <port> ...] [options]
+
+Each --out is looped back by cable (or IAC bus) to the --in at the same position.
+
+options:
+  --backend coremidi|juce    send path (default coremidi)
+                               coremidi: CoreMIDI packets with future timestamps
+                               juce:     1 ms HighResolutionTimer + sendMessageNow
+  --density single|stacked|spread   (default stacked)
+  --minutes <m>              run length (default 5)
+  --bpm <n>                  tempo of the sixteenths (default 120)
+  --window-ms <ms>           sender wake-up period (default 2)
+  --lookahead-ms <ms>        how far ahead messages are handed over (default 10)
+  --din                      the loop is a DIN cable: also report lateness net of wire time
+  --load "<text>"            what load the tester produced during the run (recorded in the report)
+  --report <file>            append the report to this file
+  --csv <file>               write one row per message to this file
+
+  --listen                   milestone 3 mode (compare against an SMF export): not built yet
+)";
+
+struct Options
+{
+    bool list = false;
+    bool listen = false;
+    std::vector<std::string> outs, ins;
+    std::string backend = "coremidi";
+    std::string density = "stacked";
+    double minutes = 5, bpm = 120, windowMs = 2, lookAheadMs = 10;
+    bool din = false;
+    std::string load = "none (quiet)";
+    std::string reportFile, csvFile;
+};
+
+std::optional<Options> parse (int argc, char** argv)
+{
+    Options o;
+
+    for (int i = 1; i < argc; ++i)
+    {
+        const std::string arg = argv[i];
+        const auto value = [&]() -> std::optional<std::string>
+        {
+            if (i + 1 >= argc) return std::nullopt;
+            return std::string (argv[++i]);
+        };
+        const auto number = [&] (double& target)
+        {
+            const auto v = value();
+            if (! v) return false;
+            try { target = std::stod (*v); } catch (...) { return false; }
+            return target > 0;
+        };
+
+        bool ok = true;
+        if (arg == "--list") o.list = true;
+        else if (arg == "--listen") o.listen = true;
+        else if (arg == "--din") o.din = true;
+        else if (arg == "--out") { auto v = value(); ok = v.has_value(); if (ok) o.outs.push_back (*v); }
+        else if (arg == "--in") { auto v = value(); ok = v.has_value(); if (ok) o.ins.push_back (*v); }
+        else if (arg == "--backend") { auto v = value(); ok = v.has_value(); if (ok) o.backend = *v; }
+        else if (arg == "--density") { auto v = value(); ok = v.has_value(); if (ok) o.density = *v; }
+        else if (arg == "--load") { auto v = value(); ok = v.has_value(); if (ok) o.load = *v; }
+        else if (arg == "--report") { auto v = value(); ok = v.has_value(); if (ok) o.reportFile = *v; }
+        else if (arg == "--csv") { auto v = value(); ok = v.has_value(); if (ok) o.csvFile = *v; }
+        else if (arg == "--minutes") ok = number (o.minutes);
+        else if (arg == "--bpm") ok = number (o.bpm);
+        else if (arg == "--window-ms") ok = number (o.windowMs);
+        else if (arg == "--lookahead-ms") ok = number (o.lookAheadMs);
+        else ok = false;
+
+        if (! ok)
+        {
+            std::cerr << "bad or incomplete argument: " << arg << "\n\n" << usage;
+            return std::nullopt;
+        }
+    }
+
+    return o;
+}
+
+std::optional<juce::MidiDeviceInfo> findDevice (const juce::Array<juce::MidiDeviceInfo>& devices, const std::string& nameOrId)
+{
+    for (const auto& d : devices)
+        if (d.name.toStdString() == nameOrId)
+            return d;
+    for (const auto& d : devices)
+        if (d.identifier.toStdString() == nameOrId)
+            return d;
+    return std::nullopt;
+}
+
+void listPorts()
+{
+    platform::CoreMidiScheduler coreMidi;
+
+    std::cout << "outputs (name | identifier | CoreMIDI backend resolves it):\n";
+    for (const auto& d : juce::MidiOutput::getAvailableDevices())
+    {
+        const auto handle = coreMidi.open (d.identifier.toStdString());
+        std::cout << "  " << d.name << " | " << d.identifier << " | " << (handle >= 0 ? "yes" : "NO") << "\n";
+        coreMidi.close (handle);
+    }
+
+    std::cout << "inputs (name | identifier):\n";
+    for (const auto& d : juce::MidiInput::getAvailableDevices())
+        std::cout << "  " << d.name << " | " << d.identifier << "\n";
+}
+
+std::string nowText()
+{
+    return juce::Time::getCurrentTime().toString (true, true, true, true).toStdString();
+}
+
+int run (const Options& o)
+{
+    bool densityOk = false;
+    const auto density = miditiming::densityFromName (o.density, densityOk);
+
+    if (! densityOk || (o.backend != "coremidi" && o.backend != "juce"))
+    {
+        std::cerr << usage;
+        return 2;
+    }
+
+    if (o.outs.empty() || o.outs.size() != o.ins.size())
+    {
+        std::cerr << "give the same number of --out and --in ports (at least one each)\n";
+        return 2;
+    }
+
+    if (density != miditiming::Density::spread && o.outs.size() > 1)
+    {
+        std::cerr << "only --density spread uses more than one port pair\n";
+        return 2;
+    }
+
+    const auto outputDevices = juce::MidiOutput::getAvailableDevices();
+    const auto inputDevices = juce::MidiInput::getAvailableDevices();
+
+    platform::MachMonotonicClock clock;
+    platform::MachRealtimeThread realtime;
+
+    std::unique_ptr<platform::MidiScheduler> scheduler;
+    platform::JuceTimerMidiScheduler* juceScheduler = nullptr;
+
+    if (o.backend == "coremidi")
+    {
+        auto coreMidi = std::make_unique<platform::CoreMidiScheduler>();
+        if (! coreMidi->isReady())
+        {
+            std::cerr << "could not create the CoreMIDI client\n";
+            return 1;
+        }
+        scheduler = std::move (coreMidi);
+    }
+    else
+    {
+        auto timer = std::make_unique<platform::JuceTimerMidiScheduler> (clock);
+        juceScheduler = timer.get();
+        scheduler = std::move (timer);
+    }
+
+    const miditiming::TrafficPattern pattern (density, static_cast<int> (o.outs.size()), o.bpm, o.minutes);
+
+    // Generous: every message could arrive on one input.
+    const auto capacity = pattern.messages().size() + 4096;
+
+    std::vector<std::unique_ptr<miditiming::InputRecorder>> recorders;
+    std::vector<std::unique_ptr<juce::MidiInput>> inputs;
+    std::vector<platform::MidiScheduler::PortHandle> ports;
+
+    for (std::size_t i = 0; i < o.outs.size(); ++i)
+    {
+        const auto out = findDevice (outputDevices, o.outs[i]);
+        const auto in = findDevice (inputDevices, o.ins[i]);
+
+        if (! out || ! in)
+        {
+            std::cerr << "no such port: " << (! out ? "output " + o.outs[i] : "input " + o.ins[i]) << " (see --list)\n";
+            return 1;
+        }
+
+        recorders.push_back (std::make_unique<miditiming::InputRecorder> (clock, capacity));
+        auto input = juce::MidiInput::openDevice (in->identifier, recorders.back().get());
+        if (input == nullptr)
+        {
+            std::cerr << "could not open input " << o.ins[i] << "\n";
+            return 1;
+        }
+        inputs.push_back (std::move (input));
+
+        const auto handle = scheduler->open (out->identifier.toStdString());
+        if (handle == platform::MidiScheduler::invalidPort)
+        {
+            std::cerr << "could not open output " << o.outs[i] << " with the " << o.backend << " backend\n";
+            return 1;
+        }
+        ports.push_back (handle);
+    }
+
+    miditiming::Sender::Settings settings;
+    settings.windowNanoseconds = static_cast<std::int64_t> (o.windowMs * 1.0e6);
+    settings.lookAheadNanoseconds = static_cast<std::int64_t> (o.lookAheadMs * 1.0e6);
+
+    miditiming::Sender sender (*scheduler, clock, realtime, pattern, ports, settings);
+
+    for (auto& input : inputs)
+        input->start();
+
+    const auto startedAt = nowText();
+    std::cout << "running " << o.minutes << " min, " << pattern.messages().size() << " messages, backend "
+              << o.backend << ", " << pattern.describe() << "\n" << std::flush;
+
+    // Time zero one second out, so ports and threads have settled.
+    const auto start = clock.nowNanoseconds() + 1'000'000'000;
+    std::thread senderThread ([&] { sender.run (start); });
+
+    const auto end = start + pattern.lengthNanoseconds();
+    while (clock.nowNanoseconds() < end)
+    {
+        std::this_thread::sleep_for (std::chrono::seconds (1));
+        const auto elapsed = (clock.nowNanoseconds() - start) / 1'000'000'000;
+        if (elapsed > 0 && elapsed % 30 == 0)
+            std::cout << "  " << elapsed << " s\n" << std::flush;
+    }
+
+    senderThread.join();
+
+    // Let the last messages arrive: DIN queues can hold several ms.
+    std::this_thread::sleep_for (std::chrono::milliseconds (500));
+
+    for (auto& input : inputs)
+        input->stop();
+
+    miditiming::TimingReport::Input reportInput;
+    reportInput.pattern = &pattern;
+    reportInput.sender = &sender;
+    reportInput.startNanoseconds = start;
+    reportInput.din = o.din;
+    reportInput.backendOverflows = juceScheduler != nullptr ? juceScheduler->overflowCount() : 0;
+
+    for (auto& recorder : recorders)
+    {
+        reportInput.receivedPerPort.push_back (recorder->received());
+        reportInput.inputOverflows += recorder->overflowCount();
+    }
+
+    std::string pairs;
+    for (std::size_t i = 0; i < o.outs.size(); ++i)
+        pairs += (i > 0 ? "; " : "") + o.outs[i] + " -> " + o.ins[i];
+
+    reportInput.header = {
+        "started: " + startedAt,
+        "backend: " + o.backend,
+        "pattern: " + pattern.describe(),
+        "loop: " + pairs + (o.din ? " (DIN)" : " (software)"),
+        "length: " + juce::String (o.minutes, 2).toStdString() + " min",
+        "sender: window " + juce::String (o.windowMs, 2).toStdString() + " ms, look-ahead "
+            + juce::String (o.lookAheadMs, 2).toStdString() + " ms, real-time priority "
+            + (sender.realtimeGranted() ? "granted" : "REFUSED"),
+        "load: " + o.load,
+        "system: " + juce::SystemStats::getOperatingSystemName().toStdString() + ", "
+            + juce::SystemStats::getCpuModel().toStdString() + ", " + juce::SystemStats::getJUCEVersion().toStdString(),
+        "arrival time: MonotonicClock read in the input callback (includes CoreMIDI delivery)",
+    };
+
+    const miditiming::TimingReport report (std::move (reportInput));
+    std::cout << "\n" << report.text() << std::flush;
+
+    if (! o.reportFile.empty())
+    {
+        std::ofstream file (o.reportFile, std::ios::app);
+        file << report.text() << "\n";
+    }
+
+    if (! o.csvFile.empty())
+    {
+        std::ofstream file (o.csvFile);
+        file << report.csv();
+    }
+
+    return 0;
+}
+
+} // namespace
+
+int main (int argc, char** argv)
+{
+    const auto options = parse (argc, argv);
+    if (! options)
+        return 2;
+
+    // JUCE's MIDI device list expects a MessageManager to exist; the loop
+    // itself never needs to run in a one-shot tool.
+    juce::ScopedJuceInitialiser_GUI juce;
+
+    if (options->list)
+    {
+        listPorts();
+        return 0;
+    }
+
+    if (options->listen)
+    {
+        std::cerr << "--listen is milestone 3 work and not built yet\n";
+        return 2;
+    }
+
+    return run (*options);
+}

@@ -7,3 +7,4 @@ function(hums_add_test_executable target)
 endfunction()
 
 add_subdirectory(guardrails)
+add_subdirectory(platform)
