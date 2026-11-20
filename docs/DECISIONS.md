@@ -13,7 +13,7 @@ Rules for Claude:
 
 | id | default | applies in | status |
 |---|---|---|---|
-| D1 | Timing targets: p99 output lateness ≤ 1 ms, max ≤ 2 ms, zero drops (software loopback and hardware net of wire time; dense load; tester-produced load in M0, the app's own GUI and save load in M3) | `docs/ARCHITECTURE.md → Timing`, milestones 0 and 3 | pending |
+| D1 | Timing targets: p99 output lateness ≤ 1 ms, max ≤ 2 ms, zero drops (software loopback and hardware net of wire time; dense load; tester-produced load in M0, the app's own GUI and save load in M3) | `docs/ARCHITECTURE.md → Timing`, milestones 0 and 3 | changed 2026-11-20: software loopback unchanged (p99 ≤ 1 ms, max ≤ 2 ms); hardware net of wire time p99 ≤ 2 ms, max ≤ 3 ms; zero drops on every run. The interface itself adds 0.7–0.9 ms that no send path removes; numbers in `docs/TIMING.md` |
 | D2 | MIDI clock pulses run continuously while the app has the port, also while stopped, so synth LFOs and arpeggiators stay locked | `docs/ARCHITECTURE.md → Timing` | pending |
 | D3 | The step-clip same-pitch merge (tie) never crosses the loop point: a lane of equal pitches with long gates retriggers once per loop instead of droning | `docs/RENDERING.md → StepClip` | pending |
 | D4 | Session recording lands takes on new take tracks that copy the source's Player, channel and name, placed at the record start | `docs/EDITING.md → Session recording` | pending |
@@ -23,6 +23,8 @@ Rules for Claude:
 | D8 | The step sequencer and drum view are the first editor (milestone 4), before the arrangement and piano roll | `docs/MILESTONES.md` | pending |
 | D9 | The full gate (`tools/gate.sh`: plain, ASan + UBSan, TSan) runs before every commit; plain `ctest` is for the loop in between | `CLAUDE.md → Git and done`, `docs/GUARDRAILS.md → Sanitizer builds` | pending |
 | D10 | No RealtimeSanitizer gate configuration in v1: the pinned Xcode 27.0 clang does not ship it (`-fsanitize=realtime` unsupported, checked 20 Nov 2026). The engine thread's no-allocation / no-lock rule may later get a compile-time check instead: `[[clang::nonblocking]]` on engine-thread entry points plus `-Wfunction-effects` as an error, which the pinned clang supports. Formerly open question Q7 | `docs/GUARDRAILS.md → Sanitizer builds`, `TOOLCHAIN.md` | confirmed 2026-11-20 |
+| D11 | Milestone 0 measures one hardware interface (the U6MIDI Pro), not two; a second interface is not measured at all | `docs/ARCHITECTURE.md → Timing`, `docs/MILESTONES.md` | confirmed 2026-11-20 |
+| D12 | The engine's send path is CoreMIDI with future timestamps (`platform/mac/CoreMidiScheduler`), handed over one look-ahead early; the `HighResolutionTimer` + `sendMessageNow` candidate missed the software target (p99 1.16 ms quiet) and was removed | `docs/ARCHITECTURE.md → Timing`, `CLAUDE.md → Layers and dependencies` | confirmed 2026-11-20 |
 
 ## Open questions
 

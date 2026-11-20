@@ -1,6 +1,7 @@
 // miditiming: loopback MIDI timing measurement for milestone 0
-// (docs/ARCHITECTURE.md -> Timing). Sends a dense pattern through one of the
-// platform::MidiScheduler backends and measures what comes back in.
+// (docs/ARCHITECTURE.md -> Timing, results in docs/TIMING.md). Sends a dense
+// pattern through platform::MidiScheduler (CoreMidiScheduler, the engine's
+// send path) and measures what comes back in.
 // Measure only on a plain Release build, never an instrumented one.
 
 #include "InputRecorder.h"
@@ -9,7 +10,6 @@
 #include "TrafficPattern.h"
 
 #include "platform/mac/CoreMidiScheduler.h"
-#include "platform/mac/JuceTimerMidiScheduler.h"
 #include "platform/mac/MachMonotonicClock.h"
 #include "platform/mac/MachRealtimeThread.h"
 
@@ -35,9 +35,6 @@ const char* usage = R"(usage:
 Each --out is looped back by cable (or IAC bus) to the --in at the same position.
 
 options:
-  --backend coremidi|juce    send path (default coremidi)
-                               coremidi: CoreMIDI packets with future timestamps
-                               juce:     1 ms HighResolutionTimer + sendMessageNow
   --density single|stacked|spread   (default stacked)
   --minutes <m>              run length (default 5)
   --bpm <n>                  tempo of the sixteenths (default 121: a sixteenth is not a whole
@@ -58,7 +55,6 @@ struct Options
     bool list = false;
     bool listen = false;
     std::vector<std::string> outs, ins;
-    std::string backend = "coremidi";
     std::string density = "stacked";
     double minutes = 5, bpm = 121, windowMs = 2, lookAheadMs = 10;
     bool din = false;
@@ -92,7 +88,6 @@ std::optional<Options> parse (int argc, char** argv)
         else if (arg == "--din") o.din = true;
         else if (arg == "--out") { auto v = value(); ok = v.has_value(); if (ok) o.outs.push_back (*v); }
         else if (arg == "--in") { auto v = value(); ok = v.has_value(); if (ok) o.ins.push_back (*v); }
-        else if (arg == "--backend") { auto v = value(); ok = v.has_value(); if (ok) o.backend = *v; }
         else if (arg == "--density") { auto v = value(); ok = v.has_value(); if (ok) o.density = *v; }
         else if (arg == "--load") { auto v = value(); ok = v.has_value(); if (ok) o.load = *v; }
         else if (arg == "--report") { auto v = value(); ok = v.has_value(); if (ok) o.reportFile = *v; }
@@ -151,7 +146,7 @@ int run (const Options& o)
     bool densityOk = false;
     const auto density = miditiming::densityFromName (o.density, densityOk);
 
-    if (! densityOk || (o.backend != "coremidi" && o.backend != "juce"))
+    if (! densityOk)
     {
         std::cerr << usage;
         return 2;
@@ -175,25 +170,15 @@ int run (const Options& o)
     platform::MachMonotonicClock clock;
     platform::MachRealtimeThread realtime;
 
-    std::unique_ptr<platform::MidiScheduler> scheduler;
-    platform::JuceTimerMidiScheduler* juceScheduler = nullptr;
+    platform::CoreMidiScheduler coreMidi;
+    if (! coreMidi.isReady())
+    {
+        std::cerr << "could not create the CoreMIDI client\n";
+        return 1;
+    }
 
-    if (o.backend == "coremidi")
-    {
-        auto coreMidi = std::make_unique<platform::CoreMidiScheduler>();
-        if (! coreMidi->isReady())
-        {
-            std::cerr << "could not create the CoreMIDI client\n";
-            return 1;
-        }
-        scheduler = std::move (coreMidi);
-    }
-    else
-    {
-        auto timer = std::make_unique<platform::JuceTimerMidiScheduler> (clock);
-        juceScheduler = timer.get();
-        scheduler = std::move (timer);
-    }
+    // Everything below sees only the interface, as the engine will.
+    platform::MidiScheduler& scheduler = coreMidi;
 
     const miditiming::TrafficPattern pattern (density, static_cast<int> (o.outs.size()), o.bpm, o.minutes);
 
@@ -224,10 +209,10 @@ int run (const Options& o)
         }
         inputs.push_back (std::move (input));
 
-        const auto handle = scheduler->open (out->identifier.toStdString());
+        const auto handle = scheduler.open (out->identifier.toStdString());
         if (handle == platform::MidiScheduler::invalidPort)
         {
-            std::cerr << "could not open output " << o.outs[i] << " with the " << o.backend << " backend\n";
+            std::cerr << "could not open output " << o.outs[i] << "\n";
             return 1;
         }
         ports.push_back (handle);
@@ -237,14 +222,14 @@ int run (const Options& o)
     settings.windowNanoseconds = static_cast<std::int64_t> (o.windowMs * 1.0e6);
     settings.lookAheadNanoseconds = static_cast<std::int64_t> (o.lookAheadMs * 1.0e6);
 
-    miditiming::Sender sender (*scheduler, clock, realtime, pattern, ports, settings);
+    miditiming::Sender sender (scheduler, clock, realtime, pattern, ports, settings);
 
     for (auto& input : inputs)
         input->start();
 
     const auto startedAt = nowText();
-    std::cout << "running " << o.minutes << " min, " << pattern.messages().size() << " messages, backend "
-              << o.backend << ", " << pattern.describe() << "\n" << std::flush;
+    std::cout << "running " << o.minutes << " min, " << pattern.messages().size() << " messages, "
+              << pattern.describe() << "\n" << std::flush;
 
     // Time zero one second out, so ports and threads have settled.
     const auto start = clock.nowNanoseconds() + 1'000'000'000;
@@ -272,7 +257,6 @@ int run (const Options& o)
     reportInput.sender = &sender;
     reportInput.startNanoseconds = start;
     reportInput.din = o.din;
-    reportInput.backendOverflows = juceScheduler != nullptr ? juceScheduler->overflowCount() : 0;
 
     for (auto& recorder : recorders)
     {
@@ -286,7 +270,7 @@ int run (const Options& o)
 
     reportInput.header = {
         "started: " + startedAt,
-        "backend: " + o.backend,
+        "send path: CoreMidiScheduler (CoreMIDI, future timestamps)",
         "pattern: " + pattern.describe(),
         "loop: " + pairs + (o.din ? " (DIN)" : " (software)"),
         "length: " + juce::String (o.minutes, 2).toStdString() + " min",

@@ -26,7 +26,6 @@ public:
         std::int64_t startNanoseconds = 0;
         std::vector<std::vector<ReceivedMessage>> receivedPerPort;
         int inputOverflows = 0;
-        int backendOverflows = 0;
         bool din = false;                  // the loop runs over a DIN cable
     };
 

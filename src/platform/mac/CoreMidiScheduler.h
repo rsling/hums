@@ -13,8 +13,8 @@ namespace platform
 {
 
 // MidiScheduler that hands CoreMIDI packets with future host-time timestamps,
-// so the driver, not our thread, decides when the bytes leave. Timing-candidate
-// backend for milestone 0.
+// so the driver, not our thread, decides when the bytes leave. The engine's
+// send path, chosen at milestone 0 (docs/TIMING.md).
 class CoreMidiScheduler final : public MidiScheduler
 {
 public:

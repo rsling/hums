@@ -1,0 +1,141 @@
+== miditiming report ==
+started: 20 Nov 2026 1:18:57
+backend: coremidi
+pattern: stacked: 4 track(s), sixteenths at 121 bpm, CC 74 + note-on per step, note-off at half step
+loop: IAC Driver Bus 1 -> IAC Driver Bus 1 (software)
+length: 5.00 min
+sender: window 2.00 ms, look-ahead 10.00 ms, real-time priority granted
+load: none (quiet)
+system: Mac OSX 27.0.1, Apple M1 Ultra, JUCE v9.0.6
+arrival time: MonotonicClock read in the input callback (includes CoreMIDI delivery)
+
+wake-up lateness (sender thread)   median    0.022 ms   p99    0.083 ms   max    0.185 ms   (min 0.003, n = 149970)
+hand-over lead (intended - send()) median    8.980 ms   p99    9.961 ms   max    9.999 ms   (min 7.870, n = 29040)
+lateness, raw                      median    0.090 ms   p99    0.162 ms   max    0.453 ms   (min 0.037, n = 29040)
+drift (raw): -0.0007 ms per minute; median first minute 0.091 ms, last minute 0.091 ms
+messages sent 29040, received 29040, dropped 0, unexpected 0, send() refused 0, backend overflow 0, input overflow 0, handed to backend after intended time 0
+
+targets [D1] on raw lateness: p99 <= 1 ms, max <= 2 ms, zero drops -> MET
+
+== miditiming report ==
+started: 20 Nov 2026 1:23:59
+backend: coremidi
+pattern: single: 1 track(s), sixteenths at 121 bpm, CC 74 + note-on per step, note-off at half step
+loop: IAC Driver Bus 1 -> IAC Driver Bus 1 (software)
+length: 5.00 min
+sender: window 2.00 ms, look-ahead 10.00 ms, real-time priority granted
+load: none (quiet)
+system: Mac OSX 27.0.1, Apple M1 Ultra, JUCE v9.0.6
+arrival time: MonotonicClock read in the input callback (includes CoreMIDI delivery)
+
+wake-up lateness (sender thread)   median    0.022 ms   p99    0.065 ms   max    0.240 ms   (min 0.004, n = 149971)
+hand-over lead (intended - send()) median    8.991 ms   p99    9.971 ms   max   10.000 ms   (min 7.953, n = 7260)
+lateness, raw                      median    0.101 ms   p99    0.178 ms   max    0.390 ms   (min 0.040, n = 7260)
+drift (raw): +0.0022 ms per minute; median first minute 0.086 ms, last minute 0.103 ms
+messages sent 7260, received 7260, dropped 0, unexpected 0, send() refused 0, backend overflow 0, input overflow 0, handed to backend after intended time 0
+
+targets [D1] on raw lateness: p99 <= 1 ms, max <= 2 ms, zero drops -> MET
+
+== miditiming report ==
+started: 20 Nov 2026 1:29:01
+backend: juce
+pattern: stacked: 4 track(s), sixteenths at 121 bpm, CC 74 + note-on per step, note-off at half step
+loop: IAC Driver Bus 1 -> IAC Driver Bus 1 (software)
+length: 5.00 min
+sender: window 2.00 ms, look-ahead 10.00 ms, real-time priority granted
+load: none (quiet)
+system: Mac OSX 27.0.1, Apple M1 Ultra, JUCE v9.0.6
+arrival time: MonotonicClock read in the input callback (includes CoreMIDI delivery)
+
+wake-up lateness (sender thread)   median    0.020 ms   p99    0.057 ms   max    0.206 ms   (min 0.004, n = 149971)
+hand-over lead (intended - send()) median    8.997 ms   p99    9.977 ms   max    9.999 ms   (min 7.977, n = 29040)
+lateness, raw                      median    0.649 ms   p99    1.159 ms   max    1.239 ms   (min 0.080, n = 29040)
+drift (raw): +0.0029 ms per minute; median first minute 0.643 ms, last minute 0.654 ms
+messages sent 29040, received 29040, dropped 0, unexpected 0, send() refused 0, backend overflow 0, input overflow 0, handed to backend after intended time 0
+
+targets [D1] on raw lateness: p99 <= 1 ms, max <= 2 ms, zero drops -> NOT MET
+
+== miditiming report ==
+started: 20 Nov 2026 1:34:04
+backend: coremidi
+pattern: single: 1 track(s), sixteenths at 121 bpm, CC 74 + note-on per step, note-off at half step
+loop: U6MIDI Pro Port 1 -> U6MIDI Pro Port 1 (DIN)
+length: 5.00 min
+sender: window 2.00 ms, look-ahead 10.00 ms, real-time priority granted
+load: none (quiet)
+system: Mac OSX 27.0.1, Apple M1 Ultra, JUCE v9.0.6
+arrival time: MonotonicClock read in the input callback (includes CoreMIDI delivery)
+
+wake-up lateness (sender thread)   median    0.022 ms   p99    0.068 ms   max    0.280 ms   (min 0.005, n = 149970)
+hand-over lead (intended - send()) median    8.994 ms   p99    9.973 ms   max    9.999 ms   (min 7.941, n = 7260)
+lateness, raw                      median    2.274 ms   p99    3.257 ms   max    3.480 ms   (min 1.827, n = 7260)
+lateness, net of DIN wire time     median    1.182 ms   p99    1.523 ms   max    2.454 ms   (min 0.771, n = 7260)
+drift (net): -0.0036 ms per minute; median first minute 1.185 ms, last minute 1.183 ms
+messages sent 7260, received 7260, dropped 0, unexpected 0, send() refused 0, backend overflow 0, input overflow 0, handed to backend after intended time 0
+
+targets [D1] on net lateness: p99 <= 1 ms, max <= 2 ms, zero drops -> NOT MET
+(wire time = the message's own bytes plus the bytes queued ahead of it on the same DIN line, 0.32 ms per byte)
+
+== miditiming report ==
+started: 20 Nov 2026 1:39:06
+backend: coremidi
+pattern: stacked: 4 track(s), sixteenths at 121 bpm, CC 74 + note-on per step, note-off at half step
+loop: U6MIDI Pro Port 1 -> U6MIDI Pro Port 1 (DIN)
+length: 5.00 min
+sender: window 2.00 ms, look-ahead 10.00 ms, real-time priority granted
+load: none (quiet)
+system: Mac OSX 27.0.1, Apple M1 Ultra, JUCE v9.0.6
+arrival time: MonotonicClock read in the input callback (includes CoreMIDI delivery)
+
+wake-up lateness (sender thread)   median    0.022 ms   p99    0.071 ms   max    0.262 ms   (min 0.005, n = 149970)
+hand-over lead (intended - send()) median    8.977 ms   p99    9.954 ms   max    9.999 ms   (min 7.925, n = 29040)
+lateness, raw                      median    4.697 ms   p99    9.088 ms   max    9.593 ms   (min 1.861, n = 29040)
+lateness, net of DIN wire time     median    1.258 ms   p99    1.587 ms   max    2.647 ms   (min 0.839, n = 29040)
+drift (net): -0.0019 ms per minute; median first minute 1.259 ms, last minute 1.249 ms
+messages sent 29040, received 29040, dropped 0, unexpected 0, send() refused 0, backend overflow 0, input overflow 0, handed to backend after intended time 0
+
+targets [D1] on net lateness: p99 <= 1 ms, max <= 2 ms, zero drops -> NOT MET
+(wire time = the message's own bytes plus the bytes queued ahead of it on the same DIN line, 0.32 ms per byte)
+
+== miditiming report ==
+started: 20 Nov 2026 1:44:09
+backend: coremidi
+pattern: spread: 4 track(s), sixteenths at 121 bpm, CC 74 + note-on per step, note-off at half step, tracks round-robin over 3 port(s)
+loop: U6MIDI Pro Port 1 -> U6MIDI Pro Port 1; U6MIDI Pro Port 2 -> U6MIDI Pro Port 2; U6MIDI Pro Port 3 -> U6MIDI Pro Port 3 (DIN)
+length: 5.00 min
+sender: window 2.00 ms, look-ahead 10.00 ms, real-time priority granted
+load: none (quiet)
+system: Mac OSX 27.0.1, Apple M1 Ultra, JUCE v9.0.6
+arrival time: MonotonicClock read in the input callback (includes CoreMIDI delivery)
+
+wake-up lateness (sender thread)   median    0.022 ms   p99    0.070 ms   max    0.293 ms   (min 0.005, n = 149970)
+hand-over lead (intended - send()) median    8.978 ms   p99    9.957 ms   max    9.999 ms   (min 7.863, n = 29040)
+lateness, raw                      median    2.917 ms   p99    5.257 ms   max    5.745 ms   (min 1.819, n = 29040)
+lateness, net of DIN wire time     median    1.361 ms   p99    1.917 ms   max    2.848 ms   (min 0.859, n = 29040)
+drift (net): +0.0014 ms per minute; median first minute 1.358 ms, last minute 1.364 ms
+messages sent 29040, received 29040, dropped 0, unexpected 0, send() refused 0, backend overflow 0, input overflow 0, handed to backend after intended time 0
+
+targets [D1] on net lateness: p99 <= 1 ms, max <= 2 ms, zero drops -> NOT MET
+(wire time = the message's own bytes plus the bytes queued ahead of it on the same DIN line, 0.32 ms per byte)
+
+== miditiming report ==
+started: 20 Nov 2026 1:49:11
+backend: juce
+pattern: stacked: 4 track(s), sixteenths at 121 bpm, CC 74 + note-on per step, note-off at half step
+loop: U6MIDI Pro Port 1 -> U6MIDI Pro Port 1 (DIN)
+length: 5.00 min
+sender: window 2.00 ms, look-ahead 10.00 ms, real-time priority granted
+load: none (quiet)
+system: Mac OSX 27.0.1, Apple M1 Ultra, JUCE v9.0.6
+arrival time: MonotonicClock read in the input callback (includes CoreMIDI delivery)
+
+wake-up lateness (sender thread)   median    0.020 ms   p99    0.059 ms   max    0.218 ms   (min 0.004, n = 149970)
+hand-over lead (intended - send()) median    9.002 ms   p99    9.979 ms   max    9.999 ms   (min 7.984, n = 29040)
+lateness, raw                      median    5.110 ms   p99    9.879 ms   max   10.281 ms   (min 1.988, n = 29040)
+lateness, net of DIN wire time     median    1.795 ms   p99    2.422 ms   max    2.807 ms   (min 0.925, n = 29040)
+drift (net): -0.0018 ms per minute; median first minute 1.791 ms, last minute 1.789 ms
+messages sent 29040, received 29040, dropped 0, unexpected 0, send() refused 0, backend overflow 0, input overflow 0, handed to backend after intended time 0
+
+targets [D1] on net lateness: p99 <= 1 ms, max <= 2 ms, zero drops -> NOT MET
+(wire time = the message's own bytes plus the bytes queued ahead of it on the same DIN line, 0.32 ms per byte)
+

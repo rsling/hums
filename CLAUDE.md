@@ -19,6 +19,7 @@ Revised 3 Oct 2026 after an external design review; quantisation contract, Trans
 | `docs/GUARDRAILS.md` | full contract of the five guardrails, golden case list, sanitizer builds, manual checks, external review | before touching `tools/`, `tests/guardrails/`, golden files, `CMakeLists.txt` (auto-loaded) |
 | `docs/MILESTONES.md` | milestones 0–7 with demo and pass criteria | when starting, planning or closing a milestone |
 | `docs/DECISIONS.md` | status of every [Dn] default and open question | when a task depends on one; when Roland answers one |
+| `docs/TIMING.md` | milestone 0 timing results, run conditions, how to read and repeat them | before changing the send path, the timing targets or `tools/miditiming`; at milestone 3 |
 | `TOOLCHAIN.md` | pinned versions (JUCE, Xcode, clang, CMake, Ninja, Catch2, ccache, deployment target), build-time baselines | before changing the build or any pin |
 
 When a task spans areas, read every doc whose area it touches, not only the ones auto-loaded so far.
@@ -103,6 +104,8 @@ docs/
   GUARDRAILS.md        guardrail contract, golden case list, sanitizer builds
   MILESTONES.md        milestone plan
   DECISIONS.md         status of defaults and open questions
+  TIMING.md            milestone 0 timing results and how they were measured
+  timing/              raw miditiming reports behind TIMING.md
   MANUAL_CHECKS.md     GUI interaction checklist, run at milestone boundaries
 libs/
   JUCE/                submodule, pinned tag (9.0.6)
@@ -214,7 +217,7 @@ Six source layers, a std-only core inside `render/`, and a std-only interface se
 
 The render core is std-only so that the engine's dependency on it is transitively clean by construction: `check_layers.py` checks the core's own includes, not paths through them. The core therefore never reads the document itself — `SnapshotBuilder` turns the Timeline into TempoMap data and clips into templates and chase tables on the message thread, and `io/` does the same for export.
 
-The `platform/` interfaces are std-only for the same reason the render core is: the engine's dependency on them is clean by construction. Time crosses that boundary as nanoseconds on a monotonic clock; the CoreMIDI backend converts to and from mach host time internally. `app/` constructs the `platform/mac/` backends at startup and hands them to the engine as interface references; the engine never knows which backend it holds. A JUCE-based send path, if milestone 0 picks one, is wrapped the same way, so swapping the send path is a one-line change in `app/`. A later Linux or Windows port adds a sibling backend directory (`platform/linux/`, `platform/windows/`) and changes nothing above this layer.
+The `platform/` interfaces are std-only for the same reason the render core is: the engine's dependency on them is clean by construction. Time crosses that boundary as nanoseconds on a monotonic clock; the CoreMIDI backend converts to and from mach host time internally. `app/` constructs the `platform/mac/` backends at startup and hands them to the engine as interface references; the engine never knows which backend it holds. The send path is CoreMIDI with future timestamps (`platform/mac/CoreMidiScheduler`), chosen at milestone 0 **[D12]**; swapping it would still be a one-line change in `app/`. A later Linux or Windows port adds a sibling backend directory (`platform/linux/`, `platform/windows/`) and changes nothing above this layer.
 
 `TransportFacade.h` must not transitively include any other `engine/` header; it exposes an interface class and plain types. Include graphs cannot prove thread behaviour, so the engine additionally asserts in debug builds that it is never called on the message thread with a `ValueTree` in scope — in practice: the engine simply cannot name the type.
 

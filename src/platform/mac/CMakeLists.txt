@@ -4,8 +4,6 @@ hums_add_layer(hums_platform_mac
     SOURCES
         CoreMidiScheduler.cpp
         CoreMidiScheduler.h
-        JuceTimerMidiScheduler.cpp
-        JuceTimerMidiScheduler.h
         MachMonotonicClock.cpp
         MachMonotonicClock.h
         MachRealtimeThread.cpp

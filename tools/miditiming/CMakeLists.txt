@@ -1,6 +1,6 @@
 # tools/miditiming: loopback timing measurement (docs/ARCHITECTURE.md -> Timing).
-# Built against the platform/ interfaces and the platform/mac/ backends, so one
-# harness compares send paths. Measure on a plain Release build only.
+# Built against the platform/ interfaces, so the engine's send path and any
+# future backend are measured the same way. Plain Release build only.
 add_executable(miditiming
     InputRecorder.cpp
     InputRecorder.h

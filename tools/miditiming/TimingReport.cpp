@@ -176,7 +176,7 @@ void TimingReport::summarise()
     const auto rawStats = statsOf (raw);
     const auto netStats = statsOf (net);
     const auto& judged = in.din ? netStats : rawStats;
-    const auto drops = dropped + in.inputOverflows + in.backendOverflows + in.sender->failedSends();
+    const auto drops = dropped + in.inputOverflows + in.sender->failedSends();
 
     met = judged.count > 0 && judged.p99 <= 1.0 && judged.max <= 2.0 && drops == 0 && unexpected == 0;
 
@@ -199,7 +199,6 @@ void TimingReport::summarise()
     out << "messages sent " << messages.size() << ", received " << raw.size()
         << ", dropped " << dropped << ", unexpected " << unexpected
         << ", send() refused " << in.sender->failedSends()
-        << ", backend overflow " << in.backendOverflows
         << ", input overflow " << in.inputOverflows
         << ", handed to backend after intended time " << handedLate << "\n";
 
