@@ -40,7 +40,9 @@ options:
                                juce:     1 ms HighResolutionTimer + sendMessageNow
   --density single|stacked|spread   (default stacked)
   --minutes <m>              run length (default 5)
-  --bpm <n>                  tempo of the sixteenths (default 120)
+  --bpm <n>                  tempo of the sixteenths (default 121: a sixteenth is not a whole
+                             number of milliseconds, so events don't all land at one phase of
+                             a 1 ms timer, as they would at 120)
   --window-ms <ms>           sender wake-up period (default 2)
   --lookahead-ms <ms>        how far ahead messages are handed over (default 10)
   --din                      the loop is a DIN cable: also report lateness net of wire time
@@ -58,7 +60,7 @@ struct Options
     std::vector<std::string> outs, ins;
     std::string backend = "coremidi";
     std::string density = "stacked";
-    double minutes = 5, bpm = 120, windowMs = 2, lookAheadMs = 10;
+    double minutes = 5, bpm = 121, windowMs = 2, lookAheadMs = 10;
     bool din = false;
     std::string load = "none (quiet)";
     std::string reportFile, csvFile;
