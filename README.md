@@ -15,3 +15,10 @@ I don't review code. I just make all decisions on the architecture, I review tes
 ## On "wasting resources"
 
 Whether this project fails or succeeds, I'll learn something about complex software architectures, JUCE, C++, the macOS architecture, MIDI, and about agentic coding. So don't … just don't … 
+
+
+## Licence
+
+Hums is free software, licensed under the GNU Affero General Public License, version 3 (AGPLv3); the full text is in `LICENSE`. Copyright © 2026 Roland Schäfer.
+
+Hums is built on [JUCE](https://juce.com), which is itself available under the AGPLv3 or a commercial licence; Hums uses it under the AGPLv3. Revisions of this repository from before 20 Nov 2026 were published under the BSD 2-Clause licence.
