@@ -2,7 +2,7 @@
 
 Authoritative description of the document model. `src/model/Ids.h` mirrors this file exactly; if they disagree, fix one and bump `schemaVersion`.
 
-Revision history: v1 drafted Sept 2026; amended 3 Oct 2026 after external review (renderer decoupled from routing, equal-tick order, loop-length invariants, PadMap moved out of UiState, quantisation added, validated load boundary); quantisation grid origin, wrap rule and validation tightened the same day; later the same day: transport-loop command path, view-state identifiers in `Ids.h`, `stepCount` change rules, automation ownership window, arrangement end; 21 Nov 2026: a hand-edited file with an error is refused, never repaired, and invariant 10 covers `UiState`'s own properties, the tab names and the six digits of a double **[D17]**. `schemaVersion` is still 1 because nothing has shipped.
+Revision history: v1 drafted Sept 2026; amended 3 Oct 2026 after external review (renderer decoupled from routing, equal-tick order, loop-length invariants, PadMap moved out of UiState, quantisation added, validated load boundary); quantisation grid origin, wrap rule and validation tightened the same day; later the same day: transport-loop command path, view-state identifiers in `Ids.h`, `stepCount` change rules, automation ownership window, arrangement end; 21 Nov 2026: a hand-edited file with an error is refused, never repaired, and invariant 10 covers `UiState`'s own properties, the tab names and the six digits of a double **[D17]**; later the same day: two `TempoEvent`s or `TimeSigEvent`s at one tick are refused too, where the text still said the loader keeps the last. `schemaVersion` is still 1 because nothing has shipped.
 
 ## Conventions
 
@@ -109,9 +109,9 @@ Two Players bound to the same physical port both sending clock would emit duplic
 
 SMF conductor-track equivalent. Global, never per track. **The Timeline is the single authority for tick ↔ time conversion**; the engine, the recorder and SMF I/O all go through `render/TempoMap`, never through ad-hoc arithmetic.
 
-**TempoEvent** — `tick` (int64), `bpm` (double, finite, > 0; three decimals **[D14]**). One at tick 0 is required. At most one per tick; the loader keeps the last and reports the duplicate. The document stores `bpm` as entered, to three decimals (*Doubles*, below); `TempoMap` plays and exports it as `round(60 000 000 / bpm)` whole microseconds per quarter note, which is all an SMF can hold **[D13]** (`docs/ARCHITECTURE.md → Timing`). v1 UI edits only the one at tick 0; an imported tempo map stays in effect for playback and export until the user flattens it explicitly.
+**TempoEvent** — `tick` (int64), `bpm` (double, finite, > 0; three decimals **[D14]**). One at tick 0 is required. At most one per tick (invariant 6); a project file with two at one tick is refused like any other invalid file, never reduced to one **[D17]**. The document stores `bpm` as entered, to three decimals (*Doubles*, below); `TempoMap` plays and exports it as `round(60 000 000 / bpm)` whole microseconds per quarter note, which is all an SMF can hold **[D13]** (`docs/ARCHITECTURE.md → Timing`). v1 UI edits only the one at tick 0; an imported tempo map stays in effect for playback and export until the user flattens it explicitly.
 
-**TimeSigEvent** — `tick`, `numerator` (int, 1–32), `denominator` (int, power of two, 1–64). One at tick 0 is required. Same duplicate rule.
+**TimeSigEvent** — `tick`, `numerator` (int, 1–32), `denominator` (int, power of two, 1–64). One at tick 0 is required. At most one per tick, and two at one tick are refused the same way.
 
 **Marker** — `tick` (int64, required), `name` (string, default `""` **[D16]**). Round-trips to SMF marker meta events.
 

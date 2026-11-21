@@ -38,6 +38,7 @@ Implemented once in `src/render/`, used by the engine Snapshot and by SMF export
 | overlapping same pitch | earlier note truncated at the later onset |
 | End-of-Track | clip `loopLength` = EOT tick rounded up to a whole bar of the time signature at tick 0 |
 | tempo / time signature / markers | merged into the Timeline from any track |
+| two tempo events, or two time signatures, at one tick | the last in file order is kept, the others dropped and reported; the Timeline holds at most one per tick (`docs/SCHEMA.md`, invariant 6) |
 | other meta events, SMF SysEx packets/escapes | dropped and reported |
 | Players | left unassigned (rendering unaffected) |
 
