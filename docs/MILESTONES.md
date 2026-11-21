@@ -19,6 +19,10 @@ Known gaps that are not decisions (those are in `docs/DECISIONS.md`) and are not
 
 | pick up at | issue |
 |---|---|
+| milestone 1 | **[D14]** is decided but not built: no command exists yet. Every command that stores a double (`bpm`, `gate`; tasks F.17 and F.24) must first round it to the value its saved text reads back as, and the property tests must show a project is the same before and after save and reload. |
+| milestone 1 | The load path (task D.13) has to settle what happens to a hand-edited project file whose `bpm` or `gate` carries more than six significant digits: round on load, or refuse. `docs/SCHEMA.md → Doubles` leaves it open on purpose. |
+| milestone 1 | `Ids.h` gives the canonical property order only by the order of its lines. The canonical writer (task D.12) needs that order as a list it can walk; it must come from `Ids.h` itself or be checked against it, never be a second hand-kept list. |
+| milestone 1 | The gate's TSan run filters tests by `engine\|canary`, which now also matches the five guardrail 2 fixture tests with "engine" in their names (TSan reports 6 tests, not 1). They are script runs and harmless, but the count misleads. Tighten the filter in `tools/gate.sh` when the first real engine test gets its name (a gate change: Roland's yes). |
 | milestone 1 | The runtime half of **[D15]** is not built yet: guardrail 3 must assert after every command that every type and property name in the undoable subtree is declared in `Ids.h` (`docs/GUARDRAILS.md → 3`). It lands with the generator (task E.16) and needs the list of all identifiers, which the canonical writer (task D.12) needs in declaration order anyway. |
 | milestone 3 | `MidiScheduler` has no way to ask whether a port has gone; the engine learns it only from refused sends. Decide with the Routing tab how "unassigned" reaches the message thread (JUCE's device-list change, or a query on the interface). |
 | milestone 2 | An SMF tempo event has 24 bits, so `TempoMap` **[D13]** cannot hold a tempo below about 3.58 bpm (16 777 215 µs per quarter). Decide with the Validator's `bpm` range whether such a tempo is refused on entry or clamped. |
