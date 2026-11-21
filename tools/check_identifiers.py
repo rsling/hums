@@ -17,7 +17,8 @@ follows it is a value, and a value is not a name even when it equals one:
 setProperty (ids::kind, "cc", ...) is no hit. In a ValueTree constructed with
 its properties and subtrees, the names are the type and the first half of
 each pair: juce::ValueTree { "Event", { { "kind", "cc" } } } has two. The
-same word in a comment, a log message or a UI label is not a hit.
+body of a lambda after "-> juce::ValueTree {" is no construction. The same
+word in a comment, a log message or a UI label is not a hit.
 
 juce::Identifier converts from a string literal without a word, so a literal
 is accepted wherever an Identifier is expected, not only in JUCE's own calls.
@@ -26,7 +27,8 @@ literal that stands for the name:
 
     PropertyReader::getInt (node, "pitch", 60)    a function of ours with a
                                                   juce::Identifier parameter
-    juce::Identifier f() { return "pitch"; }      what such a function returns
+    juce::Identifier f() { return "pitch"; }      what a function returns as an
+    juce::ValueTree g() { return { "Note", {} }; }  Identifier or as a ValueTree
     std::array<juce::Identifier, 2> { ... }       a list of Identifiers
     xml.getIntAttribute ("pitch")                 an XML tag or attribute name
 
@@ -117,6 +119,10 @@ CONSTRUCTION_OPENING = re.compile(r"\b(" + "|".join(IDENTIFIER_TYPES) + r")\b\s*
 ASSIGNMENT = re.compile(r"\b(" + "|".join(IDENTIFIER_TYPES) + r")\b\s*\w+\s*=\s*" + STRING_LITERAL.pattern)
 SUBSCRIPT = re.compile(r"\[\s*" + STRING_LITERAL.pattern + r"\s*\]")
 
+# What stands before the type in a trailing return type: "[] () -> juce::ValueTree {"
+# opens the body of a lambda, not the brackets of a construction.
+TRAILING_RETURN_ARROW = re.compile(r"->\s*(?:const\s+)?(?:juce\s*::\s*)?$")
+
 IDS_DECLARATION = re.compile(
     r'^\s*inline\s+const\s+juce::Identifier\s+(\w+)\s*\{\s*"([^"\\]*)"\s*\}\s*;\s*$'
 )
@@ -156,6 +162,17 @@ TRAILING_RETURN_OF_IDENTIFIER = re.compile(
 )
 BETWEEN_PARAMETERS_AND_BODY = re.compile(r"\s*(?:(?:const|noexcept|override|final)\s*)*\{")
 RETURN_STATEMENT = re.compile(r"\breturn\b([^;]*);")
+
+#    The same for a ValueTree: "juce::ValueTree f() { return { "Event", { ... } }; }"
+#    constructs one from the list in braces, because the constructor that
+#    takes a type and its properties is not explicit (juce_ValueTree.h at the
+#    pinned tag). A variable, "juce::ValueTree event (ids::Event);", has the
+#    same opening and no body after its brackets.
+RETURNS_VALUE_TREE = re.compile(r"\bValueTree\b\s*&?\s*(?:\w+\s*::\s*)*\w+\s*\(")
+TRAILING_RETURN_OF_VALUE_TREE = re.compile(
+    r"->\s*(?:const\s+)?(?:juce\s*::\s*)?ValueTree\b\s*&?\s*\{"
+)
+RETURN_OF_LIST = re.compile(r"\breturn\s*\{")
 
 # 3. A list of Identifiers: "std::array<juce::Identifier, 2> names { ... }",
 #    "std::vector<juce::Identifier> names = { ... }", "juce::Identifier names[] = { ... }".
@@ -418,6 +435,10 @@ def hits_in_file(text, names, document_only_layer, name_functions):
         remember_names(start, end, f"{opening.group(1)} (...)")
 
     for opening in CONSTRUCTION_OPENING.finditer(text):
+        # "-> juce::ValueTree {" is the return type of a lambda and the brace
+        # opens its body. What the body returns is looked at under 2. below.
+        if TRAILING_RETURN_ARROW.search(text, max(0, opening.start() - 80), opening.start()):
+            continue
         bracket_position = opening.end() - 1
         where = f"{opening.group(1)} {text[bracket_position]}...{CLOSING_BRACKET[text[bracket_position]]}"
         if opening.group(1) == "ValueTree":
@@ -459,6 +480,21 @@ def hits_in_file(text, names, document_only_layer, name_functions):
         end_of_body = end_of_brackets(text, body_position)
         for statement in RETURN_STATEMENT.finditer(text, body_position, end_of_body):
             remember_names(statement.start(1), statement.end(1), "the return of an Identifier")
+
+    #    And every "return { ... }" in the body of a function that returns a
+    #    ValueTree: the list in braces is a ValueTree construction.
+    tree_body_positions = []
+    for opening in RETURNS_VALUE_TREE.finditer(text):
+        end_of_parameters = end_of_brackets(text, opening.end() - 1)
+        body = BETWEEN_PARAMETERS_AND_BODY.match(text, end_of_parameters)
+        if body:
+            tree_body_positions.append(body.end() - 1)
+    for opening in TRAILING_RETURN_OF_VALUE_TREE.finditer(text):
+        tree_body_positions.append(opening.end() - 1)
+    for body_position in tree_body_positions:
+        end_of_body = end_of_brackets(text, body_position)
+        for statement in RETURN_OF_LIST.finditer(text, body_position, end_of_body):
+            remember_tree_names(statement.end() - 1, "the return of a ValueTree")
 
     # 3. Everything in a list of Identifiers.
     for opening in IDENTIFIER_LIST.finditer(text):

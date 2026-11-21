@@ -156,6 +156,10 @@ hums_add_identifiers_fixture(value_tree_construction "model/commands/TrackComman
 hums_add_identifiers_fixture(call_value               "model/commands/EventCommands.cpp:11"   "identifier")
 hums_add_identifiers_fixture(value_tree_property_list "model/commands/EventCommands.cpp:9"    "identifier")
 hums_add_identifiers_fixture(value_tree_subtree       "io/ProjectFile.cpp:8"                  "identifier")
+# The brace after a trailing return type opens the body of a lambda, not the
+# brackets of a construction: a value in that body is still no name.
+hums_add_identifiers_fixture(trailing_return_value_tree "model/commands/EventCommands.cpp:8"  "identifier")
+hums_add_identifiers_fixture(trailing_return_identifier "model/EventModel.cpp:8"              "identifier")
 
 # In model/, io/ and render/ a name that is no schema name at all fails too [D15].
 hums_add_identifiers_fixture(literal_name_set_property            "model/commands/NoteCommands.cpp:6" "literal-name")
@@ -170,10 +174,12 @@ hums_add_identifiers_fixture(own_function                          "model/NoteMo
 hums_add_identifiers_fixture(own_function_first_parameter          "model/Settings.cpp:7"          "identifier")
 hums_add_identifiers_fixture(own_lambda                            "render/SnapshotBuilder.cpp:6"  "identifier")
 hums_add_identifiers_fixture(identifier_return                     "io/ProjectFile.cpp:5"          "identifier")
+hums_add_identifiers_fixture(value_tree_return                     "io/ProjectFile.cpp:9"          "identifier")
+hums_add_identifiers_fixture(value_tree_return_lambda              "render/SnapshotBuilder.cpp:5"  "identifier")
 hums_add_identifiers_fixture(identifier_list                       "model/Validator.cpp:3"         "identifier")
 hums_add_identifiers_fixture(identifier_array                      "render/SnapshotBuilder.cpp:3"  "identifier")
 hums_add_identifiers_fixture(literal_name_own_function             "model/CellModel.cpp:6"         "literal-name")
-hums_add_identifiers_fixture(literal_name_identifier_return_lambda "model/LaneModel.cpp:8"         "literal-name")
+hums_add_identifiers_fixture(literal_name_identifier_return_lambda "model/LaneModel.cpp:5"         "literal-name")
 # XML tag and attribute names, in model/, io/ and render/.
 hums_add_identifiers_fixture(xml_tag_name                          "io/ProjectFile.cpp:6"          "identifier")
 hums_add_identifiers_fixture(xml_construction                      "io/ProjectFile.cpp:5"          "identifier")
