@@ -140,5 +140,10 @@ hums_add_identifiers_fixture(identifier_construction "model/ClipModel.cpp:3"    
 hums_add_identifiers_fixture(identifier_assignment   "render/SnapshotBuilder.cpp:3"          "identifier")
 hums_add_identifiers_fixture(value_tree_construction "model/commands/TrackCommands.cpp:4"    "identifier")
 
+# In model/, io/ and render/ a name that is no schema name at all fails too [D15].
+hums_add_identifiers_fixture(literal_name_set_property            "model/commands/NoteCommands.cpp:6" "literal-name")
+hums_add_identifiers_fixture(literal_name_child_with_name         "render/SnapshotBuilder.cpp:5"      "literal-name")
+hums_add_identifiers_fixture(literal_name_identifier_construction "io/ProjectFile.cpp:3"              "literal-name")
+
 hums_add_identifiers_fixture(ids_constant_differs_from_string "model/Ids.h:9"  "ids-file")
 hums_add_identifiers_fixture(ids_unreadable_declaration       "model/Ids.h:10" "ids-file")

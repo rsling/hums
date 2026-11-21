@@ -16,6 +16,15 @@ brackets counts. The same word in a comment, a log message or a UI label is
 not a hit. Reported with file:line and a rule name in square brackets:
 
   [identifier]  a schema name spelled as a string outside Ids.h
+  [literal-name] in model/, io/ and render/ only: any string literal, schema
+                name or not, as the name in one of those places: the first
+                argument of a call or construction, the initialiser of an
+                Identifier, a subscript. In these layers every ValueTree is
+                the document, so a name that is not a constant from Ids.h is
+                an invented one [D15]. The value in
+                setProperty (ids::kind, "event", ...) is not a name and not
+                a hit. views/ and app/ keep the first rule only, because
+                there the same call names can belong to other things.
   [ids-file]    a declaration in Ids.h that is not of the one fixed form
                     inline const juce::Identifier pitch { "pitch" };
                 with the constant named exactly like its string. The check
@@ -50,6 +59,10 @@ REPOSITORY_ROOT = pathlib.Path(__file__).resolve().parent.parent
 # names and would not be hits either.)
 EXEMPT_FILES = ("src/io/Migrations.cpp",)
 EXEMPT_DIRECTORIES = ("tests/io/fixtures/",)
+
+# The layers where every ValueTree is the document, as directories under the
+# source root: the [literal-name] rule applies here.
+DOCUMENT_ONLY_LAYERS = ("model/", "io/", "render/")
 
 SOURCE_SUFFIXES = {".h", ".hpp", ".c", ".cc", ".cpp", ".m", ".mm", ".inl", ".inc", ".ipp"}
 
@@ -180,27 +193,60 @@ def end_of_brackets(text, opening_position):
     return length
 
 
-def hits_in_file(text, names):
-    """(position, identifier string, where it was found) for every hit, in order."""
+def end_of_first_argument(text, opening_position):
+    """The position of the comma or bracket that ends the first argument."""
+    depth = 0
+    position = opening_position
+    length = len(text)
+    while position < length:
+        character = text[position]
+        if character == '"':
+            literal = STRING_LITERAL.match(text, position)
+            position = literal.end() if literal else position + 1
+            continue
+        if character in "({[":
+            depth += 1
+        elif character in ")}]":
+            depth -= 1
+            if depth == 0:
+                return position
+        elif character == "," and depth == 1:
+            return position
+        position += 1
+    return length
+
+
+def hits_in_file(text, names, document_only_layer):
+    """(position, rule, string, where it was found) for every hit, in order.
+
+    A schema name anywhere inside the brackets is an [identifier] hit in every
+    layer. In a document-only layer, any other literal in the place of the
+    name is a [literal-name] hit.
+    """
     hits = {}
 
-    def remember(position, string, where):
-        if string in names and position not in hits:
-            hits[position] = (string, where)
+    def remember(position, string, where, is_in_name_place):
+        if position in hits:
+            return
+        if string in names:
+            hits[position] = ("identifier", string, where)
+        elif document_only_layer and is_in_name_place:
+            hits[position] = ("literal-name", string, where)
 
     for opening_pattern in (CALL_OPENING, CONSTRUCTION_OPENING):
         for opening in opening_pattern.finditer(text):
             bracket_position = opening.end() - 1
             end = end_of_brackets(text, bracket_position)
+            first_argument_end = end_of_first_argument(text, bracket_position)
             where = f"{opening.group(1)} {text[bracket_position]}...{CLOSING_BRACKET[text[bracket_position]]}"
             for literal in STRING_LITERAL.finditer(text, bracket_position, end):
-                remember(literal.start(), literal.group(1), where)
+                remember(literal.start(), literal.group(1), where, literal.start() < first_argument_end)
 
     for assignment in ASSIGNMENT.finditer(text):
-        remember(assignment.start(2) - 1, assignment.group(2), f"{assignment.group(1)} ... = ")
+        remember(assignment.start(2) - 1, assignment.group(2), f"{assignment.group(1)} ... = ", True)
 
     for subscript in SUBSCRIPT.finditer(text):
-        remember(subscript.start(1) - 1, subscript.group(1), "[...]")
+        remember(subscript.start(1) - 1, subscript.group(1), "[...]", True)
 
     return [(position, *hits[position]) for position in sorted(hits)]
 
@@ -234,15 +280,22 @@ def find_violations(source_root, ids_file):
         if path.resolve() == ids_file_resolved or is_exempt(path):
             continue
         text = read_source(path)
-        for position, string, where in hits_in_file(text, names):
-            violations.append(
-                Violation(
-                    display_path(path),
-                    line_number_at(text, position),
-                    "identifier",
+        layer_path = path.relative_to(source_root).as_posix()
+        document_only_layer = layer_path.startswith(DOCUMENT_ONLY_LAYERS)
+        for position, rule, string, where in hits_in_file(text, names, document_only_layer):
+            if rule == "identifier":
+                message = (
                     f'"{string}" is spelled as a string in {where}; '
-                    f"use model::ids::{string} ({display_path(ids_file)})",
+                    f"use model::ids::{string} ({display_path(ids_file)})"
                 )
+            else:
+                message = (
+                    f'"{string}" names a type, property or child as a string in {where}; '
+                    f"in model/, io/ and render/ every such name is a constant from "
+                    f"{display_path(ids_file)}"
+                )
+            violations.append(
+                Violation(display_path(path), line_number_at(text, position), rule, message)
             )
     return violations
 

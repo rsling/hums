@@ -19,6 +19,7 @@ Known gaps that are not decisions (those are in `docs/DECISIONS.md`) and are not
 
 | pick up at | issue |
 |---|---|
+| milestone 1 | The runtime half of **[D15]** is not built yet: guardrail 3 must assert after every command that every type and property name in the undoable subtree is declared in `Ids.h` (`docs/GUARDRAILS.md → 3`). It lands with the generator (task E.16) and needs the list of all identifiers, which the canonical writer (task D.12) needs in declaration order anyway. |
 | milestone 3 | `MidiScheduler` has no way to ask whether a port has gone; the engine learns it only from refused sends. Decide with the Routing tab how "unassigned" reaches the message thread (JUCE's device-list change, or a query on the interface). |
 | milestone 2 | An SMF tempo event has 24 bits, so `TempoMap` **[D13]** cannot hold a tempo below about 3.58 bpm (16 777 215 µs per quarter). Decide with the Validator's `bpm` range whether such a tempo is refused on entry or clamped. |
 | milestone 2 | `juce::MidiFile::readFrom` reorders a same-tick note-on / note-off pair of one pitch (`reorderNoteOnsAfterNoteOffs`, unconditional) — the reason `miditiming` reads its reference byte by byte. SMF import promises file order at equal ticks (`docs/RENDERING.md → Equal-tick order`), so the importer cannot use that reader unchanged, and the export must be checked for the same on the way out. |

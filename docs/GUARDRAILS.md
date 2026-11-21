@@ -12,7 +12,9 @@ Allowed exceptions, and only these: `src/io/Migrations.cpp`, which by definition
 
 The script can only trust an `Ids.h` it can read completely, so it also fixes the form of that file: every declaration is `inline const juce::Identifier pitch { "pitch" };`, one per line, the constant named exactly like its string. Anything else in `Ids.h` that mentions an `Identifier` fails the check. A literal counts as a hit anywhere inside the brackets of one of the named calls, on any line; `node["pitch"]` and `juce::Identifier x = "pitch"` count too. A string that merely equals a schema name outside those places (`text == "cc"`, a label) is not a hit.
 
-The fixtures are small trees under `tools/fixtures/check_identifiers/`, one planted violation each: a literal in `getProperty`, `setProperty`, `hasType`, `getChildWithName`, a subscript, an `Identifier` constructed and one initialised with `=`, a `ValueTree` constructed — all scanned against the real `Ids.h` — and two stand-ins for `Ids.h` itself, one whose constant differs from its string and one with a declaration in another form. Each fixture's test passes only when the script reports that file, that rule, and exactly one violation.
+**Invented names [D15].** The rule above knows only the names in `Ids.h`, so on its own it would let `node.setProperty ("swing", …)` pass. Two things close that. In `model/`, `io/` and `render/`, where every ValueTree is the document, the script refuses *any* string literal in the place of the name: the first argument of one of the named calls or of a `ValueTree` construction, the initialiser of a `juce::Identifier`, a subscript. A value is not a name: `setProperty (ids::kind, "event", …)` passes. `views/` and `app/` keep the first rule only, because there the same call names can belong to things that are not the document (a `juce::DynamicObject`, a component's properties), and views may not write the document anyway. `src/io/Migrations.cpp` stays exempt from both rules. The second thing is a runtime check in guardrail 3, below.
+
+The fixtures are small trees under `tools/fixtures/check_identifiers/`, one planted violation each: a literal in `getProperty`, `setProperty`, `hasType`, `getChildWithName`, a subscript, an `Identifier` constructed and one initialised with `=`, a `ValueTree` constructed; three invented names, one each in `model/`, `render/` and `io/` — all scanned against the real `Ids.h` — and two stand-ins for `Ids.h` itself, one whose constant differs from its string and one with a declaration in another form. Each fixture's test passes only when the script reports that file, that rule, and exactly one violation.
 
 ## 2. The layer rules are checked, not just documented
 
@@ -29,7 +31,8 @@ The fixtures are small trees under `tools/fixtures/check_layers/`, each standing
 - a valid command fully applies; an invalid one leaves the undoable subtree XML-identical and the undo history unchanged;
 - undo restores the undoable subtree to an XML-identical state, and redo returns to the post-command state (`UiState` excluded from the comparison);
 - canonical save → load → canonical save is byte-identical;
-- clip ids referenced before a command still reference a clip of the same `kind` after it, or the command was a conversion.
+- clip ids referenced before a command still reference a clip of the same `kind` after it, or the command was a conversion;
+- every node type and property name in the undoable subtree is declared in `Ids.h` **[D15]**: a command that writes an invented name fails here, however its source is spelled. (The generator builds its documents itself, so the unknown properties a file from a newer build may carry do not occur.)
 
 Seeds are printed on failure and reproducible. When the generator finds a failure, shrink it to a minimal document and add that as a named regression test.
 
