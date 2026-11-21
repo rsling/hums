@@ -134,6 +134,7 @@ src/
   model/               ValueTree schema ids, typed wrappers, commands, validator, refcount gate
     Ids.h              every ValueTree type/property identifier, nowhere else as strings
     PropertyReader     typed reading of properties (int, int64, bool, double, string); absent vs malformed
+    Settings           the settings path: reads and writes UiState, always with a nullptr UndoManager
     Validator          invariants 1–12, run on load and after every command in tests
     commands/          free functions that mutate the document (take UndoManager&)
   io/                  ProjectFile (XML, canonical writer, atomic save), SmfExport, SmfImport, Migrations

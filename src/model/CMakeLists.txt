@@ -44,6 +44,8 @@ hums_add_layer(hums_model
         SceneModel.h
         SessionModel.cpp
         SessionModel.h
+        Settings.cpp
+        Settings.h
         SlotModel.cpp
         SlotModel.h
         TempoEventModel.cpp

@@ -54,4 +54,9 @@ SessionModel ProjectModel::getSession() const
     return SessionModel (node.getChildWithName (ids::Session));
 }
 
+Settings ProjectModel::getSettings() const
+{
+    return Settings (node.getChildWithName (ids::UiState));
+}
+
 } // namespace model

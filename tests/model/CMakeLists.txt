@@ -22,6 +22,7 @@ hums_add_test_executable(model_tests
     RoutingModelTest.cpp
     SceneModelTest.cpp
     SessionModelTest.cpp
+    SettingsTest.cpp
     SlotModelTest.cpp
     TempoEventModelTest.cpp
     TimeSigEventModelTest.cpp

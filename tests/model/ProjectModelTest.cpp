@@ -9,8 +9,7 @@ namespace
 {
 
 // The Routing, Timeline, Session, one clip and one track of the schema's
-// "Berlin test" example. UiState is there because every Project has one; it
-// is read through model/Settings, not through ProjectModel.
+// "Berlin test" example.
 juce::ValueTree berlinProject()
 {
     return juce::ValueTree::fromXml (
@@ -123,6 +122,19 @@ TEST_CASE ("A Project gives its Tracks", "[model][ProjectModel]")
     CHECK (tracks.getRefcount ("5a0c7e1b3d2f4a6988b7c6d5e4f3a2b1") == 2);
     REQUIRE (tracks.getArrangementEnd().has_value());
     CHECK (*tracks.getArrangementEnd() == 7680);
+}
+
+TEST_CASE ("A Project gives its Settings", "[model][ProjectModel]")
+{
+    auto tree = berlinProject();
+    const model::ProjectModel project (tree);
+
+    auto settings = project.getSettings();
+    CHECK (settings.getActiveTab() == "stepseq");
+
+    // Settings write to the document's own UiState node, not to a copy.
+    settings.setActiveTab ("drums");
+    CHECK (tree.getChildWithName (model::ids::UiState)[model::ids::activeTab].toString() == "drums");
 }
 
 TEST_CASE ("A wrapper sees a later change to the document", "[model][ProjectModel]")

@@ -3,6 +3,7 @@
 #include "model/ClipPoolModel.h"
 #include "model/RoutingModel.h"
 #include "model/SessionModel.h"
+#include "model/Settings.h"
 #include "model/TimelineModel.h"
 #include "model/TracksModel.h"
 
@@ -12,8 +13,6 @@ namespace model
 {
 
 // The root of the document (docs/SCHEMA.md -> Project).
-//
-// UiState gets its accessor together with model/Settings.
 class ProjectModel
 {
 public:
@@ -31,6 +30,10 @@ public:
     ClipPoolModel getClipPool() const;
     TracksModel getTracks() const;
     SessionModel getSession() const;
+
+    // UiState, the part of the document that is not undoable. Unlike the
+    // wrappers above, Settings also writes: it is the settings path.
+    Settings getSettings() const;
 
 private:
     juce::ValueTree node;
