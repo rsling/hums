@@ -242,7 +242,7 @@ Every script ships a fixture that must fail it. Never weaken, skip or `// NOLINT
 
 ## Conventions
 
-- One class per file, file name = class name. One namespace per layer (`platform`, `model`, `io`, `render`, `engine`, `views`).
+- One class per file, file name = class name, under `src/` and `tests/`; `tools/` is exempt (decided 21 Nov 2026: a small tool may keep closely related types in one header). One namespace per layer (`platform`, `model`, `io`, `render`, `engine`, `views`).
 - `views/` is mouse-and-keyboard first and JUCE-only: no AppKit, no Objective-C++, no touch affordances. Shortcuts use `juce::ModifierKeys::commandModifier`, never a hard-coded Cmd. The native menu bar is wired in `app/`.
 - ValueTree type and property identifiers live in `model/Ids.h` as `juce::Identifier` constants. Nowhere else is a type or property name spelled as a string. Enforced by guardrail 1.
 - Typed wrapper classes over ValueTree nodes (`ClipModel`, `TrackModel`, …) are how views *read* the document. Views never call `setProperty`.
