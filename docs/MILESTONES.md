@@ -19,8 +19,6 @@ Known gaps that are not decisions (those are in `docs/DECISIONS.md`) and are not
 
 | pick up at | issue |
 |---|---|
-| milestone 1 | `tests/guardrails/ToolchainJuceTest.cpp` spells two identifiers as string literals, on purpose and with a comment. Guardrail 1 scans `src/` only, so it is no violation; keep it in mind if the scan is ever widened to `tests/`. |
-| milestone 1 | `hums_add_layer` refuses a JUCE-using layer whose first file is a header ("header-only and cannot link JUCE"). `model/Ids.h` alone would trip it; add the first `.cpp` in the same commit, or let a header-only layer link `hums_juce` as INTERFACE. |
 | milestone 3 | `MidiScheduler` has no way to ask whether a port has gone; the engine learns it only from refused sends. Decide with the Routing tab how "unassigned" reaches the message thread (JUCE's device-list change, or a query on the interface). |
 | milestone 2 | An SMF tempo event has 24 bits, so `TempoMap` **[D13]** cannot hold a tempo below about 3.58 bpm (16 777 215 µs per quarter). Decide with the Validator's `bpm` range whether such a tempo is refused on entry or clamped. |
 | milestone 2 | `juce::MidiFile::readFrom` reorders a same-tick note-on / note-off pair of one pitch (`reorderNoteOnsAfterNoteOffs`, unconditional) — the reason `miditiming` reads its reference byte by byte. SMF import promises file order at equal ticks (`docs/RENDERING.md → Equal-tick order`), so the importer cannot use that reader unchanged, and the export must be checked for the same on the way out. |

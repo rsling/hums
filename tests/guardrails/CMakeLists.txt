@@ -112,3 +112,33 @@ hums_add_layers_fixture(unknown_layer                       "util/Helper.h:1"   
 hums_add_layers_fixture(unresolved_include                  "model/ClipModel.h:5"               "unresolved")
 hums_add_layers_fixture(include_leaves_source_root          "model/ClipModel.h:5"               "unresolved")
 hums_add_layers_fixture(computed_include                    "model/ClipModel.h:6"               "computed-include")
+
+# Guardrail 1: schema names are spelled as strings only in src/model/Ids.h.
+# The first group of fixtures is scanned against the real Ids.h, one fixture
+# per way of naming a type, property or child; the second group stands in for
+# Ids.h itself. As with guardrail 2, a fixture's test passes only when the
+# script reports that file and rule and counts exactly one violation.
+hums_add_script_guardrail(guardrail_identifiers check_identifiers.py)
+
+function(hums_add_identifiers_fixture case file_and_line rule)
+    set(fixture "${PROJECT_SOURCE_DIR}/tools/fixtures/check_identifiers/${case}")
+    set(arguments --source-root "${fixture}")
+    if(case MATCHES "^ids_")
+        list(APPEND arguments --ids-file "${fixture}/model/Ids.h")
+    endif()
+    hums_add_script_guardrail_fixture(guardrail_identifiers_fixture_${case}_fails check_identifiers.py
+        "check_identifiers: VIOLATION: [^\n]*/${case}/${file_and_line}: \\[${rule}\\][^\n]*\ncheck_identifiers: 1 violation"
+        ${arguments})
+endfunction()
+
+hums_add_identifiers_fixture(get_property            "views/pianoroll/NoteComponent.cpp:5"   "identifier")
+hums_add_identifiers_fixture(set_property            "model/commands/NoteCommands.cpp:6"     "identifier")
+hums_add_identifiers_fixture(has_type                "render/SnapshotBuilder.cpp:4"          "identifier")
+hums_add_identifiers_fixture(child_with_name         "io/ProjectFile.cpp:4"                  "identifier")
+hums_add_identifiers_fixture(subscript               "views/stepseq/CellComponent.cpp:4"     "identifier")
+hums_add_identifiers_fixture(identifier_construction "model/ClipModel.cpp:3"                 "identifier")
+hums_add_identifiers_fixture(identifier_assignment   "render/SnapshotBuilder.cpp:3"          "identifier")
+hums_add_identifiers_fixture(value_tree_construction "model/commands/TrackCommands.cpp:4"    "identifier")
+
+hums_add_identifiers_fixture(ids_constant_differs_from_string "model/Ids.h:9"  "ids-file")
+hums_add_identifiers_fixture(ids_unreadable_declaration       "model/Ids.h:10" "ids-file")
