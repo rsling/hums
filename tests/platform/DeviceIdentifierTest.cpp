@@ -17,11 +17,11 @@ namespace
 {
     // Does the identifier name an endpoint with this own id and these
     // connections (empty: cabled to nothing)?
-    bool names (std::string_view identifier, std::int32_t endpointId, std::vector<std::int32_t> connectionIds = {})
-    {
-        const auto parsed = DeviceIdentifier::parse (identifier);
-        return parsed.has_value() && parsed->names (endpointId, connectionIds);
-    }
+bool names (std::string_view identifier, std::int32_t endpointId, std::vector<std::int32_t> connectionIds = {})
+{
+    const auto parsed = DeviceIdentifier::parse (identifier);
+    return parsed.has_value() && parsed->names (endpointId, connectionIds);
+}
 } // namespace
 
 TEST_CASE ("An endpoint cabled to nothing is named by its own id", "[platform]")

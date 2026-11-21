@@ -120,8 +120,10 @@ void TimingReport::summarise()
     for (const auto& [x, y] : judgedOverTime)
     {
         const auto ns = static_cast<std::int64_t> (y * 1.0e6);
-        if (x < 1.0) firstMinute.push_back (ns);
-        if (x >= lengthMinutes - 1.0) lastMinute.push_back (ns);
+        if (x < 1.0)
+            firstMinute.push_back (ns);
+        if (x >= lengthMinutes - 1.0)
+            lastMinute.push_back (ns);
     }
 
     const auto rawStats = statsOf (raw);

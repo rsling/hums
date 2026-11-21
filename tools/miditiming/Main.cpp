@@ -91,26 +91,35 @@ std::optional<Options> parse (int argc, char** argv)
     for (int i = 1; i < argc; ++i)
     {
         const std::string arg = argv[i];
-        const auto value = [&]() -> std::optional<std::string>
-        {
-            if (i + 1 >= argc) return std::nullopt;
+        const auto value = [&]() -> std::optional<std::string> {
+            if (i + 1 >= argc)
+                return std::nullopt;
             return std::string (argv[++i]);
         };
         // The whole text has to be one number in the range: std::stod alone
         // would take "121,5" as 121 and let "inf" through, and a value that
         // rounds to zero nanoseconds would divide by zero further on.
-        const auto number = [&] (double& target, double lowest, double highest)
-        {
+        const auto number = [&] (double& target, double lowest, double highest) {
             const auto v = value();
-            if (! v) return false;
+            if (! v)
+                return false;
 
             std::size_t used = 0;
-            try { target = std::stod (*v, &used); } catch (...) { return false; }
+            try
+            {
+                target = std::stod (*v, &used);
+            }
+            catch (...)
+            {
+                return false;
+            }
 
             return used == v->size() && target >= lowest && target <= highest;
         };
 
         bool ok = true;
+        // One line per option, so the table can be read as a table.
+        // clang-format off
         if (arg == "--list") o.list = true;
         else if (arg == "--listen") o.listen = true;
         else if (arg == "--din") o.din = true;
@@ -127,10 +136,12 @@ std::optional<Options> parse (int argc, char** argv)
         else if (arg == "--window-ms") ok = number (o.windowMs, 0.001, 1000);
         else if (arg == "--lookahead-ms") ok = number (o.lookAheadMs, 0.001, 10000);
         else ok = false;
+        // clang-format on
 
         if (! ok)
         {
-            std::cerr << "bad or incomplete argument: " << arg << "\n\n" << usage;
+            std::cerr << "bad or incomplete argument: " << arg << "\n\n"
+                      << usage;
             return std::nullopt;
         }
     }
@@ -175,11 +186,11 @@ std::string nowText()
 // Sanitizer builds), so every report says which build produced it.
 std::string buildText()
 {
-   #ifdef NDEBUG
+#ifdef NDEBUG
     return "Release";
-   #else
+#else
     return "Debug (timing figures count only from a plain Release build)";
-   #endif
+#endif
 }
 
 // Checked before a run starts, so that a mistyped path costs a message, not
@@ -328,7 +339,8 @@ int run (const Options& o)
 
     const auto startedAt = nowText();
     std::cout << "running " << o.minutes << " min, " << pattern.messages().size() << " messages, "
-              << pattern.describe() << "\n" << std::flush;
+              << pattern.describe() << "\n"
+              << std::flush;
 
     // Time zero one second out, so ports and threads have settled.
     const auto start = clock.nowNanoseconds() + 1'000'000'000;
@@ -340,7 +352,8 @@ int run (const Options& o)
         std::this_thread::sleep_for (std::chrono::seconds (1));
         const auto elapsed = (clock.nowNanoseconds() - start) / 1'000'000'000;
         if (elapsed > 0 && elapsed % 30 == 0)
-            std::cout << "  " << elapsed << " s\n" << std::flush;
+            std::cout << "  " << elapsed << " s\n"
+                      << std::flush;
     }
 
     senderThread.join();
@@ -384,11 +397,11 @@ int run (const Options& o)
     };
 
     const miditiming::TimingReport report (std::move (reportInput));
-    std::cout << "\n" << report.text() << std::flush;
+    std::cout << "\n"
+              << report.text() << std::flush;
 
     return writeOutputFiles (o, report.text(), o.csvFile.empty() ? std::string() : report.csv()) ? 0 : 1;
 }
-
 
 int writeReference (const Options& o)
 {
@@ -472,10 +485,10 @@ int listen (const Options& o)
 
     const auto startedAt = nowText();
     std::cout << "reference: " << messages.size() << " messages over " << juce::String (static_cast<double> (span) / 60.0e9, 2)
-              << " min\nlistening; start playback from the beginning now\n" << std::flush;
+              << " min\nlistening; start playback from the beginning now\n"
+              << std::flush;
 
-    const auto anyArrived = [&]
-    {
+    const auto anyArrived = [&] {
         for (const auto& r : recorders)
             if (r->receivedCount() > 0)
                 return true;
@@ -487,7 +500,8 @@ int listen (const Options& o)
 
     // Everything the reference holds, plus room for DIN queues and stragglers.
     const auto end = clock.nowNanoseconds() + span + 2'000'000'000;
-    std::cout << "first message arrived, recording\n" << std::flush;
+    std::cout << "first message arrived, recording\n"
+              << std::flush;
 
     std::int64_t lastPrinted = 0;
     while (clock.nowNanoseconds() < end)
@@ -496,7 +510,8 @@ int listen (const Options& o)
         const auto left = (end - clock.nowNanoseconds()) / 1'000'000'000;
         if (left > 0 && left % 30 == 0 && left != lastPrinted)
         {
-            std::cout << "  " << left << " s to go\n" << std::flush;
+            std::cout << "  " << left << " s to go\n"
+                      << std::flush;
             lastPrinted = left;
         }
     }
@@ -539,7 +554,8 @@ int listen (const Options& o)
     };
 
     const miditiming::ListenReport report (std::move (reportInput));
-    std::cout << "\n" << report.text() << std::flush;
+    std::cout << "\n"
+              << report.text() << std::flush;
 
     return writeOutputFiles (o, report.text(), o.csvFile.empty() ? std::string() : report.csv()) ? 0 : 1;
 }

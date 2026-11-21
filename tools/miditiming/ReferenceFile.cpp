@@ -161,8 +161,7 @@ bool ReferenceFile::read (const std::string& path, std::string& error)
     }
 
     const std::vector<std::uint8_t> bytes { std::istreambuf_iterator<char> (stream), std::istreambuf_iterator<char>() };
-    const auto unreadable = [&]
-    {
+    const auto unreadable = [&] {
         error = path + " is not a readable Standard MIDI File";
         return false;
     };

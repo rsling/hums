@@ -186,8 +186,16 @@ void ListenReport::match()
             const auto aligned = coarse + messages[expected[e]].offsetNanoseconds;
             const auto at = got[arrivals[a]].timeNanoseconds;
 
-            if (at < aligned - matchTolerance) { ++a; continue; }   // not expected
-            if (at > aligned + matchTolerance) { ++e; continue; }   // expected one dropped
+            if (at < aligned - matchTolerance)
+            {
+                ++a;
+                continue;
+            }   // not expected
+            if (at > aligned + matchTolerance)
+            {
+                ++e;
+                continue;
+            }   // expected one dropped
 
             outcomes[expected[e]].received = true;
             outcomes[expected[e]].receivedNanoseconds = at;
@@ -212,8 +220,7 @@ void ListenReport::checkOrderWithinTicks()
     const auto& messages = in.reference->messages();
     const auto& got = in.received;
 
-    const auto hex = [] (const auto& m)
-    {
+    const auto hex = [] (const auto& m) {
         char text[16];
         if (m.size > 2)
             std::snprintf (text, sizeof (text), "%02X %02X %02X", m.bytes[0], m.bytes[1], m.bytes[2]);
@@ -255,7 +262,7 @@ void ListenReport::checkOrderWithinTicks()
                 std::snprintf (where, sizeof (where), "tick %lld (%.3f s): ", static_cast<long long> (messages[i].tick),
                                static_cast<double> (messages[i].offsetNanoseconds) / 1.0e9);
                 firstWrongOrder = where + hex (messages[i]) + " arrived before " + hex (messages[earlier->second])
-                                  + ", which the reference has first";
+                                + ", which the reference has first";
             }
         }
 
@@ -309,7 +316,7 @@ ListenReport::Judgement ListenReport::judge (std::size_t model) const
     // [D1]: software loopback judged on raw lateness, DIN loops net of wire time.
     const auto& judged = in.din ? j.net : j.raw;
     j.met = judged.count > 0 && judged.p99 <= (in.din ? 2.0 : 1.0) && judged.max <= (in.din ? 3.0 : 2.0)
-            && dropped + in.inputOverflows == 0 && unexpected == 0 && wrongOrderTicks == 0;
+         && dropped + in.inputOverflows == 0 && unexpected == 0 && wrongOrderTicks == 0;
     return j;
 }
 
@@ -380,7 +387,8 @@ void ListenReport::summarise()
     else
     {
         out << "\ntargets [D1] on raw relative lateness: p99 <= 1 ms, max <= 2 ms, zero drops, nothing unexpected, "
-               "no tick in the wrong order -> " << verdict (met) << "\n";
+               "no tick in the wrong order -> "
+            << verdict (met) << "\n";
         out << "(relative: aligned so the best-timed message has lateness 0; a constant delay does not show here)\n";
     }
 

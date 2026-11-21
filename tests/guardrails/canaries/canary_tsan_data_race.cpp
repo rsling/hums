@@ -7,14 +7,14 @@
 
 namespace
 {
-    int sharedCounter = 0;
+int sharedCounter = 0;
 
-    void increment()
-    {
-        for (int i = 0; i < 1000; ++i)
-            ++sharedCounter;
-    }
+void increment()
+{
+    for (int i = 0; i < 1000; ++i)
+        ++sharedCounter;
 }
+} // namespace
 
 int main()
 {

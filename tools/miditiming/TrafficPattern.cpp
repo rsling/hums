@@ -70,9 +70,12 @@ TrafficPattern::TrafficPattern (Density density, int portCount, double bpm, doub
 Density densityFromName (const std::string& name, bool& ok)
 {
     ok = true;
-    if (name == "single") return Density::single;
-    if (name == "stacked") return Density::stacked;
-    if (name == "spread") return Density::spread;
+    if (name == "single")
+        return Density::single;
+    if (name == "stacked")
+        return Density::stacked;
+    if (name == "spread")
+        return Density::spread;
     ok = false;
     return Density::single;
 }

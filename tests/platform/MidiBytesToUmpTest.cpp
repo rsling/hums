@@ -14,12 +14,12 @@ using platform::MidiBytesToUmp;
 
 namespace
 {
-    std::vector<std::uint32_t> convert (std::vector<std::uint8_t> bytes)
-    {
-        std::vector<std::uint32_t> words (MidiBytesToUmp::maxWords);
-        words.resize (MidiBytesToUmp::convert (bytes, words));
-        return words;
-    }
+std::vector<std::uint32_t> convert (std::vector<std::uint8_t> bytes)
+{
+    std::vector<std::uint32_t> words (MidiBytesToUmp::maxWords);
+    words.resize (MidiBytesToUmp::convert (bytes, words));
+    return words;
+}
 } // namespace
 
 TEST_CASE ("Channel voice messages become one type-2 word", "[platform]")

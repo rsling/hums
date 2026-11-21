@@ -8,11 +8,11 @@
 
 namespace
 {
-    struct Leaked
-    {
-        int value = 0;
-        JUCE_LEAK_DETECTOR (Leaked)
-    };
+struct Leaked
+{
+    int value = 0;
+    JUCE_LEAK_DETECTOR (Leaked)
+};
 } // namespace
 
 int main()

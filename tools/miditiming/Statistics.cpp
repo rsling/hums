@@ -15,8 +15,7 @@ Stats statsOf (std::vector<std::int64_t> values)
         return s;
 
     std::sort (values.begin(), values.end());
-    const auto at = [&] (double p)
-    {
+    const auto at = [&] (double p) {
         const auto rank = static_cast<std::size_t> (std::ceil (p * static_cast<double> (values.size())));
         return static_cast<double> (values[std::max<std::size_t> (rank, 1) - 1]) / 1.0e6;
     };
@@ -42,12 +41,20 @@ double slopeOf (const std::vector<std::pair<double, double>>& points)
         return 0;
 
     double mx = 0, my = 0;
-    for (const auto& [x, y] : points) { mx += x; my += y; }
+    for (const auto& [x, y] : points)
+    {
+        mx += x;
+        my += y;
+    }
     mx /= static_cast<double> (points.size());
     my /= static_cast<double> (points.size());
 
     double sxy = 0, sxx = 0;
-    for (const auto& [x, y] : points) { sxy += (x - mx) * (y - my); sxx += (x - mx) * (x - mx); }
+    for (const auto& [x, y] : points)
+    {
+        sxy += (x - mx) * (y - my);
+        sxx += (x - mx) * (x - mx);
+    }
     return sxx > 0 ? sxy / sxx : 0;
 }
 
