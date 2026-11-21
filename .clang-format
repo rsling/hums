@@ -1,0 +1,71 @@
+# Hums code style. Codifies what the milestone 0 code already looked like
+# (JUCE-like): Allman braces, four spaces, a space before a non-empty
+# argument list, "! x", left-bound pointers. Decided 21 Nov 2026 and not
+# discussed again (CLAUDE.md -> Toolchain).
+#
+# Run with the pinned Xcode's clang-format (TOOLCHAIN.md), never another one:
+#   xcrun clang-format -i <files>
+#
+# ColumnLimit 0: lines are wrapped by hand, where it reads best, and
+# clang-format keeps those breaks. The price is that a lambda's opening brace
+# stays on the line of its introducer (BeforeLambdaBody: false); with no
+# column limit the alternative would break every one-line lambda in two.
+Language: Cpp
+Standard: c++20
+BasedOnStyle: LLVM
+ColumnLimit: 0
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+AccessModifierOffset: -4
+BreakBeforeBraces: Custom
+BraceWrapping:
+  AfterCaseLabel: true
+  AfterClass: true
+  AfterControlStatement: Always
+  AfterEnum: true
+  AfterFunction: true
+  AfterNamespace: true
+  AfterStruct: true
+  AfterUnion: true
+  AfterExternBlock: true
+  BeforeCatch: true
+  BeforeElse: true
+  BeforeLambdaBody: false
+  BeforeWhile: false
+  IndentBraces: false
+  SplitEmptyFunction: false
+  SplitEmptyRecord: false
+  SplitEmptyNamespace: false
+NamespaceIndentation: Inner
+FixNamespaceComments: true
+SpaceBeforeParens: NonEmptyParentheses
+SpaceAfterLogicalNot: true
+SpaceAfterTemplateKeyword: true
+SpaceBeforeCpp11BracedList: true
+Cpp11BracedListStyle: false
+PointerAlignment: Left
+AlwaysBreakTemplateDeclarations: Yes
+AllowShortFunctionsOnASingleLine: All
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AllowShortBlocksOnASingleLine: Never
+AllowShortLambdasOnASingleLine: All
+IndentCaseLabels: true
+IndentPPDirectives: None
+SortIncludes: Never
+ReflowComments: false
+MaxEmptyLinesToKeep: 1
+KeepEmptyLinesAtTheStartOfBlocks: false
+BinPackArguments: true
+BinPackParameters: true
+AlignAfterOpenBracket: Align
+AlignOperands: AlignAfterOperator
+BreakBeforeBinaryOperators: NonAssignment
+AllowShortCaseLabelsOnASingleLine: true
+BreakConstructorInitializers: BeforeColon
+ConstructorInitializerIndentWidth: 4
+ContinuationIndentWidth: 4
+PackConstructorInitializers: BinPack
+AlignTrailingComments:
+  Kind: Leave

@@ -62,7 +62,7 @@ Exact versions live in `TOOLCHAIN.md`; this list says what is pinned and how.
 - Build shape: each layer (`platform` with its `platform/mac/` backends, `model`, `io`, the render core, the rest of `render`, `engine`) is a library target, and the app links them: a static library, or an INTERFACE library while the layer holds only headers, as the `platform/` interfaces do. Every layer is declared in `src/` from the start; it becomes a target with its first source (`hums_add_layer` in `src/CMakeLists.txt`). The JUCE modules are compiled once, into `hums_juce`, which the JUCE-using layers link; JUCE modules must be linked `PRIVATE` and only once per binary. Test executables link only the layer libraries they test plus the JUCE modules those layers use; they never link the app target or `juce_gui_*`. Render-core tests link no JUCE at all. This keeps an edit-build-test iteration, Roland's or an agent's, from paying the full JUCE and app link. `ccache` is the compiler launcher; its version and wiring are recorded in `TOOLCHAIN.md`.
 - Guardrail checks are plain scripts in `tools/`, registered as CTest tests so `ctest` fails on a violation. Each script ships a fixture that must *fail* it, and that negative test runs too. No separate CI is assumed; the local test run is the gate.
 - Sanitizers: besides the plain Debug build there are two instrumented configurations, ASan + UBSan and TSan, selected by the CMake option `HUMS_SANITIZE` (`address` / `thread`), each in its own build directory. `tools/gate.sh` runs all three, and builds `tools/miditiming` in the plain one so the timing tool cannot break unnoticed; that script, not a bare `ctest`, is the full gate. In every configuration a failed `jassert` or a JUCE leak report fails the test that printed it; test executables are registered through `hums_discover_tests`, never a bare `catch_discover_tests`. See `docs/GUARDRAILS.md → Sanitizer builds`.
-- `clang-format` config checked in. Decide the style once, then never discuss it again.
+- `.clang-format` is checked in and codifies the style of the milestone 0 code (decided 21 Nov 2026; never discussed again). Format new and changed C++ with the pinned Xcode's formatter, `xcrun clang-format -i <files>`.
 
 ## Commands
 
@@ -97,6 +97,7 @@ CMakeLists.txt
 CLAUDE.md
 README.md
 LICENSE                GNU AGPL, version 3
+.clang-format          the code style, decided once
 TOOLCHAIN.md           pinned versions and build-time baselines
 .claude/rules/         path-scoped pointers that load the docs below when matching files are touched
 docs/
