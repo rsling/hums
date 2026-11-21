@@ -21,7 +21,7 @@ std::int64_t MarkerModel::getTick() const
 
 juce::String MarkerModel::getName() const
 {
-    return PropertyReader::getRequiredString (node, ids::name);
+    return PropertyReader::getString (node, ids::name, "");
 }
 
 } // namespace model

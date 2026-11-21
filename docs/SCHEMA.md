@@ -113,7 +113,7 @@ SMF conductor-track equivalent. Global, never per track. **The Timeline is the s
 
 **TimeSigEvent** — `tick`, `numerator` (int, 1–32), `denominator` (int, power of two, 1–64). One at tick 0 is required. Same duplicate rule.
 
-**Marker** — `tick`, `name`. Round-trips to SMF marker meta events.
+**Marker** — `tick` (int64, required), `name` (string, default `""` **[D16]**). Round-trips to SMF marker meta events.
 
 ### ClipPool / Clip
 
@@ -298,7 +298,7 @@ Session-view launch slots. Sparse: only occupied slots are stored.
 |---|---|---|---|
 | `launchQuantise` | int64 | 3840 | launch grid in ticks from tick 0; 0 = immediate. v1 is a fixed grid, not meter-aware |
 
-**Scene** — `index` (int, ≥ 0, unique), `name` (string). Sparse; scenes without a node have no name.
+**Scene** — `index` (int, ≥ 0, unique, required), `name` (string, default `""` **[D16]**). Sparse; scenes without a node have no name, and neither has a node without the property.
 
 Live state (which slot is playing, playhead, which tracks are "in session") is engine state, never document state.
 

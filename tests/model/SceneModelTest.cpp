@@ -11,3 +11,11 @@ TEST_CASE ("A Scene gives back what is stored", "[model][SceneModel]")
     CHECK (scene.getIndex() == 2);
     CHECK (scene.getName() == "Chorus");
 }
+
+TEST_CASE ("A Scene without a name has an empty one", "[model][SceneModel]")
+{
+    const model::SceneModel scene (juce::ValueTree::fromXml (R"(<Scene index="2"/>)"));
+
+    CHECK (scene.getIndex() == 2);
+    CHECK (scene.getName() == "");
+}

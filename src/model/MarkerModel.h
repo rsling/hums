@@ -15,6 +15,7 @@ public:
     explicit MarkerModel (juce::ValueTree markerNode);
 
     std::int64_t getTick() const;
+    // Empty when the node has no name [D16].
     juce::String getName() const;
 
 private:

@@ -11,3 +11,11 @@ TEST_CASE ("A Marker gives back what is stored", "[model][MarkerModel]")
     CHECK (marker.getTick() == 15360);
     CHECK (marker.getName() == "Break");
 }
+
+TEST_CASE ("A Marker without a name has an empty one", "[model][MarkerModel]")
+{
+    const model::MarkerModel marker (juce::ValueTree::fromXml (R"(<Marker tick="15360"/>)"));
+
+    CHECK (marker.getTick() == 15360);
+    CHECK (marker.getName() == "");
+}

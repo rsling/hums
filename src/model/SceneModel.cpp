@@ -21,7 +21,7 @@ int SceneModel::getIndex() const
 
 juce::String SceneModel::getName() const
 {
-    return PropertyReader::getRequiredString (node, ids::name);
+    return PropertyReader::getString (node, ids::name, "");
 }
 
 } // namespace model

@@ -15,6 +15,7 @@ public:
 
     // Row index, >= 0, unique.
     int getIndex() const;
+    // Empty when the node has no name [D16].
     juce::String getName() const;
 
 private:
