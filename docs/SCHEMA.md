@@ -109,7 +109,7 @@ Two Players bound to the same physical port both sending clock would emit duplic
 
 SMF conductor-track equivalent. Global, never per track. **The Timeline is the single authority for tick ↔ time conversion**; the engine, the recorder and SMF I/O all go through `render/TempoMap`, never through ad-hoc arithmetic.
 
-**TempoEvent** — `tick` (int64), `bpm` (double, finite, > 0). One at tick 0 is required. At most one per tick; the loader keeps the last and reports the duplicate. The document stores `bpm` as entered; `TempoMap` plays and exports it as `round(60 000 000 / bpm)` whole microseconds per quarter note, which is all an SMF can hold **[D13]** (`docs/ARCHITECTURE.md → Timing`). v1 UI edits only the one at tick 0; an imported tempo map stays in effect for playback and export until the user flattens it explicitly.
+**TempoEvent** — `tick` (int64), `bpm` (double, finite, > 0; three decimals **[D14]**). One at tick 0 is required. At most one per tick; the loader keeps the last and reports the duplicate. The document stores `bpm` as entered, to three decimals (*Doubles*, below); `TempoMap` plays and exports it as `round(60 000 000 / bpm)` whole microseconds per quarter note, which is all an SMF can hold **[D13]** (`docs/ARCHITECTURE.md → Timing`). v1 UI edits only the one at tick 0; an imported tempo map stays in effect for playback and export until the user flattens it explicitly.
 
 **TimeSigEvent** — `tick`, `numerator` (int, 1–32), `denominator` (int, power of two, 1–64). One at tick 0 is required. Same duplicate rule.
 
@@ -211,7 +211,7 @@ A 960-style sequencer clip is a `Grid` with exactly one lane and no `fixedPitch`
 | `pitch` | int | 60 | ignored when the lane has `fixedPitch` |
 | `on` | bool | 0 | off cells are rests: time passes, nothing plays |
 | `velocity` | int | 100 | 1–127 |
-| `gate` | double | 0.5 | fraction of `stepLength`, finite, `0 < gate ≤ 4`; > 1.0 reaches into the following cells |
+| `gate` | double | 0.5 | fraction of `stepLength`, finite, `0 < gate ≤ 4`; > 1.0 reaches into the following cells. Six significant digits **[D14]** |
 
 Note length = `round(gate × stepLength)` ticks, at least 1, measured in audible time (skipped columns don't exist in time). Overlap with the following cells is just overlap; same-pitch handling is in `docs/RENDERING.md → StepClip` (consecutive same-pitch cells with `gate > 1` merge into one note).
 
@@ -342,7 +342,9 @@ Each view may add one child node named after itself (`PianoRollState`, `StepSeqS
 
 **Save** writes to a temporary file in the same directory and renames over the target (`juce::TemporaryFile`), keeps the previous file as `<name>.bak`, and reports failure without having touched the original. A dirty project is autosaved to a recovery file in Application Support every two minutes; on launch, an existing recovery file is offered. One project is open at a time.
 
-**Canonical form.** The writer emits properties in `Ids.h` declaration order, omits defaulted properties, writes integers as decimal, doubles with `juce::String(double)`, booleans as `0`/`1`, children in stored order, UTF-8 with `\n` line endings. The guardrail *save → load → save is byte-identical* is tested on canonical output; arbitrary hand-edited XML is tested for model equivalence after one normalising pass, not for byte identity.
+**Canonical form.** The writer emits properties in `Ids.h` declaration order, omits defaulted properties, writes integers as decimal, doubles with `juce::String(double)` (six significant digits, *Doubles* below), booleans as `0`/`1`, children in stored order, UTF-8 with `\n` line endings. The guardrail *save → load → save is byte-identical* is tested on canonical output; arbitrary hand-edited XML is tested for model equivalence after one normalising pass, not for byte identity.
+
+**Doubles [D14].** The document has two double properties, `TempoEvent.bpm` and `Cell.gate`, and both hold six significant digits, no more. That is what `juce::String(double)` writes in the pinned JUCE (a plain stream insertion: `118.123`, `0.333333`, `1e-05`), and it is all a saved project keeps. For `bpm` this means three decimals up to 999.999, which is the resolution Hums offers; a tempo of 1000 or more keeps fewer. So that a project is the same before and after save and reload, a command that stores a double first rounds it to the value its saved text reads back as, and stores that; the precision is given up at the edit, where undo can see it, never silently at the save. `model/PropertyReader` reads every double through its text, so a value set in this session and the same value loaded from a file are the same number. SMF import rounds a tempo the same way a command does. A hand-edited project file can still carry more digits; whether the load path rounds them or refuses them is settled when the load path is written (milestone 1, with `io/ProjectFile`), not here.
 
 ## Migrations
 

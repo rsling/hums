@@ -21,7 +21,8 @@ namespace model
 //   int, int64   decimal digits with an optional leading '-', nothing else
 //   bool         exactly "0" or "1"
 //   double       decimal digits with an optional '-', fraction and exponent;
-//                the value must be finite
+//                the value must be finite. The writer keeps six
+//                significant digits [D14]; the reader takes any number
 //   string       any text
 //
 // read...() tells "absent" from "present and malformed"; the Validator needs
