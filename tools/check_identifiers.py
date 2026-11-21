@@ -11,9 +11,13 @@ is constructed or a ValueTree property or child is named:
     node.hasType ("Note")             node.getChildWithName ("Events")
     juce::ValueTree note { "Note" }   node["pitch"]
 
-and the other calls in IDENTIFIER_CALLS. A hit anywhere inside the call's
-brackets counts. The same word in a comment, a log message or a UI label is
-not a hit.
+and the other calls in IDENTIFIER_CALLS. The name is the first argument of
+every one of these calls, wherever it stands and on whichever line; what
+follows it is a value, and a value is not a name even when it equals one:
+setProperty (ids::kind, "cc", ...) is no hit. In a ValueTree constructed with
+its properties and subtrees, the names are the type and the first half of
+each pair: juce::ValueTree { "Event", { { "kind", "cc" } } } has two. The
+same word in a comment, a log message or a UI label is not a hit.
 
 juce::Identifier converts from a string literal without a word, so a literal
 is accepted wherever an Identifier is expected, not only in JUCE's own calls.
@@ -36,8 +40,9 @@ Reported with file:line and a rule name in square brackets:
   [identifier]  a schema name spelled as a string outside Ids.h
   [literal-name] in model/, io/ and render/ only: any string literal, schema
                 name or not, as the name in one of those places: the first
-                argument of a call or construction, the initialiser of an
-                Identifier, a subscript, and the four further places above.
+                argument of a call, the names of a construction, the
+                initialiser of an Identifier, a subscript, and the four
+                further places above.
                 In these layers every ValueTree is the document, so a name
                 that is not a constant from Ids.h is an invented one [D15].
                 The value in setProperty (ids::kind, "event", ...) is not a
@@ -284,29 +289,6 @@ def end_of_brackets(text, opening_position):
     return length
 
 
-def end_of_first_argument(text, opening_position):
-    """The position of the comma or bracket that ends the first argument."""
-    depth = 0
-    position = opening_position
-    length = len(text)
-    while position < length:
-        character = text[position]
-        if character == '"':
-            literal = STRING_LITERAL.match(text, position)
-            position = literal.end() if literal else position + 1
-            continue
-        if character in "({[":
-            depth += 1
-        elif character in ")}]":
-            depth -= 1
-            if depth == 0:
-                return position
-        elif character == "," and depth == 1:
-            return position
-        position += 1
-    return length
-
-
 def arguments_of(text, opening_position, angles_are_brackets):
     """(start, end) of every argument inside the bracket at opening_position.
 
@@ -345,6 +327,24 @@ def arguments_of(text, opening_position, angles_are_brackets):
     return arguments
 
 
+def bracketed_elements(text, start, end):
+    """The position of the opening bracket of every element of the list in braces at [start, end).
+
+    For "{ { ids::kind, value }, NamedValue (ids::a, 1), other }" these are
+    the brace of the first element and the round bracket of the second; the
+    third has none. Nothing if what stands there is not a list in braces.
+    """
+    list_position = start + len(text[start:end]) - len(text[start:end].lstrip())
+    if list_position >= end or text[list_position] != "{":
+        return []
+    positions = []
+    for element_start, element_end in arguments_of(text, list_position, angles_are_brackets=False):
+        opening = re.compile(r"[({]").search(text, element_start, element_end)
+        if opening:
+            positions.append(opening.start())
+    return positions
+
+
 def name_taking_functions(texts):
     """{function name: the positions of its juce::Identifier parameters}.
 
@@ -370,39 +370,66 @@ def name_taking_functions(texts):
 def hits_in_file(text, names, document_only_layer, name_functions):
     """(position, rule, string, where it was found) for every hit, in order.
 
-    A schema name anywhere inside the brackets of one of JUCE's calls is an
-    [identifier] hit in every layer; so is one in the place of the name in
-    the further places. In a document-only layer, any other literal in the
-    place of the name is a [literal-name] hit.
+    A schema name in the place of the name is an [identifier] hit in every
+    layer: the first argument of one of JUCE's calls, the names of a
+    construction, and the further places. In a document-only layer, any
+    other literal in the place of the name is a [literal-name] hit.
     """
     hits = {}
 
-    def remember(position, string, where, is_in_name_place):
+    def remember(position, string, where):
         if position in hits:
             return
         if string in names:
             hits[position] = ("identifier", string, where)
-        elif document_only_layer and is_in_name_place:
+        elif document_only_layer:
             hits[position] = ("literal-name", string, where)
-
-    for opening_pattern in (CALL_OPENING, CONSTRUCTION_OPENING):
-        for opening in opening_pattern.finditer(text):
-            bracket_position = opening.end() - 1
-            end = end_of_brackets(text, bracket_position)
-            first_argument_end = end_of_first_argument(text, bracket_position)
-            where = f"{opening.group(1)} {text[bracket_position]}...{CLOSING_BRACKET[text[bracket_position]]}"
-            for literal in STRING_LITERAL.finditer(text, bracket_position, end):
-                remember(literal.start(), literal.group(1), where, literal.start() < first_argument_end)
-
-    for assignment in ASSIGNMENT.finditer(text):
-        remember(assignment.start(2) - 1, assignment.group(2), f"{assignment.group(1)} ... = ", True)
-
-    for subscript in SUBSCRIPT.finditer(text):
-        remember(subscript.start(1) - 1, subscript.group(1), "[...]", True)
 
     def remember_names(start, end, where):
         for literal in STRING_LITERAL.finditer(text, start, end):
-            remember(literal.start(), literal.group(1), where, True)
+            remember(literal.start(), literal.group(1), where)
+
+    def remember_tree_names(bracket_position, where):
+        """The names in the brackets of a ValueTree construction.
+
+        (type, { { property, value }, ... }, { subtree, ... }): the type, the
+        first half of every pair in the list of properties, and the same
+        again for every subtree written as a list in braces. A value is not
+        a name.
+        """
+        arguments = arguments_of(text, bracket_position, angles_are_brackets=False)
+        remember_names(*arguments[0], where)
+        if len(arguments) > 1:
+            for pair_position in bracketed_elements(text, *arguments[1]):
+                pair = arguments_of(text, pair_position, angles_are_brackets=False)
+                remember_names(*pair[0], where)
+        if len(arguments) > 2:
+            for subtree_position in bracketed_elements(text, *arguments[2]):
+                if text[subtree_position] == "{":
+                    remember_tree_names(subtree_position, where)
+
+    # JUCE's own calls: the name is the first argument of every one of them
+    # (juce_ValueTree.h at the pinned tag). What follows it is a value, and
+    # a value that equals a schema name, as in setProperty (ids::kind, "cc",
+    # ...), is not a name.
+    for opening in CALL_OPENING.finditer(text):
+        bracket_position = opening.end() - 1
+        start, end = arguments_of(text, bracket_position, angles_are_brackets=False)[0]
+        remember_names(start, end, f"{opening.group(1)} (...)")
+
+    for opening in CONSTRUCTION_OPENING.finditer(text):
+        bracket_position = opening.end() - 1
+        where = f"{opening.group(1)} {text[bracket_position]}...{CLOSING_BRACKET[text[bracket_position]]}"
+        if opening.group(1) == "ValueTree":
+            remember_tree_names(bracket_position, where)
+        else:
+            remember_names(bracket_position, end_of_brackets(text, bracket_position), where)
+
+    for assignment in ASSIGNMENT.finditer(text):
+        remember(assignment.start(2) - 1, assignment.group(2), f"{assignment.group(1)} ... = ")
+
+    for subscript in SUBSCRIPT.finditer(text):
+        remember(subscript.start(1) - 1, subscript.group(1), "[...]")
 
     # 1. Calls to our own functions: only the arguments that are an Identifier.
     #    The optional word is the variable in "PropertyName name (...)", for a

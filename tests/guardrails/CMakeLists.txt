@@ -150,11 +150,18 @@ hums_add_identifiers_fixture(subscript               "views/stepseq/CellComponen
 hums_add_identifiers_fixture(identifier_construction "model/ClipModel.cpp:3"                 "identifier")
 hums_add_identifiers_fixture(identifier_assignment   "render/SnapshotBuilder.cpp:3"          "identifier")
 hums_add_identifiers_fixture(value_tree_construction "model/commands/TrackCommands.cpp:4"    "identifier")
+# A value is not a name, also when it equals one: only the first argument of
+# a call, and in a ValueTree constructed with properties and subtrees the
+# type and the first half of each pair.
+hums_add_identifiers_fixture(call_value               "model/commands/EventCommands.cpp:11"   "identifier")
+hums_add_identifiers_fixture(value_tree_property_list "model/commands/EventCommands.cpp:9"    "identifier")
+hums_add_identifiers_fixture(value_tree_subtree       "io/ProjectFile.cpp:8"                  "identifier")
 
 # In model/, io/ and render/ a name that is no schema name at all fails too [D15].
 hums_add_identifiers_fixture(literal_name_set_property            "model/commands/NoteCommands.cpp:6" "literal-name")
 hums_add_identifiers_fixture(literal_name_child_with_name         "render/SnapshotBuilder.cpp:5"      "literal-name")
 hums_add_identifiers_fixture(literal_name_identifier_construction "io/ProjectFile.cpp:3"              "literal-name")
+hums_add_identifiers_fixture(literal_name_value_tree_property_list "render/SnapshotBuilder.cpp:6"     "literal-name")
 
 # The other places a juce::Identifier is expected, which converts from a
 # string literal without a word: a parameter of a function of ours (the check
