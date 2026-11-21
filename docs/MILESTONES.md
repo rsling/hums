@@ -15,7 +15,7 @@ Each milestone names a demonstration and its pass criterion. Do not start UI for
 
 ## Carried-over issues
 
-Known gaps that are not decisions (those are in `docs/DECISIONS.md`) and are not fixed yet. Each names the milestone at whose start it is picked up; delete an entry in the commit that settles it. Found by the code review of milestone 0 on 20 Nov 2026.
+Known gaps that are not decisions (those are in `docs/DECISIONS.md`) and are not fixed yet. Each names the milestone at whose start it is picked up, or the event that makes it due; delete an entry in the commit that settles it. Found by the code review of milestone 0 on 20 Nov 2026; the last three by the code review of 21 Nov 2026, which Roland marked "can wait" (they are as the review reported them, not reproduced since).
 
 | pick up at | issue |
 |---|---|
@@ -30,3 +30,6 @@ Known gaps that are not decisions (those are in `docs/DECISIONS.md`) and are not
 | milestone 3 | `miditiming` exits 0 on NOT MET (`targetsMet()` has no caller), so a script cannot use it as a check. Decide the exit code before the milestone 3 pass criterion is run. |
 | milestone 3 | Listen mode's recording window starts with the first message on the input. A stray message more than 2 s before playback ends the recording before the playback does (the report then shows drops). Keep the port quiet, or let the window follow the last arrival. |
 | milestone 3 | Nothing in `tools/miditiming` is covered by the test suite; its report logic was checked with throw-away harnesses outside the repository. If the milestone 3 pass criterion leans on listen mode, `ListenReport` and `ReferenceFile` deserve tests of their own, which needs a place in the layout (`tests/tools/`?) and Roland's yes. |
+| the gate first runs from a git hook or `git rebase --exec` | `tools/check_juce_pin.py` fails when `GIT_DIR` is exported: git then answers for the repository and not for the submodule in `libs/JUCE`. No hook is installed today. The fix is to clear git's environment variables for the script's own git calls (a guardrail script change: Roland's yes). |
+| the first `.mm` file under `platform/mac/` | `.clang-format` has one section, `Language: Cpp`, so `xcrun clang-format` refuses an Objective-C++ file. It needs an `ObjC` section with the same style. |
+| the first false violation it causes | `tools/cpp_text.py`, which tells comments from code for the guardrail scripts, takes the `'` of a digit separator (`1'000`) for the start of a character literal, so a `/*` later on that line is not seen and the comment's lines are scanned as code. It does not handle a raw string over several lines either. Fixing either is a guardrail script change: Roland's yes. |
