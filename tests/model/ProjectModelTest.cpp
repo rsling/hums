@@ -8,8 +8,8 @@
 namespace
 {
 
-// The Routing, Timeline and Session of the schema's "Berlin test" example.
-// ClipPool, Tracks and UiState are there because every Project has them;
+// The Routing, Timeline, Session and one clip of the schema's "Berlin test"
+// example. Tracks and UiState are there because every Project has them;
 // their wrappers come with later tasks.
 juce::ValueTree berlinProject()
 {
@@ -27,7 +27,11 @@ juce::ValueTree berlinProject()
                <TempoEvent tick="0" bpm="118"/>
                <TimeSigEvent tick="0" numerator="4" denominator="4"/>
              </Timeline>
-             <ClipPool/>
+             <ClipPool>
+               <Clip id="5a0c7e1b3d2f4a6988b7c6d5e4f3a2b1" name="Bass 5-step" kind="step">
+                 <Grid stepLength="240" stepCount="8" resetAt="6" skipMask="00010000"/>
+               </Clip>
+             </ClipPool>
              <Tracks/>
              <Session launchQuantise="3840">
                <Scene index="0" name="A"/>
@@ -84,6 +88,17 @@ TEST_CASE ("A Project gives its Routing, Timeline and Session", "[model][Project
     CHECK (session.getLaunchQuantise() == 3840);
     REQUIRE (session.getScenes().size() == 1);
     CHECK (session.getScenes()[0].getName() == "A");
+}
+
+TEST_CASE ("A Project gives its ClipPool", "[model][ProjectModel]")
+{
+    const model::ProjectModel project (berlinProject());
+
+    const auto clips = project.getClipPool().getClips();
+
+    REQUIRE (clips.size() == 1);
+    CHECK (clips[0].getName() == "Bass 5-step");
+    CHECK (clips[0].getLoopLength() == 1200);
 }
 
 TEST_CASE ("A wrapper sees a later change to the document", "[model][ProjectModel]")

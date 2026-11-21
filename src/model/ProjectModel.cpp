@@ -39,6 +39,11 @@ TimelineModel ProjectModel::getTimeline() const
     return TimelineModel (node.getChildWithName (ids::Timeline));
 }
 
+ClipPoolModel ProjectModel::getClipPool() const
+{
+    return ClipPoolModel (node.getChildWithName (ids::ClipPool));
+}
+
 SessionModel ProjectModel::getSession() const
 {
     return SessionModel (node.getChildWithName (ids::Session));

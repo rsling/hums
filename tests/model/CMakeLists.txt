@@ -1,7 +1,15 @@
 # model/: one test file per model type. Links the model layer only, never
 # io/, render/ or the engine.
 hums_add_test_executable(model_tests
+    CcValueModelTest.cpp
+    CellModelTest.cpp
+    ClipModelTest.cpp
+    ClipPoolModelTest.cpp
+    EventModelTest.cpp
+    GridModelTest.cpp
+    LaneModelTest.cpp
     MarkerModelTest.cpp
+    NoteModelTest.cpp
     PadMapModelTest.cpp
     PadModelTest.cpp
     PerformerModelTest.cpp

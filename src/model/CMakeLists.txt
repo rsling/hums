@@ -1,9 +1,25 @@
 # model/: ValueTree schema ids, typed wrappers, commands, Validator.
 hums_add_layer(hums_model
     SOURCES
+        CcValueModel.cpp
+        CcValueModel.h
+        CellModel.cpp
+        CellModel.h
+        ClipModel.cpp
+        ClipModel.h
+        ClipPoolModel.cpp
+        ClipPoolModel.h
+        EventModel.cpp
+        EventModel.h
+        GridModel.cpp
+        GridModel.h
         Ids.h
+        LaneModel.cpp
+        LaneModel.h
         MarkerModel.cpp
         MarkerModel.h
+        NoteModel.cpp
+        NoteModel.h
         PadMapModel.cpp
         PadMapModel.h
         PadModel.cpp

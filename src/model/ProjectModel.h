@@ -1,5 +1,6 @@
 #pragma once
 
+#include "model/ClipPoolModel.h"
 #include "model/RoutingModel.h"
 #include "model/SessionModel.h"
 #include "model/TimelineModel.h"
@@ -11,8 +12,7 @@ namespace model
 
 // The root of the document (docs/SCHEMA.md -> Project).
 //
-// ClipPool, Tracks and UiState get their accessors together with their own
-// wrappers.
+// Tracks and UiState get their accessors together with their own wrappers.
 class ProjectModel
 {
 public:
@@ -27,6 +27,7 @@ public:
 
     RoutingModel getRouting() const;
     TimelineModel getTimeline() const;
+    ClipPoolModel getClipPool() const;
     SessionModel getSession() const;
 
 private:
