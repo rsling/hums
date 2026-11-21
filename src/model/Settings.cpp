@@ -11,10 +11,31 @@ namespace model
 namespace
 {
 
-    // The defaults of the table in docs/SCHEMA.md -> UiState.
-    const char* const defaultActiveTab = "arrangement";
+    // The texts of the table in docs/SCHEMA.md -> UiState.
     const char* const updateAllText = "updateAll";
     const char* const makeUniqueText = "makeUnique";
+
+    const char* tabText (Settings::Tab tab)
+    {
+        switch (tab)
+        {
+            case Settings::Tab::routing:
+                return "routing";
+            case Settings::Tab::pianoroll:
+                return "pianoroll";
+            case Settings::Tab::arrangement:
+                return "arrangement";
+            case Settings::Tab::drums:
+                return "drums";
+            case Settings::Tab::stepseq:
+                return "stepseq";
+            case Settings::Tab::automation:
+                return "automation";
+        }
+
+        jassertfalse;
+        return "arrangement";
+    }
 
 } // namespace
 
@@ -24,15 +45,23 @@ Settings::Settings (juce::ValueTree uiStateNode)
     jassert (node.hasType (ids::UiState));
 }
 
-juce::String Settings::getActiveTab() const
+Settings::Tab Settings::getActiveTab() const
 {
-    return PropertyReader::getString (node, ids::activeTab, defaultActiveTab);
+    const auto text = PropertyReader::getString (node, ids::activeTab, tabText (Tab::arrangement));
+
+    for (const auto tab : { Tab::routing, Tab::pianoroll, Tab::drums, Tab::stepseq, Tab::automation })
+        if (text == tabText (tab))
+            return tab;
+
+    // The Validator lets no document in whose active tab has any other name.
+    jassert (text == tabText (Tab::arrangement));
+    return Tab::arrangement;
 }
 
-void Settings::setActiveTab (const juce::String& tab)
+void Settings::setActiveTab (Tab tab)
 {
     if (tab != getActiveTab())
-        node.setProperty (ids::activeTab, tab, nullptr);
+        node.setProperty (ids::activeTab, tabText (tab), nullptr);
 }
 
 Settings::SharedEditPolicy Settings::getSharedEditPolicy() const

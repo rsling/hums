@@ -130,10 +130,10 @@ TEST_CASE ("A Project gives its Settings", "[model][ProjectModel]")
     const model::ProjectModel project (tree);
 
     auto settings = project.getSettings();
-    CHECK (settings.getActiveTab() == "stepseq");
+    CHECK (settings.getActiveTab() == model::Settings::Tab::stepseq);
 
     // Settings write to the document's own UiState node, not to a copy.
-    settings.setActiveTab ("drums");
+    settings.setActiveTab (model::Settings::Tab::drums);
     CHECK (tree.getChildWithName (model::ids::UiState)[model::ids::activeTab].toString() == "drums");
 }
 

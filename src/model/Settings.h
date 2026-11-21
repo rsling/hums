@@ -20,11 +20,26 @@ namespace model
 // so no listener hears of it: "changed" means the value changed. That is what
 // lets a listener on UiState mark the project dirty.
 //
+// Like every wrapper, this reads a document that has passed the Validator,
+// which refuses a UiState with a malformed or unlisted value [D17]; there is
+// no fallback for one here.
+//
 // A view's own child node under UiState (zoom, scroll, visible CC rows) is
 // not handled here; it arrives with the first view.
 class Settings
 {
 public:
+    // The tabs, by the names the document stores (docs/SCHEMA.md -> UiState).
+    enum class Tab
+    {
+        routing,
+        pianoroll,
+        arrangement,
+        drums,
+        stepseq,
+        automation
+    };
+
     // The refcount gate's current setting (docs/EDITING.md).
     enum class SharedEditPolicy
     {
@@ -43,10 +58,9 @@ public:
     // The node must be a UiState node.
     explicit Settings (juce::ValueTree uiStateNode);
 
-    // The tab that was showing; "arrangement" when none is stored. The schema
-    // does not list the tab names, so any text is kept as it is.
-    juce::String getActiveTab() const;
-    void setActiveTab (const juce::String& tab);
+    // The tab that was showing; the arrangement when none is stored.
+    Tab getActiveTab() const;
+    void setActiveTab (Tab tab);
 
     SharedEditPolicy getSharedEditPolicy() const;
     void setSharedEditPolicy (SharedEditPolicy policy);

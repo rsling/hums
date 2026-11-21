@@ -6,6 +6,7 @@
 #include "model/Ids.h"
 #include "model/Settings.h"
 
+#include <utility>
 #include <vector>
 
 namespace
@@ -54,7 +55,7 @@ TEST_CASE ("Settings give back what is stored", "[model][Settings]")
 {
     const model::Settings settings (storedUiState());
 
-    CHECK (settings.getActiveTab() == "stepseq");
+    CHECK (settings.getActiveTab() == model::Settings::Tab::stepseq);
     CHECK (settings.getSharedEditPolicy() == model::Settings::SharedEditPolicy::makeUnique);
     CHECK (settings.getTransportLoop().start == 3840);
     CHECK (settings.getTransportLoop().end == 7680);
@@ -66,7 +67,7 @@ TEST_CASE ("Settings of an empty UiState are the schema's defaults", "[model][Se
 {
     const model::Settings settings (emptyUiState());
 
-    CHECK (settings.getActiveTab() == "arrangement");
+    CHECK (settings.getActiveTab() == model::Settings::Tab::arrangement);
     CHECK (settings.getSharedEditPolicy() == model::Settings::SharedEditPolicy::updateAll);
     CHECK (settings.getTransportLoop().start == 0);
     CHECK (settings.getTransportLoop().end == 0);
@@ -87,7 +88,7 @@ TEST_CASE ("Settings write every setting, and it survives save and reload", "[mo
     auto tree = emptyUiState();
     model::Settings settings (tree);
 
-    settings.setActiveTab ("pianoroll");
+    settings.setActiveTab (model::Settings::Tab::pianoroll);
     settings.setSharedEditPolicy (model::Settings::SharedEditPolicy::makeUnique);
     REQUIRE (settings.setTransportLoop ({ 960, 4800, true }));
     REQUIRE (settings.setExportLength (30720));
@@ -97,12 +98,38 @@ TEST_CASE ("Settings write every setting, and it survives save and reload", "[mo
     {
         const model::Settings read (node);
 
-        CHECK (read.getActiveTab() == "pianoroll");
+        CHECK (read.getActiveTab() == model::Settings::Tab::pianoroll);
         CHECK (read.getSharedEditPolicy() == model::Settings::SharedEditPolicy::makeUnique);
         CHECK (read.getTransportLoop().start == 960);
         CHECK (read.getTransportLoop().end == 4800);
         CHECK (read.getTransportLoop().enabled);
         CHECK (read.getExportLength() == 30720);
+    }
+}
+
+TEST_CASE ("Settings store and read every tab by the name the schema lists", "[model][Settings]")
+{
+    using Tab = model::Settings::Tab;
+
+    const std::vector<std::pair<Tab, juce::String>> tabs {
+        { Tab::routing, "routing" },
+        { Tab::pianoroll, "pianoroll" },
+        { Tab::arrangement, "arrangement" },
+        { Tab::drums, "drums" },
+        { Tab::stepseq, "stepseq" },
+        { Tab::automation, "automation" },
+    };
+
+    for (const auto& [tab, text] : tabs)
+    {
+        // Written from another tab, so that the write happens.
+        auto tree = emptyUiState();
+        model::Settings settings (tree);
+        settings.setActiveTab (tab == Tab::routing ? Tab::drums : Tab::routing);
+        settings.setActiveTab (tab);
+
+        CHECK (tree[model::ids::activeTab].toString() == text);
+        CHECK (model::Settings (savedAndReloaded (tree)).getActiveTab() == tab);
     }
 }
 
@@ -213,7 +240,7 @@ TEST_CASE ("Settings tell a listener of each setting that changed", "[model][Set
     tree.addListener (&listener);
     model::Settings settings (tree);
 
-    settings.setActiveTab ("drums");
+    settings.setActiveTab (model::Settings::Tab::drums);
     settings.setSharedEditPolicy (model::Settings::SharedEditPolicy::makeUnique);
     REQUIRE (settings.setExportLength (960));
 
@@ -231,7 +258,7 @@ TEST_CASE ("Settings tell no listener of a value that stays the same", "[model][
     auto written = emptyUiState();
     {
         model::Settings settings (written);
-        settings.setActiveTab ("stepseq");
+        settings.setActiveTab (model::Settings::Tab::stepseq);
         settings.setSharedEditPolicy (model::Settings::SharedEditPolicy::makeUnique);
         REQUIRE (settings.setTransportLoop ({ 3840, 7680, true }));
         REQUIRE (settings.setExportLength (15360));
@@ -243,7 +270,7 @@ TEST_CASE ("Settings tell no listener of a value that stays the same", "[model][
         tree.addListener (&listener);
         model::Settings settings (tree);
 
-        settings.setActiveTab ("stepseq");
+        settings.setActiveTab (model::Settings::Tab::stepseq);
         settings.setSharedEditPolicy (model::Settings::SharedEditPolicy::makeUnique);
         CHECK (settings.setTransportLoop ({ 3840, 7680, true }));
         CHECK (settings.setExportLength (15360));
@@ -259,7 +286,7 @@ TEST_CASE ("Settings tell no listener of a default set on an empty UiState", "[m
     tree.addListener (&listener);
     model::Settings settings (tree);
 
-    settings.setActiveTab ("arrangement");
+    settings.setActiveTab (model::Settings::Tab::arrangement);
     settings.setSharedEditPolicy (model::Settings::SharedEditPolicy::updateAll);
     CHECK (settings.setTransportLoop ({ 0, 0, false }));
     CHECK (settings.setExportLength (0));
@@ -300,18 +327,18 @@ TEST_CASE ("Settings never touch the undo history", "[model][Settings]")
 
     undoManager.beginNewTransaction();
     project.setProperty (model::ids::name, "After", &undoManager);
-    settings.setActiveTab ("drums");
+    settings.setActiveTab (model::Settings::Tab::drums);
     REQUIRE (settings.setTransportLoop ({ 0, 3840, true }));
 
     REQUIRE (undoManager.undo());
 
     CHECK (project[model::ids::name].toString() == "Before");
-    CHECK (settings.getActiveTab() == "drums");
+    CHECK (settings.getActiveTab() == model::Settings::Tab::drums);
     CHECK (settings.getTransportLoop().enabled);
     CHECK_FALSE (undoManager.canUndo());
 
     // Changing a setting after an undo leaves the redo in place.
-    settings.setActiveTab ("stepseq");
+    settings.setActiveTab (model::Settings::Tab::stepseq);
 
     REQUIRE (undoManager.redo());
     CHECK (project[model::ids::name].toString() == "After");
@@ -324,7 +351,7 @@ TEST_CASE ("Two Settings on one UiState see each other's changes", "[model][Sett
     model::Settings writer (tree);
     const model::Settings reader (tree);
 
-    writer.setActiveTab ("routing");
+    writer.setActiveTab (model::Settings::Tab::routing);
 
-    CHECK (reader.getActiveTab() == "routing");
+    CHECK (reader.getActiveTab() == model::Settings::Tab::routing);
 }
