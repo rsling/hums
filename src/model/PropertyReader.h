@@ -25,8 +25,8 @@ namespace model
 //   string       any text
 //
 // read...() tells "absent" from "present and malformed"; the Validator needs
-// that distinction. get...() is for the typed wrappers, which read documents
-// that have already passed the Validator.
+// that distinction. get...() and getRequired...() are for the typed wrappers,
+// which read documents that have already passed the Validator.
 class PropertyReader
 {
 public:
@@ -64,6 +64,15 @@ public:
     static bool getBool (const juce::ValueTree& node, const juce::Identifier& property, bool valueWhenAbsent);
     static double getDouble (const juce::ValueTree& node, const juce::Identifier& property, double valueWhenAbsent);
     static juce::String getString (const juce::ValueTree& node, const juce::Identifier& property, const juce::String& valueWhenAbsent);
+
+    // For a property the schema lists without a default. In a validated
+    // document it is always there, so a missing or malformed one asserts;
+    // a release build then gets 0, 0.0 or an empty string. (No bool: every
+    // bool in the schema has a default.)
+    static int getRequiredInt (const juce::ValueTree& node, const juce::Identifier& property);
+    static std::int64_t getRequiredInt64 (const juce::ValueTree& node, const juce::Identifier& property);
+    static double getRequiredDouble (const juce::ValueTree& node, const juce::Identifier& property);
+    static juce::String getRequiredString (const juce::ValueTree& node, const juce::Identifier& property);
 };
 
 } // namespace model

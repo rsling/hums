@@ -116,6 +116,14 @@ namespace
         return result.isValid() ? result.value : valueWhenAbsent;
     }
 
+    // A required property: anything but a valid value is a broken promise.
+    template <typename Value>
+    Value requiredValue (const PropertyReader::Result<Value>& result)
+    {
+        jassert (result.isValid());
+        return result.isValid() ? result.value : Value {};
+    }
+
 } // namespace
 
 PropertyReader::Result<int> PropertyReader::readInt (const juce::ValueTree& node, const juce::Identifier& property)
@@ -199,6 +207,26 @@ double PropertyReader::getDouble (const juce::ValueTree& node, const juce::Ident
 juce::String PropertyReader::getString (const juce::ValueTree& node, const juce::Identifier& property, const juce::String& valueWhenAbsent)
 {
     return valueOr (readString (node, property), valueWhenAbsent);
+}
+
+int PropertyReader::getRequiredInt (const juce::ValueTree& node, const juce::Identifier& property)
+{
+    return requiredValue (readInt (node, property));
+}
+
+std::int64_t PropertyReader::getRequiredInt64 (const juce::ValueTree& node, const juce::Identifier& property)
+{
+    return requiredValue (readInt64 (node, property));
+}
+
+double PropertyReader::getRequiredDouble (const juce::ValueTree& node, const juce::Identifier& property)
+{
+    return requiredValue (readDouble (node, property));
+}
+
+juce::String PropertyReader::getRequiredString (const juce::ValueTree& node, const juce::Identifier& property)
+{
+    return requiredValue (readString (node, property));
 }
 
 } // namespace model

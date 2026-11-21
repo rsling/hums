@@ -2,7 +2,31 @@
 hums_add_layer(hums_model
     SOURCES
         Ids.h
+        MarkerModel.cpp
+        MarkerModel.h
+        PadMapModel.cpp
+        PadMapModel.h
+        PadModel.cpp
+        PadModel.h
+        PerformerModel.cpp
+        PerformerModel.h
+        PlayerModel.cpp
+        PlayerModel.h
+        ProjectModel.cpp
+        ProjectModel.h
         PropertyReader.cpp
         PropertyReader.h
+        RoutingModel.cpp
+        RoutingModel.h
+        SceneModel.cpp
+        SceneModel.h
+        SessionModel.cpp
+        SessionModel.h
+        TempoEventModel.cpp
+        TempoEventModel.h
+        TimeSigEventModel.cpp
+        TimeSigEventModel.h
+        TimelineModel.cpp
+        TimelineModel.h
     LAYERS
     JUCE)

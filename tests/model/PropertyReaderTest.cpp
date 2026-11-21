@@ -183,3 +183,17 @@ TEST_CASE ("An identifier constant carries its own name", "[model][Ids]")
     CHECK (ids::schemaVersion.toString() == "schemaVersion");
     CHECK (juce::Identifier::isValidIdentifier (ids::AutomationLane.toString()));
 }
+
+TEST_CASE ("getRequired returns a property that is present", "[model][PropertyReader]")
+{
+    juce::ValueTree node (ids::TempoEvent);
+    node.setProperty (ids::tick, std::int64_t { 7680 }, nullptr);
+    node.setProperty (ids::bpm, "118.5", nullptr);
+    node.setProperty (ids::numerator, 7, nullptr);
+    node.setProperty (ids::name, "Break", nullptr);
+
+    CHECK (PropertyReader::getRequiredInt64 (node, ids::tick) == 7680);
+    CHECK (juce::exactlyEqual (PropertyReader::getRequiredDouble (node, ids::bpm), 118.5));
+    CHECK (PropertyReader::getRequiredInt (node, ids::numerator) == 7);
+    CHECK (PropertyReader::getRequiredString (node, ids::name) == "Break");
+}
