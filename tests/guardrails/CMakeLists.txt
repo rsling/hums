@@ -73,3 +73,42 @@ hums_add_script_guardrail(guardrail_juce_pin check_juce_pin.py)
 hums_add_script_guardrail_fixture(guardrail_juce_pin_fixture_fails check_juce_pin.py
     "check_juce_pin: VIOLATION: .*pins JUCE '9\\.0\\.5'"
     --version-file "${PROJECT_SOURCE_DIR}/tools/fixtures/check_juce_pin/JUCE_VERSION")
+
+# Guardrail 2: the include graph under src/ obeys the layer rules. Each
+# fixture is a small tree standing in for src/ with one planted violation; its
+# test passes only when the script reports that file and rule and counts
+# exactly one violation, so a fixture cannot pass for another reason than its
+# own.
+hums_add_script_guardrail(guardrail_layers check_layers.py)
+
+function(hums_add_layers_fixture case file_and_line rule)
+    hums_add_script_guardrail_fixture(guardrail_layers_fixture_${case}_fails check_layers.py
+        "check_layers: VIOLATION: [^\n]*/${case}/${file_and_line}: \\[${rule}\\][^\n]*\ncheck_layers: 1 violation"
+        --source-root "${PROJECT_SOURCE_DIR}/tools/fixtures/check_layers/${case}")
+endfunction()
+
+# The layer table.
+hums_add_layers_fixture(views_includes_engine               "views/pianoroll/PianoRollView.h:5" "layer")
+hums_add_layers_fixture(views_includes_other_app_header     "views/common/Knob.h:5"             "layer")
+hums_add_layers_fixture(engine_includes_model               "engine/Transport.h:5"              "layer")
+hums_add_layers_fixture(engine_includes_render_outside_core "engine/Scheduler.h:5"              "layer")
+hums_add_layers_fixture(engine_includes_platform_mac        "engine/Clock.h:5"                  "layer")
+hums_add_layers_fixture(model_includes_io                   "model/ClipModel.h:5"               "layer")
+# The std-only render core and platform/ interfaces.
+hums_add_layers_fixture(render_core_includes_model          "render/snapshot/Snapshot.h:5"      "layer")
+hums_add_layers_fixture(render_core_includes_render         "render/Kernel.cpp:3"               "layer")
+hums_add_layers_fixture(render_core_includes_juce           "render/TempoMap.h:5"               "juce")
+hums_add_layers_fixture(platform_interface_includes_juce    "platform/MidiScheduler.h:5"        "juce")
+hums_add_layers_fixture(platform_interface_includes_backend "platform/MonotonicClock.h:5"       "layer")
+# OS headers and Objective-C++ only under platform/mac/.
+hums_add_layers_fixture(os_header_outside_platform_mac          "engine/Clock.cpp:3"    "os-header")
+hums_add_layers_fixture(os_header_in_app                        "app/Main.cpp:3"        "os-header")
+hums_add_layers_fixture(third_party_header_outside_platform_mac "model/Validator.cpp:3" "os-header")
+hums_add_layers_fixture(objc_file_outside_platform_mac          "app/MenuBar.mm:1"      "objc-file")
+# app/TransportFacade.h reaches no engine/ header.
+hums_add_layers_fixture(transport_facade_reaches_engine     "app/TransportTypes.h:3"            "facade")
+# Nothing escapes classification.
+hums_add_layers_fixture(unknown_layer                       "util/Helper.h:1"                   "unknown-layer")
+hums_add_layers_fixture(unresolved_include                  "model/ClipModel.h:5"               "unresolved")
+hums_add_layers_fixture(include_leaves_source_root          "model/ClipModel.h:5"               "unresolved")
+hums_add_layers_fixture(computed_include                    "model/ClipModel.h:6"               "computed-include")
