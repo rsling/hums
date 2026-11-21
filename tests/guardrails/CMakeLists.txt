@@ -145,5 +145,21 @@ hums_add_identifiers_fixture(literal_name_set_property            "model/command
 hums_add_identifiers_fixture(literal_name_child_with_name         "render/SnapshotBuilder.cpp:5"      "literal-name")
 hums_add_identifiers_fixture(literal_name_identifier_construction "io/ProjectFile.cpp:3"              "literal-name")
 
+# The other places a juce::Identifier is expected, which converts from a
+# string literal without a word: a parameter of a function of ours (the check
+# reads the declaration inside the fixture), what a function returns, a list.
+hums_add_identifiers_fixture(own_function                          "model/NoteModel.cpp:6"         "identifier")
+hums_add_identifiers_fixture(own_function_first_parameter          "model/Settings.cpp:7"          "identifier")
+hums_add_identifiers_fixture(own_lambda                            "render/SnapshotBuilder.cpp:6"  "identifier")
+hums_add_identifiers_fixture(identifier_return                     "io/ProjectFile.cpp:5"          "identifier")
+hums_add_identifiers_fixture(identifier_list                       "model/Validator.cpp:3"         "identifier")
+hums_add_identifiers_fixture(identifier_array                      "render/SnapshotBuilder.cpp:3"  "identifier")
+hums_add_identifiers_fixture(literal_name_own_function             "model/CellModel.cpp:6"         "literal-name")
+hums_add_identifiers_fixture(literal_name_identifier_return_lambda "model/LaneModel.cpp:8"         "literal-name")
+# XML tag and attribute names, in model/, io/ and render/.
+hums_add_identifiers_fixture(xml_tag_name                          "io/ProjectFile.cpp:6"          "identifier")
+hums_add_identifiers_fixture(xml_construction                      "io/ProjectFile.cpp:5"          "identifier")
+hums_add_identifiers_fixture(literal_name_xml_attribute            "io/ProjectFile.cpp:6"          "literal-name")
+
 hums_add_identifiers_fixture(ids_constant_differs_from_string "model/Ids.h:9"  "ids-file")
 hums_add_identifiers_fixture(ids_unreadable_declaration       "model/Ids.h:10" "ids-file")

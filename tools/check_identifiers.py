@@ -13,18 +13,38 @@ is constructed or a ValueTree property or child is named:
 
 and the other calls in IDENTIFIER_CALLS. A hit anywhere inside the call's
 brackets counts. The same word in a comment, a log message or a UI label is
-not a hit. Reported with file:line and a rule name in square brackets:
+not a hit.
+
+juce::Identifier converts from a string literal without a word, so a literal
+is accepted wherever an Identifier is expected, not only in JUCE's own calls.
+The check therefore also looks at four more places, and there only at the
+literal that stands for the name:
+
+    PropertyReader::getInt (node, "pitch", 60)    a function of ours with a
+                                                  juce::Identifier parameter
+    juce::Identifier f() { return "pitch"; }      what such a function returns
+    std::array<juce::Identifier, 2> { ... }       a list of Identifiers
+    xml.getIntAttribute ("pitch")                 an XML tag or attribute name
+
+The functions of ours are not a list kept by hand: the check reads every
+declaration under the source root and remembers which parameters of which
+function are a juce::Identifier, as it reads the names from Ids.h. A call is
+matched by the function's name alone, whichever class it belongs to.
+
+Reported with file:line and a rule name in square brackets:
 
   [identifier]  a schema name spelled as a string outside Ids.h
   [literal-name] in model/, io/ and render/ only: any string literal, schema
                 name or not, as the name in one of those places: the first
                 argument of a call or construction, the initialiser of an
-                Identifier, a subscript. In these layers every ValueTree is
-                the document, so a name that is not a constant from Ids.h is
-                an invented one [D15]. The value in
-                setProperty (ids::kind, "event", ...) is not a name and not
-                a hit. views/ and app/ keep the first rule only, because
-                there the same call names can belong to other things.
+                Identifier, a subscript, and the four further places above.
+                In these layers every ValueTree is the document, so a name
+                that is not a constant from Ids.h is an invented one [D15].
+                The value in setProperty (ids::kind, "event", ...) is not a
+                name and not a hit. views/ and app/ keep the first rule
+                only, because there the same call names can belong to other
+                things; for the same reason XML names are looked at in
+                model/, io/ and render/ only.
   [ids-file]    a declaration in Ids.h that is not of the one fixed form
                     inline const juce::Identifier pitch { "pitch" };
                 with the constant named exactly like its string. The check
@@ -97,6 +117,77 @@ IDS_DECLARATION = re.compile(
 )
 
 CLOSING_BRACKET = {"(": ")", "{": "}"}
+
+# --- The other places a juce::Identifier is expected ------------------------
+#
+# 1. A parameter of one of our own functions. One parameter of a declaration
+#    is a juce::Identifier when it reads "const juce::Identifier& property",
+#    with or without const, juce::, the reference, the name and a default.
+IDENTIFIER_PARAMETER = re.compile(
+    r"\s*(?:const\s+)?(?:juce\s*::\s*)?Identifier\s*(?:const\s*)?&{0,2}\s*\w*\s*(?:=.*)?", re.DOTALL
+)
+FUNCTION_OPENING = re.compile(r"\b(\w+)\s*\(")
+LAMBDA_OPENING = re.compile(r"\b(\w+)\s*=\s*\[[^\]]*\]\s*\(")
+
+# Words that stand before a "(" without being the name of a function of ours:
+# "if (juce::Identifier name = ...)" declares no function called "if", and
+# std::function<void (const juce::Identifier&)> none called "void".
+NOT_A_FUNCTION_NAME = frozenset(
+    (
+        "if", "for", "while", "switch", "return", "catch", "sizeof", "alignof", "decltype",
+        "noexcept", "requires", "operator", "void", "bool", "char", "short", "int", "long",
+        "signed", "unsigned", "float", "double", "auto", "const",
+    )
+)
+
+# 2. What a function returns: "juce::Identifier nameOf() { return "tick"; }",
+#    a list of them ("std::vector<juce::Identifier> names() { return { ... }; }"),
+#    and a lambda with "-> juce::Identifier {".
+RETURNS_IDENTIFIER = re.compile(
+    r"\bIdentifier\b\s*(?:,[^<>;(){}]*)?>?\s*&?\s*(?:\w+\s*::\s*)*\w+\s*\("
+)
+TRAILING_RETURN_OF_IDENTIFIER = re.compile(
+    r"->\s*(?:const\s+)?(?:juce\s*::\s*)?Identifier\b\s*&?\s*\{"
+)
+BETWEEN_PARAMETERS_AND_BODY = re.compile(r"\s*(?:(?:const|noexcept|override|final)\s*)*\{")
+RETURN_STATEMENT = re.compile(r"\breturn\b([^;]*);")
+
+# 3. A list of Identifiers: "std::array<juce::Identifier, 2> names { ... }",
+#    "std::vector<juce::Identifier> names = { ... }", "juce::Identifier names[] = { ... }".
+IDENTIFIER_LIST = re.compile(
+    r"\bIdentifier\b\s*(?:,[^<>;(){}]*)?>\s*(?:const\s+)?\w*\s*(?:=\s*)?[({]"
+    r"|\bIdentifier\b\s+\w+\s*\[[^\]]*\]\s*(?:=\s*)?\{"
+)
+
+# 4. juce::XmlElement names a tag or an attribute in the first argument of
+#    these calls and of its constructors, mostly as text (a StringRef), so no
+#    Identifier is even involved. The list is the one in
+#    libs/JUCE/modules/juce_core/xml/juce_XmlElement.h at the pinned tag.
+XML_NAME_CALLS = (
+    "hasTagName",
+    "hasTagNameIgnoringNamespace",
+    "setTagName",
+    "hasAttribute",
+    "getStringAttribute",
+    "compareAttribute",
+    "getIntAttribute",
+    "getDoubleAttribute",
+    "getBoolAttribute",
+    "setAttribute",
+    "removeAttribute",
+    "getNextElementWithTagName",
+    "getChildByName",
+    "getChildByAttribute",
+    "createNewChildElement",
+    "deleteAllChildElementsWithTagName",
+    "getChildElementAllSubText",
+    "getChildWithTagNameIterator",
+)
+XML_TYPE = "XmlElement"
+XML_OPENING = re.compile(
+    r"\b(" + "|".join(XML_NAME_CALLS) + r")\s*\("
+    r"|\b(" + XML_TYPE + r")\b\s*>?\s*(?:\w+\s*)?[({]"
+)
 
 
 class CheckError(Exception):
@@ -216,12 +307,73 @@ def end_of_first_argument(text, opening_position):
     return length
 
 
-def hits_in_file(text, names, document_only_layer):
+def arguments_of(text, opening_position, angles_are_brackets):
+    """(start, end) of every argument inside the bracket at opening_position.
+
+    In a declaration a "<" opens template arguments, and a comma inside them
+    separates nothing: std::map<int, int> is one parameter. In a call a "<"
+    is as likely a comparison, so there it is left alone.
+    """
+    arguments = []
+    depth = 0
+    angle_depth = 0
+    start = opening_position + 1
+    position = opening_position
+    length = len(text)
+    while position < length:
+        character = text[position]
+        if character == '"':
+            literal = STRING_LITERAL.match(text, position)
+            position = literal.end() if literal else position + 1
+            continue
+        if character in "({[":
+            depth += 1
+        elif character in ")}]":
+            depth -= 1
+            if depth == 0:
+                arguments.append((start, position))
+                return arguments
+        elif angles_are_brackets and character == "<":
+            angle_depth += 1
+        elif angles_are_brackets and character == ">" and angle_depth > 0:
+            angle_depth -= 1
+        elif character == "," and depth == 1 and angle_depth == 0:
+            arguments.append((start, position))
+            start = position + 1
+        position += 1
+    arguments.append((start, length))
+    return arguments
+
+
+def name_taking_functions(texts):
+    """{function name: the positions of its juce::Identifier parameters}.
+
+    Read from every declaration and definition in the given sources, lambdas
+    held in a variable included. Only the name is kept, not the class: two
+    functions of one name are told apart by nothing here, and a call to
+    either is checked at the positions of both.
+    """
+    found = {}
+    for text in texts:
+        for opening_pattern in (FUNCTION_OPENING, LAMBDA_OPENING):
+            for opening in opening_pattern.finditer(text):
+                name = opening.group(1)
+                if name in NOT_A_FUNCTION_NAME or name in IDENTIFIER_TYPES:
+                    continue
+                parameters = arguments_of(text, opening.end() - 1, angles_are_brackets=True)
+                for index, (start, end) in enumerate(parameters):
+                    if IDENTIFIER_PARAMETER.fullmatch(text, start, end):
+                        found.setdefault(name, set()).add(index)
+    return found
+
+
+def hits_in_file(text, names, document_only_layer, name_functions):
     """(position, rule, string, where it was found) for every hit, in order.
 
-    A schema name anywhere inside the brackets is an [identifier] hit in every
-    layer. In a document-only layer, any other literal in the place of the
-    name is a [literal-name] hit.
+    A schema name anywhere inside the brackets of one of JUCE's calls is an
+    [identifier] hit in every layer; so is one in the place of the name in
+    the further places. In a document-only layer, any other literal in the
+    place of the name is a [literal-name] hit.
     """
     hits = {}
 
@@ -247,6 +399,51 @@ def hits_in_file(text, names, document_only_layer):
 
     for subscript in SUBSCRIPT.finditer(text):
         remember(subscript.start(1) - 1, subscript.group(1), "[...]", True)
+
+    def remember_names(start, end, where):
+        for literal in STRING_LITERAL.finditer(text, start, end):
+            remember(literal.start(), literal.group(1), where, True)
+
+    # 1. Calls to our own functions: only the arguments that are an Identifier.
+    #    The optional word is the variable in "PropertyName name (...)", for a
+    #    constructor that takes one.
+    if name_functions:
+        own_call_opening = re.compile(
+            r"\b(" + "|".join(sorted(name_functions)) + r")\b\s*(?:\w+\s*)?[({]"
+        )
+        for opening in own_call_opening.finditer(text):
+            arguments = arguments_of(text, opening.end() - 1, angles_are_brackets=False)
+            for index in sorted(name_functions[opening.group(1)]):
+                if index < len(arguments):
+                    start, end = arguments[index]
+                    remember_names(start, end, f"{opening.group(1)} (...)")
+
+    # 2. Every return statement in the body of a function that returns an
+    #    Identifier or a list of them.
+    body_positions = []
+    for opening in RETURNS_IDENTIFIER.finditer(text):
+        end_of_parameters = end_of_brackets(text, opening.end() - 1)
+        body = BETWEEN_PARAMETERS_AND_BODY.match(text, end_of_parameters)
+        if body:
+            body_positions.append(body.end() - 1)
+    for opening in TRAILING_RETURN_OF_IDENTIFIER.finditer(text):
+        body_positions.append(opening.end() - 1)
+    for body_position in body_positions:
+        end_of_body = end_of_brackets(text, body_position)
+        for statement in RETURN_STATEMENT.finditer(text, body_position, end_of_body):
+            remember_names(statement.start(1), statement.end(1), "the return of an Identifier")
+
+    # 3. Everything in a list of Identifiers.
+    for opening in IDENTIFIER_LIST.finditer(text):
+        bracket_position = opening.end() - 1
+        remember_names(bracket_position, end_of_brackets(text, bracket_position), "a list of Identifiers")
+
+    # 4. XML tag and attribute names. In model/, io/ and render/ every XML
+    #    element is the project file; in app/ it can be something else.
+    if document_only_layer:
+        for opening in XML_OPENING.finditer(text):
+            start, end = arguments_of(text, opening.end() - 1, angles_are_brackets=False)[0]
+            remember_names(start, end, f"{opening.group(1) or opening.group(2)} (...)")
 
     return [(position, *hits[position]) for position in sorted(hits)]
 
@@ -276,13 +473,18 @@ def find_violations(source_root, ids_file):
     names, violations = read_ids_file(ids_file)
     ids_file_resolved = ids_file.resolve()
 
+    # Read everything first: a function declared in one file is called in others.
+    texts = {}
     for path in source_files(source_root):
         if path.resolve() == ids_file_resolved or is_exempt(path):
             continue
-        text = read_source(path)
+        texts[path] = read_source(path)
+    name_functions = name_taking_functions(texts.values())
+
+    for path, text in texts.items():
         layer_path = path.relative_to(source_root).as_posix()
         document_only_layer = layer_path.startswith(DOCUMENT_ONLY_LAYERS)
-        for position, rule, string, where in hits_in_file(text, names, document_only_layer):
+        for position, rule, string, where in hits_in_file(text, names, document_only_layer, name_functions):
             if rule == "identifier":
                 message = (
                     f'"{string}" is spelled as a string in {where}; '
