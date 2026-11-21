@@ -2,7 +2,7 @@
 
 Authoritative description of the document model. `src/model/Ids.h` mirrors this file exactly; if they disagree, fix one and bump `schemaVersion`.
 
-Revision history: v1 drafted Sept 2026; amended 3 Oct 2026 after external review (renderer decoupled from routing, equal-tick order, loop-length invariants, PadMap moved out of UiState, quantisation added, validated load boundary); quantisation grid origin, wrap rule and validation tightened the same day; later the same day: transport-loop command path, view-state identifiers in `Ids.h`, `stepCount` change rules, automation ownership window, arrangement end. `schemaVersion` is still 1 because nothing has shipped.
+Revision history: v1 drafted Sept 2026; amended 3 Oct 2026 after external review (renderer decoupled from routing, equal-tick order, loop-length invariants, PadMap moved out of UiState, quantisation added, validated load boundary); quantisation grid origin, wrap rule and validation tightened the same day; later the same day: transport-loop command path, view-state identifiers in `Ids.h`, `stepCount` change rules, automation ownership window, arrangement end; 21 Nov 2026: a hand-edited file with an error is refused, never repaired, and invariant 10 covers `UiState`'s own properties **[D17]**. `schemaVersion` is still 1 because nothing has shipped.
 
 ## Conventions
 
@@ -330,15 +330,17 @@ Each view may add one child node named after itself (`PianoRollState`, `StepSeqS
 7. `Project.ppq == 960`.
 8. Every event clip has `loopLength > 0`; `loopLength` and `quantise` are absent on step clips; every `Note` has `length > 0`; no negative tick anywhere.
 9. A clip referenced by any AutomationLane placement contains only `cc` events.
-10. All MIDI ranges hold (pitch, velocity, CC, bend, program, pressure, channel 1–16); `gate` is finite and in `(0, 4]`; `bpm` is finite and > 0; `sysex` payloads are valid hex of even length; `quantise`, when present, is one of the seven listed values.
+10. All MIDI ranges hold (pitch, velocity, CC, bend, program, pressure, channel 1–16); `gate` is finite and in `(0, 4]`; `bpm` is finite and > 0; `sysex` payloads are valid hex of even length; `quantise`, when present, is one of the seven listed values. `UiState`'s own properties are held to the same standard **[D17]**: `sharedEditPolicy`, when present, is `updateAll` or `makeUnique`; `loopStart`, `loopEnd` and `exportLength` are ≥ 0; `loopStart < loopEnd` when `loopEnabled`. `activeTab` is not checked: the schema lists no tab names.
 11. Index-keyed children are unique in their scope: `Pad.index`, `Pad.inputPitch`, `Scene.index`, `Slot.scene` per track, `Knob.cc` per track, `CcValue.cc` per cell.
 12. `Project` has exactly one of each required container; every `Track` has exactly one `Placements`, `AutomationLanes`, `Knobs`, `Slots`.
 
-`src/model/Validator` checks all of these on a tree and reports `(node path, property, reason)`. It runs on every loaded document before installation and, in tests, after every command. It distinguishes "absent, default applies" from "present and malformed".
+`src/model/Validator` checks all of these on a tree and reports `(node path, property, reason)`. It runs on every loaded document before installation and, in tests, after every command. It distinguishes "absent, default applies" from "present and malformed": a property that is present but not in the text form of its type (`loopEnabled="yes"`, `channel="one"`) is a violation on every node the Validator looks at, `UiState` included, whichever invariant covers its value.
 
 ## Loading, saving, canonical form
 
 **Load** is one sequence, in `io/ProjectFile`: parse the XML into a detached candidate tree → check `schemaVersion` (greater than supported: refuse with a message naming the version; the file is not touched) → run migrations on the candidate → run the Validator → only then replace the active document and reset the UndoManager. Any failure leaves the current project untouched and reports the offending node and property.
+
+**Hand-edited files [D17].** Hums does not optimise for project files written or changed by hand. The files it has to read are the ones it wrote. A file with an error or an inconsistency — a malformed value, a value outside its range or its list, a broken reference, settings that contradict each other — is refused with a message naming the node and property. The load path never repairs, clamps or guesses, and no wrapper carries a fallback for a value the Validator should have refused. This is not a ban on editing a file by hand: a hand-edited file that is valid loads like any other, and unknown properties and children are still preserved (*Conventions*).
 
 **Save** writes to a temporary file in the same directory and renames over the target (`juce::TemporaryFile`), keeps the previous file as `<name>.bak`, and reports failure without having touched the original. A dirty project is autosaved to a recovery file in Application Support every two minutes; on launch, an existing recovery file is offered. One project is open at a time.
 
