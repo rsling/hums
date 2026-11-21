@@ -3,6 +3,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include "SettingsChangeListener.h"
 #include "model/Ids.h"
 #include "model/Settings.h"
 
@@ -29,25 +30,6 @@ juce::ValueTree savedAndReloaded (const juce::ValueTree& tree)
 {
     return juce::ValueTree::fromXml (tree.toXmlString());
 }
-
-// Notes every property change it hears of, in order.
-class ChangeListener : public juce::ValueTree::Listener
-{
-public:
-    void valueTreePropertyChanged (juce::ValueTree& changedNode, const juce::Identifier& property) override
-    {
-        changedProperties.push_back (property);
-
-        const model::Settings settings (changedNode);
-        const auto loop = settings.getTransportLoop();
-
-        if (loop.enabled && loop.start >= loop.end)
-            sawInvalidLoop = true;
-    }
-
-    std::vector<juce::Identifier> changedProperties;
-    bool sawInvalidLoop = false;
-};
 
 } // namespace
 
@@ -236,7 +218,7 @@ TEST_CASE ("Settings can set the export length back to the arrangement end", "[m
 TEST_CASE ("Settings tell a listener of each setting that changed", "[model][Settings]")
 {
     auto tree = emptyUiState();
-    ChangeListener listener;
+    SettingsChangeListener listener;
     tree.addListener (&listener);
     model::Settings settings (tree);
 
@@ -266,7 +248,7 @@ TEST_CASE ("Settings tell no listener of a value that stays the same", "[model][
 
     for (auto tree : { loaded, written })
     {
-        ChangeListener listener;
+        SettingsChangeListener listener;
         tree.addListener (&listener);
         model::Settings settings (tree);
 
@@ -282,7 +264,7 @@ TEST_CASE ("Settings tell no listener of a value that stays the same", "[model][
 TEST_CASE ("Settings tell no listener of a default set on an empty UiState", "[model][Settings]")
 {
     auto tree = emptyUiState();
-    ChangeListener listener;
+    SettingsChangeListener listener;
     tree.addListener (&listener);
     model::Settings settings (tree);
 
@@ -298,7 +280,7 @@ TEST_CASE ("Settings tell no listener of a default set on an empty UiState", "[m
 TEST_CASE ("Settings never show a listener an enabled loop with start not before end", "[model][Settings]")
 {
     auto tree = storedUiState(); // 3840 to 7680, enabled
-    ChangeListener listener;
+    SettingsChangeListener listener;
     tree.addListener (&listener);
     model::Settings settings (tree);
 
