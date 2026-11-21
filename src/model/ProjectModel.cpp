@@ -44,6 +44,11 @@ ClipPoolModel ProjectModel::getClipPool() const
     return ClipPoolModel (node.getChildWithName (ids::ClipPool));
 }
 
+TracksModel ProjectModel::getTracks() const
+{
+    return TracksModel (node.getChildWithName (ids::Tracks));
+}
+
 SessionModel ProjectModel::getSession() const
 {
     return SessionModel (node.getChildWithName (ids::Session));

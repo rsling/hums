@@ -8,9 +8,9 @@
 namespace
 {
 
-// The Routing, Timeline, Session and one clip of the schema's "Berlin test"
-// example. Tracks and UiState are there because every Project has them;
-// their wrappers come with later tasks.
+// The Routing, Timeline, Session, one clip and one track of the schema's
+// "Berlin test" example. UiState is there because every Project has one; it
+// is read through model/Settings, not through ProjectModel.
 juce::ValueTree berlinProject()
 {
     return juce::ValueTree::fromXml (
@@ -32,7 +32,18 @@ juce::ValueTree berlinProject()
                  <Grid stepLength="240" stepCount="8" resetAt="6" skipMask="00010000"/>
                </Clip>
              </ClipPool>
-             <Tracks/>
+             <Tracks>
+               <Track id="4c6e8a0c2e4f4b1d8a6c4e2a0c1e3f5b" name="Bass" playerId="9b1d6f3a2c4e4f708192a3b4c5d6e7f8" channel="1">
+                 <Placements>
+                   <Placement id="1a3c5e7a9b0d4f2e8c6a4e2c0b1d3f5a" clipId="5a0c7e1b3d2f4a6988b7c6d5e4f3a2b1" start="0" length="7680"/>
+                 </Placements>
+                 <AutomationLanes/>
+                 <Knobs/>
+                 <Slots>
+                   <Slot scene="0" clipId="5a0c7e1b3d2f4a6988b7c6d5e4f3a2b1"/>
+                 </Slots>
+               </Track>
+             </Tracks>
              <Session launchQuantise="3840">
                <Scene index="0" name="A"/>
              </Session>
@@ -99,6 +110,19 @@ TEST_CASE ("A Project gives its ClipPool", "[model][ProjectModel]")
     REQUIRE (clips.size() == 1);
     CHECK (clips[0].getName() == "Bass 5-step");
     CHECK (clips[0].getLoopLength() == 1200);
+}
+
+TEST_CASE ("A Project gives its Tracks", "[model][ProjectModel]")
+{
+    const model::ProjectModel project (berlinProject());
+
+    const auto tracks = project.getTracks();
+
+    REQUIRE (tracks.getTracks().size() == 1);
+    CHECK (tracks.getTracks()[0].getName() == "Bass");
+    CHECK (tracks.getRefcount ("5a0c7e1b3d2f4a6988b7c6d5e4f3a2b1") == 2);
+    REQUIRE (tracks.getArrangementEnd().has_value());
+    CHECK (*tracks.getArrangementEnd() == 7680);
 }
 
 TEST_CASE ("A wrapper sees a later change to the document", "[model][ProjectModel]")

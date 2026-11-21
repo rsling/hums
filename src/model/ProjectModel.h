@@ -4,6 +4,7 @@
 #include "model/RoutingModel.h"
 #include "model/SessionModel.h"
 #include "model/TimelineModel.h"
+#include "model/TracksModel.h"
 
 #include <juce_data_structures/juce_data_structures.h>
 
@@ -12,7 +13,7 @@ namespace model
 
 // The root of the document (docs/SCHEMA.md -> Project).
 //
-// Tracks and UiState get their accessors together with their own wrappers.
+// UiState gets its accessor together with model/Settings.
 class ProjectModel
 {
 public:
@@ -28,6 +29,7 @@ public:
     RoutingModel getRouting() const;
     TimelineModel getTimeline() const;
     ClipPoolModel getClipPool() const;
+    TracksModel getTracks() const;
     SessionModel getSession() const;
 
 private:

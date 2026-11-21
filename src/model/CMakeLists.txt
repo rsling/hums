@@ -1,6 +1,8 @@
 # model/: ValueTree schema ids, typed wrappers, commands, Validator.
 hums_add_layer(hums_model
     SOURCES
+        AutomationLaneModel.cpp
+        AutomationLaneModel.h
         CcValueModel.cpp
         CcValueModel.h
         CellModel.cpp
@@ -14,6 +16,8 @@ hums_add_layer(hums_model
         GridModel.cpp
         GridModel.h
         Ids.h
+        KnobModel.cpp
+        KnobModel.h
         LaneModel.cpp
         LaneModel.h
         MarkerModel.cpp
@@ -26,6 +30,8 @@ hums_add_layer(hums_model
         PadModel.h
         PerformerModel.cpp
         PerformerModel.h
+        PlacementModel.cpp
+        PlacementModel.h
         PlayerModel.cpp
         PlayerModel.h
         ProjectModel.cpp
@@ -38,11 +44,17 @@ hums_add_layer(hums_model
         SceneModel.h
         SessionModel.cpp
         SessionModel.h
+        SlotModel.cpp
+        SlotModel.h
         TempoEventModel.cpp
         TempoEventModel.h
         TimeSigEventModel.cpp
         TimeSigEventModel.h
         TimelineModel.cpp
         TimelineModel.h
+        TrackModel.cpp
+        TrackModel.h
+        TracksModel.cpp
+        TracksModel.h
     LAYERS
     JUCE)
