@@ -105,6 +105,13 @@ hums_add_layers_fixture(os_header_outside_platform_mac          "engine/Clock.cp
 hums_add_layers_fixture(os_header_in_app                        "app/Main.cpp:3"        "os-header")
 hums_add_layers_fixture(third_party_header_outside_platform_mac "model/Validator.cpp:3" "os-header")
 hums_add_layers_fixture(objc_file_outside_platform_mac          "app/MenuBar.mm:1"      "objc-file")
+# A project header in angle brackets, which platform/mac/ would otherwise take
+# for an OS header: refused in every layer, in any spelling of case, and so is
+# an angle include with ".." in it.
+hums_add_layers_fixture(angle_include_in_platform_mac  "platform/mac/CoreMidiScheduler.h:7"  "angle-include")
+hums_add_layers_fixture(angle_include_of_allowed_layer "views/pianoroll/PianoRollView.h:6"   "angle-include")
+hums_add_layers_fixture(angle_include_in_other_case    "platform/mac/MachTime.cpp:3"         "angle-include")
+hums_add_layers_fixture(angle_include_with_dot_dot     "platform/mac/DeviceIdentifier.cpp:5" "angle-include")
 # app/TransportFacade.h reaches no engine/ header.
 hums_add_layers_fixture(transport_facade_reaches_engine     "app/TransportTypes.h:3"            "facade")
 # Nothing escapes classification.

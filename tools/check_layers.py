@@ -13,6 +13,11 @@ root and reports, with file:line and a rule name in square brackets:
   [os-header]        an angle-bracket include that is neither std nor JUCE
                      (CoreMIDI, mach, Cocoa, pthread, any third-party
                      library) outside platform/mac/
+  [angle-include]    a project header included with <...>, in any layer. The
+                     source root is on the include path, so <model/Ids.h>
+                     compiles like "model/Ids.h"; only the quoted form is held
+                     against the table above. An angle include with ".." in
+                     it is refused with it
   [objc-file]        a .m / .mm file outside platform/mac/
   [facade]           app/TransportFacade.h reaches an engine/ header, directly
                      or through other headers
@@ -24,9 +29,11 @@ root and reports, with file:line and a rule name in square brackets:
 
 Quoted includes are resolved the way the compiler does it here: relative to
 the including file first, then relative to the source root. File names are
-compared case-sensitively although the macOS file system is not. Every include
-line counts, also one inside #if 0: the check does not evaluate the
-preprocessor.
+compared case-sensitively although the macOS file system is not. An angle
+include is taken for a project header when it names a file under the source
+root in any spelling of upper and lower case, because that is what compiles
+here. Every include line counts, also one inside #if 0: the check does not
+evaluate the preprocessor.
 
 Exit codes: 0 = no violation, 1 = violations, 2 = the check could not run.
 Every violation is a line starting "check_layers: VIOLATION"; the last line
@@ -234,7 +241,29 @@ def is_juce_header(target):
     return target.startswith("juce_")
 
 
-def check_angle_include(file, layer, include):
+def check_angle_include(file, layer, include, all_files_in_lower_case):
+    # Before anything else, and in every layer: platform/mac/ may include what
+    # is neither std nor JUCE, and a project header must not pass for that.
+    if ".." in include.target.split("/"):
+        return [
+            Violation(
+                file,
+                include.line_number,
+                "angle-include",
+                f'<{include.target}> has ".." in it, so it can leave its include '
+                f"directory and reach a file under the source root unseen",
+            )
+        ]
+    if posixpath.normpath(include.target).lower() in all_files_in_lower_case:
+        return [
+            Violation(
+                file,
+                include.line_number,
+                "angle-include",
+                f"<{include.target}> names a file under the source root; project "
+                f'headers are included with "...", which the layer rules read',
+            )
+        ]
     if is_std_header(include.target):
         return []
     if is_juce_header(include.target):
@@ -332,6 +361,8 @@ def find_violations(source_root):
         raise CheckError(f"{source_root} is not a directory")
 
     all_files = collect_files(source_root)
+    # An angle include finds a file as the macOS file system does: in any case.
+    all_files_in_lower_case = {name.lower() for name in all_files}
     violations = []
     project_includes = {}
 
@@ -374,7 +405,9 @@ def find_violations(source_root):
                 if resolved is not None:
                     resolved_includes.append((include.line_number, resolved))
             else:
-                violations.extend(check_angle_include(file, layer, include))
+                violations.extend(
+                    check_angle_include(file, layer, include, all_files_in_lower_case)
+                )
         project_includes[file] = resolved_includes
 
     violations.extend(check_transport_facade(project_includes))
