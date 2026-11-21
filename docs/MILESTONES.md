@@ -19,7 +19,6 @@ Known gaps that are not decisions (those are in `docs/DECISIONS.md`) and are not
 
 | pick up at | issue |
 |---|---|
-| milestone 1 | `libs/JUCE_VERSION` is never compared with the submodule's actual tag. A moved submodule would pass the gate with the pin file saying otherwise. A small guardrail script alongside guardrails 1 and 2 would close it. |
 | milestone 1 | `tests/guardrails/ToolchainJuceTest.cpp` spells two identifiers as string literals, on purpose and with a comment. Guardrail 1 scans `src/` only, so it is no violation; keep it in mind if the scan is ever widened to `tests/`. |
 | milestone 1 | `hums_add_layer` refuses a JUCE-using layer whose first file is a header ("header-only and cannot link JUCE"). `model/Ids.h` alone would trip it; add the first `.cpp` in the same commit, or let a header-only layer link `hums_juce` as INTERFACE. |
 | milestone 3 | `MidiScheduler` has no way to ask whether a port has gone; the engine learns it only from refused sends. Decide with the Routing tab how "unassigned" reaches the message thread (JUCE's device-list change, or a query on the interface). |

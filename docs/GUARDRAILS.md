@@ -37,6 +37,14 @@ Golden files are regenerated only through the `regenerate_golden` target (which 
 
 `tests/io/` loads every fixture in `fixtures/` through the real load path: valid files install; files with a higher `schemaVersion`, malformed XML, invariant violations, and a fixture whose migration throws are all refused with the current document and the source file untouched. Save failure (read-only target) leaves the previous file intact.
 
+## JUCE pin
+
+Not one of the five numbered guardrails, but a script with the same teeth. `libs/JUCE_VERSION` names the release tag JUCE is pinned to (`CLAUDE.md → Toolchain`); nothing else ties that file to the commit the submodule is at. `tools/check_juce_pin.py` fails when the commit checked out in `libs/JUCE` does not carry the pinned tag, or when the commit the repository records for `libs/JUCE` (the index entry, which is what the next commit would contain) is not the commit checked out there. So a moved submodule, a moved pin file, and a staged move that was never checked out all fail the gate. The fixture is `tools/fixtures/check_juce_pin/JUCE_VERSION`, a pin file naming another tag.
+
+## How the scripts are run
+
+The guardrail scripts in `tools/` are Python, standard library only, run with the Python that ships with the pinned Xcode (`xcrun python3`, `TOOLCHAIN.md`). Each is registered in `tests/guardrails/CMakeLists.txt` twice: against the repository, where it must exit 0 (`guardrail_<name>`), and against its fixture, where it must report a violation (`guardrail_<name>_fixture_fails`). A script exits 0 when the rule holds, 1 on a violation, 2 when it could not run; every violation is printed as a line starting `<script name>: VIOLATION`. The fixture run is judged by that line, not by the exit code, so a crashing script or a missing Python can never pass for a detected violation.
+
 ## Sanitizer builds
 
 C++ compiles lifetime and threading bugs without complaint, and the likeliest ones here — a listener outliving its `ValueTree`, a `Component` deleted inside its own callback, a Snapshot retired while the engine still reads it — can run fine for weeks. So the test suite runs in three configurations, and `tools/gate.sh` runs them in sequence:

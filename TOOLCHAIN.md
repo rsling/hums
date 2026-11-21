@@ -12,6 +12,7 @@ Started 20 Nov 2026 with the versions installed on Roland's Mac. Build-time base
 | Xcode | 27.0 (build 27A266a) | `/Applications/Xcode.app` |
 | Apple clang | 21.0.0 (clang-2100.3.34.2) | ships with Xcode 27.0; target `arm64-apple-darwin` |
 | clang-format | 21.0.0 (clang-2100.3.34.2) | ships with Xcode 27.0; run as `xcrun clang-format`, never a MacPorts or Homebrew one, which formats differently. Style in `.clang-format` (decided 21 Nov 2026) |
+| Python | 3.9.6 | ships with Xcode 27.0; runs the guardrail scripts in `tools/` as `xcrun python3`, never a MacPorts or Homebrew one. Standard library only, so the scripts must stay within Python 3.9 |
 | macOS SDK | 27.0 | ships with Xcode 27.0 |
 | CMake | 3.31.12 | |
 | Ninja | 1.13.2 | for the CLI and sanitizer build directories |

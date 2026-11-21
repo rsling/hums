@@ -40,3 +40,36 @@ endif()
 if(HUMS_SANITIZE)
     add_subdirectory(canaries)
 endif()
+
+# ---------------------------------------------------------------------------
+# Guardrail scripts (docs/GUARDRAILS.md). Each script in tools/ is registered
+# twice: once against the repository, where it must find nothing, and once
+# against its fixture in tools/fixtures/, where it must report a violation.
+#
+# The scripts run with the Python that ships with the pinned Xcode
+# (TOOLCHAIN.md), through xcrun like clang-format, so a MacPorts or Homebrew
+# Python on the PATH plays no role.
+find_program(HUMS_XCRUN xcrun REQUIRED)
+
+# The script must exit 0.
+function(hums_add_script_guardrail name script)
+    add_test(NAME ${name}
+        COMMAND "${HUMS_XCRUN}" python3 "${PROJECT_SOURCE_DIR}/tools/${script}" ${ARGN})
+endfunction()
+
+# The script must print its violation line. Judged by that line and not by the
+# exit code (WILL_FAIL), because a script that crashes, or a missing Python,
+# also exits non-zero and would pass for a detected violation.
+function(hums_add_script_guardrail_fixture name script violation_regex)
+    add_test(NAME ${name}
+        COMMAND "${HUMS_XCRUN}" python3 "${PROJECT_SOURCE_DIR}/tools/${script}" ${ARGN})
+    set_tests_properties(${name} PROPERTIES
+        PASS_REGULAR_EXPRESSION "${violation_regex}")
+endfunction()
+
+# JUCE pin: libs/JUCE is at the tag libs/JUCE_VERSION names. The fixture is a
+# version file naming another tag.
+hums_add_script_guardrail(guardrail_juce_pin check_juce_pin.py)
+hums_add_script_guardrail_fixture(guardrail_juce_pin_fixture_fails check_juce_pin.py
+    "check_juce_pin: VIOLATION: .*pins JUCE '9\\.0\\.5'"
+    --version-file "${PROJECT_SOURCE_DIR}/tools/fixtures/check_juce_pin/JUCE_VERSION")
