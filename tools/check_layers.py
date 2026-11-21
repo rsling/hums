@@ -22,6 +22,11 @@ root and reports, with file:line and a rule name in square brackets:
   [facade]           app/TransportFacade.h reaches an engine/ header, directly
                      or through other headers
   [unknown-layer]    a source file that belongs to no layer
+  [unknown-suffix]   a file under the source root that is neither a source
+                     file by its suffix nor on the short list of names that
+                     are not source (NOT_SOURCE_NAMES). The compiler includes
+                     a file of any name, so a file the check does not read
+                     could include anything unseen
   [unresolved]       a quoted include that names no file under the source
                      root with exactly that spelling; such an include cannot
                      be assigned to a layer, so it is refused
@@ -99,6 +104,11 @@ OS_LAYER = PLATFORM_MAC
 
 SOURCE_SUFFIXES = {".h", ".hpp", ".c", ".cc", ".cpp", ".m", ".mm", ".inl", ".inc", ".ipp"}
 OBJC_SUFFIXES = {".m", ".mm"}
+
+# The files under the source root that are not source, by exact name. Every
+# other file has a suffix from SOURCE_SUFFIXES, spelled exactly so, or fails.
+# .DS_Store is what Finder leaves behind in a directory it has shown.
+NOT_SOURCE_NAMES = {"CMakeLists.txt", ".DS_Store"}
 
 # Named in docs/GUARDRAILS.md; used only to word the message. Every other
 # non-std, non-JUCE angle include is refused just the same.
@@ -369,6 +379,16 @@ def find_violations(source_root):
     for file in sorted(all_files):
         suffix = posixpath.splitext(file)[1]
         if suffix not in SOURCE_SUFFIXES:
+            if posixpath.basename(file) not in NOT_SOURCE_NAMES:
+                violations.append(
+                    Violation(
+                        file,
+                        1,
+                        "unknown-suffix",
+                        "neither a source file by its suffix nor a known file that "
+                        "is not source, so its includes cannot be checked",
+                    )
+                )
             continue
 
         layer = layer_of(file)

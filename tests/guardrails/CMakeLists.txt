@@ -119,6 +119,10 @@ hums_add_layers_fixture(unknown_layer                       "util/Helper.h:1"   
 hums_add_layers_fixture(unresolved_include                  "model/ClipModel.h:5"               "unresolved")
 hums_add_layers_fixture(include_leaves_source_root          "model/ClipModel.h:5"               "unresolved")
 hums_add_layers_fixture(computed_include                    "model/ClipModel.h:6"               "computed-include")
+# A file the check would not read: a header with a suffix that is not on the
+# list, which could include anything, and an Objective-C++ file spelled .MM.
+hums_add_layers_fixture(unknown_suffix                      "engine/Detail.hxx:1"               "unknown-suffix")
+hums_add_layers_fixture(unknown_suffix_in_other_case        "app/MenuBar.MM:1"                  "unknown-suffix")
 
 # Guardrail 1: schema names are spelled as strings only in src/model/Ids.h.
 # The first group of fixtures is scanned against the real Ids.h, one fixture
