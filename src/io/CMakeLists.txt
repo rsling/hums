@@ -8,6 +8,8 @@
 # (docs/MILESTONES.md, milestone 2).
 hums_add_layer(hums_io
     SOURCES
+        Migrations.cpp
+        Migrations.h
         ProjectFile.cpp
         ProjectFile.h
     LAYERS hums_model

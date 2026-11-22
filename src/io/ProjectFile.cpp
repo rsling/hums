@@ -5,9 +5,12 @@
 #include "model/PropertyReader.h"
 
 #include <algorithm>
+#include <cstddef>
+#include <exception>
 #include <limits>
 #include <memory>
 #include <optional>
+#include <utility>
 #include <vector>
 
 namespace io
@@ -295,7 +298,178 @@ namespace
         return element;
     }
 
+    //==========================================================================
+    // Loading.
+
+    using LoadResult = ProjectFile::LoadResult;
+    using Outcome = ProjectFile::LoadResult::Outcome;
+
+    juce::String describe (const model::Validator::Violation& violation)
+    {
+        auto where = violation.nodePath;
+
+        if (violation.property.isNotEmpty())
+            where << ", " << violation.property;
+
+        return where + ": " + violation.reason;
+    }
+
+    LoadResult refusal (Outcome outcome, const juce::String& message)
+    {
+        LoadResult result;
+        result.outcome = outcome;
+        result.message = message;
+
+        return result;
+    }
+
+    // A refusal that is about the Project's schemaVersion.
+    LoadResult versionRefusal (Outcome outcome, const juce::String& reason)
+    {
+        const model::Validator::Violation violation { ids::Project.toString(), ids::schemaVersion.toString(), reason };
+
+        auto result = refusal (outcome, "The project file was not loaded. " + describe (violation));
+        result.violations.push_back (violation);
+
+        return result;
+    }
+
+    // A ValueTree has nothing to hold XML text in, so a file with text
+    // between its nodes cannot be loaded as it is, and dropping the text
+    // would be a repair. Gives the first element that holds text directly,
+    // or nullptr. (Whitespace between nodes is no text: JUCE's parser leaves
+    // it out.)
+    const juce::XmlElement* firstElementHoldingText (const juce::XmlElement& element)
+    {
+        for (const auto* child : element.getChildIterator())
+        {
+            if (child->isTextElement())
+                return &element;
+
+            if (const auto* found = firstElementHoldingText (*child))
+                return found;
+        }
+
+        return nullptr;
+    }
+
+    // Runs the steps that lie between the candidate's version and the one
+    // the table reaches. Gives the reason if a step threw, and nothing if
+    // all went through.
+    std::optional<juce::String> migrate (juce::ValueTree& candidate, int fileVersion, const Migrations::Steps& steps)
+    {
+        const auto targetVersion = Migrations::versionReachedBy (steps);
+
+        for (auto version = fileVersion; version < targetVersion; ++version)
+        {
+            const auto stepName = "The migration from schemaVersion " + juce::String (version) + " to " + juce::String (version + 1);
+
+            try
+            {
+                // The first step takes version 1 to 2.
+                steps[static_cast<std::size_t> (version - 1)](candidate);
+            }
+            catch (const std::exception& exception)
+            {
+                return stepName + " failed: " + juce::String::fromUTF8 (exception.what());
+            }
+            catch (...)
+            {
+                return stepName + " failed.";
+            }
+
+            candidate.setProperty (ids::schemaVersion, version + 1, nullptr);
+        }
+
+        return std::nullopt;
+    }
+
 } // namespace
+
+ProjectFile::LoadResult ProjectFile::load (const juce::File& file,
+                                           juce::ValueTree& document,
+                                           juce::UndoManager& undoManager,
+                                           const Migrations::Steps& steps)
+{
+    if (! file.existsAsFile())
+        return refusal (Outcome::fileNotReadable, "There is no file " + file.getFullPathName() + ".");
+
+    juce::FileInputStream stream (file);
+
+    if (! stream.openedOk())
+        return refusal (Outcome::fileNotReadable,
+                        "The file " + file.getFullPathName() + " cannot be read: " + stream.getStatus().getErrorMessage());
+
+    return loadFromText (stream.readEntireStreamAsString(), document, undoManager, steps);
+}
+
+ProjectFile::LoadResult ProjectFile::loadFromText (const juce::String& xmlText,
+                                                   juce::ValueTree& document,
+                                                   juce::UndoManager& undoManager,
+                                                   const Migrations::Steps& steps)
+{
+    // 1. Parse, into a tree nothing else refers to.
+    juce::XmlDocument xmlDocument (xmlText);
+    const auto root = xmlDocument.getDocumentElement();
+
+    // JUCE's parser carries on after some errors (an unknown entity, an
+    // illegal escape sequence) and still gives an element; the error text is
+    // then the only sign. Such a file is refused like any other malformed one.
+    if (root == nullptr || xmlDocument.getLastParseError().isNotEmpty())
+        return refusal (Outcome::malformedXml, "The project file is not well-formed XML: " + xmlDocument.getLastParseError() + ".");
+
+    if (const auto* holder = firstElementHoldingText (*root))
+        return refusal (Outcome::notAProjectFile,
+                        "The file is not a Hums project: there is text inside a " + holder->getTagName() + " node, where only nodes can be.");
+
+    auto candidate = juce::ValueTree::fromXml (*root);
+
+    if (! candidate.hasType (ids::Project))
+        return refusal (Outcome::notAProjectFile,
+                        "The file is not a Hums project: its root node is a " + candidate.getType().toString() + ", not a Project.");
+
+    // 2. The version. It is read before anything else is looked at, because
+    // it decides which steps run and whether this build may read the file.
+    const auto fileVersion = model::PropertyReader::readInt64 (candidate, ids::schemaVersion);
+    const auto supportedVersion = Migrations::versionReachedBy (steps);
+
+    if (fileVersion.isAbsent())
+        return versionRefusal (Outcome::noSchemaVersion, "the property is missing");
+
+    if (! fileVersion.isValid() || fileVersion.value < 1)
+        return versionRefusal (Outcome::noSchemaVersion, "\"" + storedText (candidate, ids::schemaVersion) + "\" is not a version number");
+
+    if (fileVersion.value > supportedVersion)
+        return versionRefusal (Outcome::versionTooNew,
+                               "the file has version " + juce::String (fileVersion.value) + " and was written by a newer Hums; this one reads up to version "
+                                   + juce::String (supportedVersion));
+
+    // 3. Migrations, on the candidate.
+    if (const auto failure = migrate (candidate, static_cast<int> (fileVersion.value), steps))
+        return refusal (Outcome::migrationFailed, "The project file was not loaded. " + *failure);
+
+    // 4. The Validator.
+    auto violations = model::Validator::validate (candidate);
+
+    if (! violations.empty())
+    {
+        auto message = "The project file is not valid. " + describe (violations.front());
+
+        if (violations.size() > 1)
+            message << " (and " << static_cast<int> (violations.size() - 1) << " more)";
+
+        auto result = refusal (Outcome::invalidDocument, message);
+        result.violations = std::move (violations);
+
+        return result;
+    }
+
+    // 5. Install. Nothing above has touched the document or the history.
+    document = candidate;
+    undoManager.clearUndoHistory();
+
+    return {};
+}
 
 juce::String ProjectFile::toCanonicalXml (const juce::ValueTree& project)
 {

@@ -1,8 +1,9 @@
-// io::ProjectFile: the native project file. So far the canonical writer,
-// docs/SCHEMA.md -> Loading, saving, canonical form.
+// io::ProjectFile: the native project file. The canonical writer and the load
+// sequence, docs/SCHEMA.md -> Loading, saving, canonical form.
 
 #include <catch2/catch_test_macros.hpp>
 
+#include "io/Migrations.h"
 #include "io/ProjectFile.h"
 #include "model/CellModel.h"
 #include "model/ClipModel.h"
@@ -24,7 +25,9 @@
 #include "model/TrackModel.h"
 #include "model/Validator.h"
 
+#include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace
 {
@@ -569,4 +572,551 @@ TEST_CASE ("Unknown children are kept in their place, with everything in them", 
 
     // And such a document, too, is the same text after a reload.
     CHECK (canonical (reloaded (project)) == canonical (project));
+}
+
+//==============================================================================
+// Loading: parse, schemaVersion, migrations, Validator, and only then install.
+
+namespace
+{
+
+using Outcome = io::ProjectFile::LoadResult::Outcome;
+
+// A project that is open and has been worked on: a document, and an undo
+// history with one edit in it. A refused load must leave both as they are.
+struct OpenProject
+{
+    OpenProject()
+    {
+        document = nodeFromXml (fixtureText ("berlin_test.xml").toRawUTF8());
+        treeBefore = document;
+
+        undoManager.beginNewTransaction();
+        document.setProperty (ids::name, "Edited since it was opened", &undoManager);
+        REQUIRE (undoManager.canUndo());
+
+        textBefore = canonical (document);
+    }
+
+    io::ProjectFile::LoadResult loadText (const juce::String& xmlText, const io::Migrations::Steps& steps = io::Migrations::steps())
+    {
+        return io::ProjectFile::loadFromText (xmlText, document, undoManager, steps);
+    }
+
+    // The document is the same tree with the same content, and the edit can
+    // still be undone.
+    bool isUntouched()
+    {
+        return document == treeBefore && canonical (document) == textBefore && undoManager.canUndo();
+    }
+
+    juce::ValueTree document;
+    juce::UndoManager undoManager;
+
+    juce::ValueTree treeBefore;
+    std::string textBefore;
+};
+
+// A valid project, as small as one can be, with room for a version and for
+// more properties on the Project node.
+juce::String smallProject (const juce::String& projectAttributes)
+{
+    return "<Project " + projectAttributes + R"(>
+              <Routing><PadMap/></Routing>
+              <Timeline>
+                <TempoEvent tick="0" bpm="120"/>
+                <TimeSigEvent tick="0" numerator="4" denominator="4"/>
+              </Timeline>
+              <ClipPool/>
+              <Tracks/>
+              <Session/>
+              <UiState/>
+            </Project>)";
+}
+
+struct CountingListener : juce::ValueTree::Listener
+{
+    void valueTreeRedirected (juce::ValueTree&) override { ++redirections; }
+    void valueTreePropertyChanged (juce::ValueTree&, const juce::Identifier&) override { ++otherCallbacks; }
+    void valueTreeChildAdded (juce::ValueTree&, juce::ValueTree&) override { ++otherCallbacks; }
+    void valueTreeChildRemoved (juce::ValueTree&, juce::ValueTree&, int) override { ++otherCallbacks; }
+    void valueTreeChildOrderChanged (juce::ValueTree&, int, int) override { ++otherCallbacks; }
+    void valueTreeParentChanged (juce::ValueTree&) override { ++otherCallbacks; }
+
+    int redirections = 0;
+    int otherCallbacks = 0;
+};
+
+} // namespace
+
+TEST_CASE ("The small project of the load tests is a valid document", "[io][ProjectFile][load]")
+{
+    // The refusals below each change one thing in it; they mean something
+    // only if the rest is in order.
+    const auto project = nodeFromXml (smallProject (R"(schemaVersion="1")").toRawUTF8());
+
+    CHECK (model::Validator::validate (project).empty());
+}
+
+TEST_CASE ("A valid file is loaded: it becomes the document and the undo history is empty", "[io][ProjectFile][load]")
+{
+    OpenProject open;
+    const auto file = juce::File (HUMS_IO_FIXTURES_DIRECTORY).getChildFile ("berlin_test.xml");
+
+    const auto result = io::ProjectFile::load (file, open.document, open.undoManager);
+
+    CHECK (result.wasLoaded());
+    CHECK (result.outcome == Outcome::loaded);
+    CHECK (result.message.isEmpty());
+    CHECK (result.violations.empty());
+
+    CHECK (canonical (open.document) == fixtureText ("berlin_test_canonical.xml").toStdString());
+    CHECK_FALSE (open.undoManager.canUndo());
+    CHECK_FALSE (open.undoManager.canRedo());
+}
+
+TEST_CASE ("Loading lets go of the previous tree and does not change it", "[io][ProjectFile][load]")
+{
+    OpenProject open;
+
+    REQUIRE (open.loadText (smallProject (R"(schemaVersion="1" name="Another")")).wasLoaded());
+
+    CHECK (open.document != open.treeBefore);
+    CHECK (model::ProjectModel (open.document).getName() == "Another");
+    CHECK (canonical (open.treeBefore) == open.textBefore);
+}
+
+TEST_CASE ("A listener on the document hears of a load once, as a redirection", "[io][ProjectFile][load]")
+{
+    OpenProject open;
+    CountingListener listener;
+    open.document.addListener (&listener);
+
+    REQUIRE (open.loadText (smallProject (R"(schemaVersion="1")")).wasLoaded());
+
+    CHECK (listener.redirections == 1);
+    CHECK (listener.otherCallbacks == 0);
+
+    // And it is still listening, now to the loaded document.
+    open.document.setProperty (ids::name, "Renamed", nullptr);
+    CHECK (listener.otherCallbacks == 1);
+
+    open.document.removeListener (&listener);
+}
+
+TEST_CASE ("A refused load tells a listener nothing", "[io][ProjectFile][load]")
+{
+    OpenProject open;
+    CountingListener listener;
+    open.document.addListener (&listener);
+
+    REQUIRE_FALSE (open.loadText (smallProject (R"(schemaVersion="1" ppq="480")")).wasLoaded());
+
+    CHECK (listener.redirections == 0);
+    CHECK (listener.otherCallbacks == 0);
+
+    open.document.removeListener (&listener);
+}
+
+TEST_CASE ("The first project of a session loads into a document that is not there yet", "[io][ProjectFile][load]")
+{
+    juce::ValueTree document;
+    juce::UndoManager undoManager;
+
+    const auto result = io::ProjectFile::loadFromText (smallProject (R"(schemaVersion="1")"), document, undoManager);
+
+    CHECK (result.wasLoaded());
+    CHECK (document.hasType (ids::Project));
+}
+
+TEST_CASE ("A valid file written by hand loads, and what Hums does not know in it is kept", "[io][ProjectFile][load]")
+{
+    OpenProject open;
+
+    // Not canonical (a default spelled out, a number with a leading zero),
+    // and with a property and a child from a newer build.
+    const auto text = juce::String (R"(<?xml version="1.0" encoding="UTF-8"?>
+        <!-- a comment -->
+        <Project ppq="960" swing="0.2" schemaVersion="01">
+          <Routing><PadMap/></Routing>
+          <Timeline>
+            <TempoEvent tick="0" bpm="120.0"/>
+            <TimeSigEvent tick="0" numerator="4" denominator="4"/>
+          </Timeline>
+          <ClipPool/>
+          <Tracks/>
+          <Session/>
+          <UiState/>
+          <Mixer><Strip gain="3"/></Mixer>
+        </Project>)");
+
+    REQUIRE (open.loadText (text).wasLoaded());
+
+    CHECK (canonical (open.document) == "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+                                        "\n"
+                                        "<Project schemaVersion=\"1\" swing=\"0.2\">\n"
+                                        "  <Routing>\n"
+                                        "    <PadMap/>\n"
+                                        "  </Routing>\n"
+                                        "  <Timeline>\n"
+                                        "    <TempoEvent tick=\"0\" bpm=\"120\"/>\n"
+                                        "    <TimeSigEvent tick=\"0\" numerator=\"4\" denominator=\"4\"/>\n"
+                                        "  </Timeline>\n"
+                                        "  <ClipPool/>\n"
+                                        "  <Tracks/>\n"
+                                        "  <Session/>\n"
+                                        "  <UiState/>\n"
+                                        "  <Mixer>\n"
+                                        "    <Strip gain=\"3\"/>\n"
+                                        "  </Mixer>\n"
+                                        "</Project>\n");
+}
+
+TEST_CASE ("Canonical text that is loaded and saved is the same text", "[io][ProjectFile][load]")
+{
+    OpenProject open;
+    const auto text = fixtureText ("berlin_test_canonical.xml");
+
+    REQUIRE (open.loadText (text).wasLoaded());
+
+    CHECK (canonical (open.document) == text.toStdString());
+}
+
+//------------------------------------------------------------------------------
+// Refusals. Each leaves the open project as it was.
+
+TEST_CASE ("A file that is not there is refused", "[io][ProjectFile][load]")
+{
+    OpenProject open;
+    const auto file = juce::File (HUMS_IO_FIXTURES_DIRECTORY).getChildFile ("no_such_file.xml");
+
+    const auto result = io::ProjectFile::load (file, open.document, open.undoManager);
+
+    CHECK (result.outcome == Outcome::fileNotReadable);
+    CHECK (result.message.contains ("no_such_file.xml"));
+    CHECK (open.isUntouched());
+}
+
+TEST_CASE ("A directory is refused", "[io][ProjectFile][load]")
+{
+    OpenProject open;
+
+    const auto result = io::ProjectFile::load (juce::File (HUMS_IO_FIXTURES_DIRECTORY), open.document, open.undoManager);
+
+    CHECK (result.outcome == Outcome::fileNotReadable);
+    CHECK (open.isUntouched());
+}
+
+TEST_CASE ("Malformed XML is refused", "[io][ProjectFile][load]")
+{
+    OpenProject open;
+
+    const std::vector<juce::String> texts {
+        "",
+        "this is no XML",
+        R"(<Project schemaVersion="1">)",                           // never closed
+        R"(<Project schemaVersion="1"><Routing></Project>)",        // unmatched tags
+        R"(<Project schemaVersion="1" name="unmatched quotes/>)",
+        // JUCE's parser carries on after this one and gives an element.
+        smallProject (R"(schemaVersion="1" name="&nosuchentity;")"),
+    };
+
+    for (const auto& text : texts)
+    {
+        INFO (text.toStdString());
+        const auto result = open.loadText (text);
+
+        CHECK (result.outcome == Outcome::malformedXml);
+        CHECK (result.message.isNotEmpty());
+        CHECK (open.isUntouched());
+    }
+}
+
+TEST_CASE ("XML with text between its nodes is refused, not loaded without the text", "[io][ProjectFile][load]")
+{
+    OpenProject open;
+
+    const auto result = open.loadText (
+        R"(<Project schemaVersion="1">
+             <Routing><PadMap>four pads</PadMap></Routing>
+           </Project>)");
+
+    CHECK (result.outcome == Outcome::notAProjectFile);
+    CHECK (result.message.contains ("PadMap"));
+    CHECK (open.isUntouched());
+}
+
+TEST_CASE ("XML whose root is not a Project is refused", "[io][ProjectFile][load]")
+{
+    OpenProject open;
+
+    const auto result = open.loadText (R"(<Clip id="9b1d6f3a2c4e4f708192a3b4c5d6e7f8" kind="event" loopLength="960"/>)");
+
+    CHECK (result.outcome == Outcome::notAProjectFile);
+    CHECK (result.message.contains ("Clip"));
+    CHECK (open.isUntouched());
+}
+
+TEST_CASE ("A file without a schemaVersion, or with one that is no version, is refused", "[io][ProjectFile][load]")
+{
+    OpenProject open;
+
+    const std::vector<juce::String> attributes {
+        R"(name="No version")",
+        R"(schemaVersion="")",
+        R"(schemaVersion="one")",
+        R"(schemaVersion="1.0")",
+        R"(schemaVersion="0")",
+        R"(schemaVersion="-1")",
+    };
+
+    for (const auto& projectAttributes : attributes)
+    {
+        INFO (projectAttributes.toStdString());
+        const auto result = open.loadText (smallProject (projectAttributes));
+
+        CHECK (result.outcome == Outcome::noSchemaVersion);
+        REQUIRE (result.violations.size() == 1);
+        CHECK (result.violations[0].nodePath == "Project");
+        CHECK (result.violations[0].property == "schemaVersion");
+        CHECK (result.message.contains ("schemaVersion"));
+        CHECK (open.isUntouched());
+    }
+}
+
+TEST_CASE ("A file of a newer schemaVersion is refused, and the message names the version", "[io][ProjectFile][load]")
+{
+    OpenProject open;
+
+    // Otherwise a valid version 1 document: it is the number alone that
+    // refuses it, and the newer build's data is not looked at.
+    const auto result = open.loadText (smallProject (R"(schemaVersion="2")"));
+
+    CHECK (result.outcome == Outcome::versionTooNew);
+    CHECK (result.message.contains ("version 2"));
+    CHECK (result.message.contains ("version 1"));
+    REQUIRE (result.violations.size() == 1);
+    CHECK (result.violations[0].nodePath == "Project");
+    CHECK (result.violations[0].property == "schemaVersion");
+    CHECK (open.isUntouched());
+
+    // Far beyond an int, too.
+    CHECK (open.loadText (smallProject (R"(schemaVersion="4000000000")")).outcome == Outcome::versionTooNew);
+    CHECK (open.isUntouched());
+}
+
+TEST_CASE ("A file that breaks an invariant is refused, with the node and property", "[io][ProjectFile][load]")
+{
+    OpenProject open;
+
+    const auto result = open.loadText (smallProject (R"(schemaVersion="1" ppq="480")"));
+
+    CHECK (result.outcome == Outcome::invalidDocument);
+    REQUIRE (result.violations.size() == 1);
+    CHECK (result.violations[0].nodePath == "Project");
+    CHECK (result.violations[0].property == "ppq");
+    CHECK (result.message.contains ("Project, ppq"));
+    CHECK (result.message.contains (result.violations[0].reason));
+    CHECK (open.isUntouched());
+}
+
+TEST_CASE ("Every violation is reported, and the message says how many more there are", "[io][ProjectFile][load]")
+{
+    OpenProject open;
+
+    const auto result = open.loadText (
+        R"(<Project schemaVersion="1" ppq="480">
+             <Routing><PadMap/></Routing>
+             <Timeline>
+               <TempoEvent tick="0" bpm="fast"/>
+               <TimeSigEvent tick="0" numerator="4" denominator="4"/>
+             </Timeline>
+             <ClipPool/>
+             <Tracks/>
+             <Session/>
+             <UiState loopEnabled="yes"/>
+           </Project>)");
+
+    CHECK (result.outcome == Outcome::invalidDocument);
+    REQUIRE (result.violations.size() == 3);
+    CHECK (result.message.contains ("(and 2 more)"));
+    CHECK (open.isUntouched());
+}
+
+TEST_CASE ("A value is never repaired on load: what the Validator refuses stays refused", "[io][ProjectFile][load]")
+{
+    OpenProject open;
+
+    // Each would be easy to clamp, round or default [D17].
+    const std::vector<juce::String> texts {
+        smallProject (R"(schemaVersion="1")").replace (R"(bpm="120")", R"(bpm="118.1234567")"),
+        smallProject (R"(schemaVersion="1")").replace ("<Session/>", R"(<Session launchQuantise="-1"/>)"),
+        smallProject (R"(schemaVersion="1")").replace ("<UiState/>", R"(<UiState activeTab="mixer"/>)"),
+    };
+
+    for (const auto& text : texts)
+    {
+        INFO (text.toStdString());
+
+        CHECK (open.loadText (text).outcome == Outcome::invalidDocument);
+        CHECK (open.isUntouched());
+    }
+}
+
+TEST_CASE ("A refused load leaves the file as it was", "[io][ProjectFile][load]")
+{
+    OpenProject open;
+    const juce::TemporaryFile temporary (".xml");
+    const auto file = temporary.getFile();
+
+    const std::vector<juce::String> texts {
+        "<Project",
+        smallProject (R"(schemaVersion="2")"),
+        smallProject (R"(schemaVersion="1" ppq="480")"),
+    };
+
+    for (const auto& text : texts)
+    {
+        INFO (text.toStdString());
+        // JUCE would otherwise write "\r\n" line endings.
+        REQUIRE (file.replaceWithText (text, false, false, "\n"));
+        const auto modifiedBefore = file.getLastModificationTime();
+
+        CHECK_FALSE (io::ProjectFile::load (file, open.document, open.undoManager).wasLoaded());
+
+        CHECK (file.loadFileAsString() == text);
+        CHECK (file.getLastModificationTime() == modifiedBefore);
+        CHECK (open.isUntouched());
+    }
+}
+
+//------------------------------------------------------------------------------
+// Migrations. No step exists at version 1, so the tests hand in their own.
+
+namespace
+{
+
+// Stands in for a format change: it leaves its mark in the Project's name,
+// which every version has.
+io::Migrations::Step appending (const juce::String& mark)
+{
+    return [mark] (juce::ValueTree& candidate) {
+        candidate.setProperty (ids::name, candidate[ids::name].toString() + mark, nullptr);
+    };
+}
+
+} // namespace
+
+TEST_CASE ("An older file runs through every step from its version on, in order", "[io][ProjectFile][load]")
+{
+    OpenProject open;
+    const io::Migrations::Steps steps { appending (" 1to2"), appending (" 2to3") };
+
+    REQUIRE (open.loadText (smallProject (R"(schemaVersion="1" name="Old")"), steps).wasLoaded());
+
+    const model::ProjectModel project (open.document);
+    CHECK (project.getName() == "Old 1to2 2to3");
+    CHECK (project.getSchemaVersion() == 3);
+    CHECK_FALSE (open.undoManager.canUndo());
+}
+
+TEST_CASE ("A file runs only the steps after its own version", "[io][ProjectFile][load]")
+{
+    OpenProject open;
+    const io::Migrations::Steps steps { appending (" 1to2"), appending (" 2to3") };
+
+    SECTION ("one version behind")
+    {
+        REQUIRE (open.loadText (smallProject (R"(schemaVersion="2" name="Old")"), steps).wasLoaded());
+
+        CHECK (model::ProjectModel (open.document).getName() == "Old 2to3");
+        CHECK (model::ProjectModel (open.document).getSchemaVersion() == 3);
+    }
+
+    SECTION ("current")
+    {
+        REQUIRE (open.loadText (smallProject (R"(schemaVersion="3" name="Old")"), steps).wasLoaded());
+
+        CHECK (model::ProjectModel (open.document).getName() == "Old");
+    }
+
+    SECTION ("newer than the steps reach")
+    {
+        CHECK (open.loadText (smallProject (R"(schemaVersion="4" name="Old")"), steps).outcome == Outcome::versionTooNew);
+        CHECK (open.isUntouched());
+    }
+}
+
+TEST_CASE ("A migration step that throws refuses the load", "[io][ProjectFile][load]")
+{
+    OpenProject open;
+
+    SECTION ("a std::exception, whose text is reported")
+    {
+        // It has already changed the candidate when it gives up.
+        const io::Migrations::Steps steps {
+            [] (juce::ValueTree& candidate) {
+                candidate.removeAllChildren (nullptr);
+                throw std::runtime_error ("a Clip without a kind");
+            },
+        };
+
+        const auto result = open.loadText (smallProject (R"(schemaVersion="1")"), steps);
+
+        CHECK (result.outcome == Outcome::migrationFailed);
+        CHECK (result.message.contains ("from schemaVersion 1 to 2"));
+        CHECK (result.message.contains ("a Clip without a kind"));
+        CHECK (open.isUntouched());
+    }
+
+    SECTION ("anything else")
+    {
+        const io::Migrations::Steps steps { [] (juce::ValueTree&) { throw 42; } };
+
+        const auto result = open.loadText (smallProject (R"(schemaVersion="1")"), steps);
+
+        CHECK (result.outcome == Outcome::migrationFailed);
+        CHECK (result.message.contains ("from schemaVersion 1 to 2"));
+        CHECK (open.isUntouched());
+    }
+
+    SECTION ("the second of two steps")
+    {
+        const io::Migrations::Steps steps {
+            appending (" 1to2"),
+            [] (juce::ValueTree&) { throw std::runtime_error ("no"); },
+        };
+
+        const auto result = open.loadText (smallProject (R"(schemaVersion="1")"), steps);
+
+        CHECK (result.outcome == Outcome::migrationFailed);
+        CHECK (result.message.contains ("from schemaVersion 2 to 3"));
+        CHECK (open.isUntouched());
+    }
+}
+
+TEST_CASE ("The Validator runs after the migrations, on what they made", "[io][ProjectFile][load]")
+{
+    OpenProject open;
+
+    SECTION ("a step can make a file valid that was not")
+    {
+        const io::Migrations::Steps steps {
+            [] (juce::ValueTree& candidate) { candidate.setProperty (ids::ppq, 960, nullptr); },
+        };
+
+        CHECK (open.loadText (smallProject (R"(schemaVersion="1" ppq="480")"), steps).wasLoaded());
+    }
+
+    SECTION ("and what a step leaves invalid is refused")
+    {
+        const io::Migrations::Steps steps {
+            [] (juce::ValueTree& candidate) { candidate.setProperty (ids::ppq, 480, nullptr); },
+        };
+
+        const auto result = open.loadText (smallProject (R"(schemaVersion="1")"), steps);
+
+        CHECK (result.outcome == Outcome::invalidDocument);
+        CHECK (open.isUntouched());
+    }
 }
