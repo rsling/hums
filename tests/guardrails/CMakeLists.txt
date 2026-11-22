@@ -147,6 +147,12 @@ hums_add_identifiers_fixture(set_property            "model/commands/NoteCommand
 hums_add_identifiers_fixture(has_type                "render/SnapshotBuilder.cpp:4"          "identifier")
 hums_add_identifiers_fixture(child_with_name         "io/ProjectFile.cpp:4"                  "identifier")
 hums_add_identifiers_fixture(subscript               "views/stepseq/CellComponent.cpp:4"     "identifier")
+# A subscript opens with a bracket that is code: the brackets in
+# "[" + position + "]" are text, and what stands between them is no name.
+hums_add_identifiers_fixture(subscript_in_string     "model/Validator.cpp:12"                "identifier")
+# The ' in 1'000 opens no character literal (tools/cpp_text.py): a comment
+# after such a number is still a comment, and code after it is still code.
+hums_add_identifiers_fixture(digit_separator         "model/GridModel.cpp:11"                "identifier")
 hums_add_identifiers_fixture(identifier_construction "model/ClipModel.cpp:3"                 "identifier")
 hums_add_identifiers_fixture(identifier_assignment   "render/SnapshotBuilder.cpp:3"          "identifier")
 hums_add_identifiers_fixture(value_tree_construction "model/commands/TrackCommands.cpp:4"    "identifier")

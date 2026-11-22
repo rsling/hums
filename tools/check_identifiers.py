@@ -71,7 +71,7 @@ import pathlib
 import re
 import sys
 
-from cpp_text import blank_out_comments
+from cpp_text import blank_out_comments, literal_spans
 
 NAME = "check_identifiers"
 REPOSITORY_ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -449,7 +449,13 @@ def hits_in_file(text, names, document_only_layer, name_functions):
     for assignment in ASSIGNMENT.finditer(text):
         remember(assignment.start(2) - 1, assignment.group(2), f"{assignment.group(1)} ... = ")
 
+    # A subscript opens with a bracket that is code. In "[" << position << "]"
+    # the brackets are text, and what stands between them is no name.
+    literals = literal_spans(text)
     for subscript in SUBSCRIPT.finditer(text):
+        bracket_position = subscript.start()
+        if any(start <= bracket_position < end for start, end in literals):
+            continue
         remember(subscript.start(1) - 1, subscript.group(1), "[...]")
 
     # 1. Calls to our own functions: only the arguments that are an Identifier.
