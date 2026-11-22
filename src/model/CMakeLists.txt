@@ -3,6 +3,8 @@ hums_add_layer(hums_model
     SOURCES
         AutomationLaneModel.cpp
         AutomationLaneModel.h
+        CanonicalDouble.cpp
+        CanonicalDouble.h
         CcValueModel.cpp
         CcValueModel.h
         CellModel.cpp
@@ -62,5 +64,16 @@ hums_add_layer(hums_model
         TracksModel.h
         Validator.cpp
         Validator.h
+        commands/CommandResult.h
+        commands/NodeLookup.cpp
+        commands/NodeLookup.h
+        commands/PadMapCommands.cpp
+        commands/PadMapCommands.h
+        commands/RoutingCommands.cpp
+        commands/RoutingCommands.h
+        commands/SessionCommands.cpp
+        commands/SessionCommands.h
+        commands/TimelineCommands.cpp
+        commands/TimelineCommands.h
     LAYERS
     JUCE)

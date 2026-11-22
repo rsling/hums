@@ -2,17 +2,21 @@
 # io/, render/ or the engine.
 hums_add_test_executable(model_tests
     AutomationLaneModelTest.cpp
+    CanonicalDoubleTest.cpp
     CcValueModelTest.cpp
     CellModelTest.cpp
     ClipModelTest.cpp
     ClipPoolModelTest.cpp
+    CommandFixture.h
     DeclaredIdentifiersTest.cpp
     EventModelTest.cpp
     GridModelTest.cpp
     KnobModelTest.cpp
     LaneModelTest.cpp
     MarkerModelTest.cpp
+    NodeLookupTest.cpp
     NoteModelTest.cpp
+    PadMapCommandsTest.cpp
     PadMapModelTest.cpp
     PadModelTest.cpp
     PerformerModelTest.cpp
@@ -20,13 +24,16 @@ hums_add_test_executable(model_tests
     PlayerModelTest.cpp
     ProjectModelTest.cpp
     PropertyReaderTest.cpp
+    RoutingCommandsTest.cpp
     RoutingModelTest.cpp
     SceneModelTest.cpp
+    SessionCommandsTest.cpp
     SessionModelTest.cpp
     SettingsTest.cpp
     SlotModelTest.cpp
     TempoEventModelTest.cpp
     TimeSigEventModelTest.cpp
+    TimelineCommandsTest.cpp
     TimelineModelTest.cpp
     TrackModelTest.cpp
     TracksModelTest.cpp

@@ -17,9 +17,16 @@ hums_discover_tests(guardrail_toolchain_juce "guardrail.toolchain_juce.")
 
 # Guardrail 3: invariants as property tests (docs/GUARDRAILS.md -> 3). The
 # generator of random valid documents, the checks every document is held to,
-# and the run over the seeds. It saves and loads through the real load path,
+# the driver that applies random commands, the checks every command is held
+# to, and the run over the seeds. It saves and loads through the real load path,
 # so it links the io layer and the model layer under it.
 hums_add_test_executable(guardrail_properties
+    CommandChecks.cpp
+    CommandChecks.h
+    CommandChecksTest.cpp
+    CommandDriver.cpp
+    CommandDriver.h
+    CommandDriverTest.cpp
     DocumentChecks.cpp
     DocumentChecks.h
     DocumentChecksTest.cpp
