@@ -6,6 +6,7 @@ hums_add_test_executable(model_tests
     CellModelTest.cpp
     ClipModelTest.cpp
     ClipPoolModelTest.cpp
+    DeclaredIdentifiersTest.cpp
     EventModelTest.cpp
     GridModelTest.cpp
     KnobModelTest.cpp
@@ -33,4 +34,7 @@ hums_add_test_executable(model_tests
 target_link_libraries(model_tests PRIVATE
     hums_model
     juce::juce_recommended_warning_flags)
+# DeclaredIdentifiersTest reads Ids.h itself, to hold the list to it.
+target_compile_definitions(model_tests PRIVATE
+    HUMS_IDS_HEADER="${PROJECT_SOURCE_DIR}/src/model/Ids.h")
 hums_discover_tests(model_tests "model.")

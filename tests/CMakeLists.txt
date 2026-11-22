@@ -23,5 +23,6 @@ function(hums_discover_tests target prefix)
 endfunction()
 
 add_subdirectory(guardrails)
+add_subdirectory(io)
 add_subdirectory(model)
 add_subdirectory(platform)

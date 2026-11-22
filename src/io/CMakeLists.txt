@@ -8,5 +8,7 @@
 # (docs/MILESTONES.md, milestone 2).
 hums_add_layer(hums_io
     SOURCES
+        ProjectFile.cpp
+        ProjectFile.h
     LAYERS hums_model
     JUCE)

@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<Project schemaVersion="1" name="Berlin test">
+  <Routing>
+    <Player id="9b1d6f3a2c4e4f708192a3b4c5d6e7f8" name="Minimoog" deviceIdentifier="1873204551" deviceName="MOTU midi express 1" sendClock="1"/>
+    <Performer id="3f2c9a1e5b7d4c80a6e1f0b2d4c6e8a1" name="Keyboard" deviceIdentifier="-904417826" deviceName="Keystep"/>
+    <PadMap>
+      <Pad index="0" inputPitch="36" pitch="36" label="Kick"/>
+      <Pad index="1" inputPitch="37" pitch="42" label="Hat"/>
+    </PadMap>
+  </Routing>
+  <Timeline>
+    <TempoEvent tick="0" bpm="118"/>
+    <TimeSigEvent tick="0" numerator="4" denominator="4"/>
+  </Timeline>
+  <ClipPool>
+    <Clip id="5a0c7e1b3d2f4a6988b7c6d5e4f3a2b1" name="Bass 5-step" kind="step">
+      <Grid stepCount="8" resetAt="6" skipMask="00010000">
+        <Lane id="2b4d6f8a0c1e4a3b8d5f7a9c1e3b5d7f">
+          <Cell pitch="36" on="1" velocity="110" gate="0.6"/>
+          <Cell pitch="36" on="1" velocity="90" gate="0.4"/>
+          <Cell pitch="43" on="1" gate="1.2"/>
+          <Cell pitch="48"/>
+          <Cell pitch="41" on="1" velocity="95">
+            <CcValue cc="74" value="90"/>
+          </Cell>
+          <Cell pitch="39" on="1"/>
+          <Cell pitch="36" on="1"/>
+          <Cell pitch="36" on="1"/>
+        </Lane>
+      </Grid>
+    </Clip>
+    <Clip id="7e2a4c6e8b0d4f1a9c3e5a7b9d1f3e5c" name="Kick+Hat" kind="step">
+      <Grid>
+        <Lane id="6d8f0a2c4e6b4d1f8a3c5e7a9b1d3f50" name="Kick" fixedPitch="36">
+          <Cell on="1"/>
+          <Cell/>
+          <Cell/>
+          <Cell/>
+          <Cell on="1"/>
+          <Cell/>
+          <Cell/>
+          <Cell/>
+          <Cell on="1"/>
+          <Cell/>
+          <Cell/>
+          <Cell/>
+          <Cell on="1"/>
+          <Cell/>
+          <Cell/>
+          <Cell/>
+        </Lane>
+        <Lane id="8f1b3d5f7a9c4e2b9d6f8a0c2e4b6d81" name="Hat" fixedPitch="42">
+          <Cell/>
+          <Cell/>
+          <Cell on="1" velocity="70"/>
+          <Cell/>
+          <Cell/>
+          <Cell/>
+          <Cell on="1" velocity="70"/>
+          <Cell/>
+          <Cell/>
+          <Cell/>
+          <Cell on="1" velocity="70"/>
+          <Cell/>
+          <Cell/>
+          <Cell/>
+          <Cell on="1" velocity="70"/>
+          <Cell/>
+        </Lane>
+      </Grid>
+    </Clip>
+  </ClipPool>
+  <Tracks>
+    <Track id="4c6e8a0c2e4f4b1d8a6c4e2a0c1e3f5b" name="Bass" playerId="9b1d6f3a2c4e4f708192a3b4c5d6e7f8" performerId="3f2c9a1e5b7d4c80a6e1f0b2d4c6e8a1">
+      <Placements>
+        <Placement id="1a3c5e7a9b0d4f2e8c6a4e2c0b1d3f5a" clipId="5a0c7e1b3d2f4a6988b7c6d5e4f3a2b1" start="0" length="7680"/>
+        <Placement id="3c5e7a9c1d2f4b4a8e0c6a4e2d3f5b7c" clipId="5a0c7e1b3d2f4a6988b7c6d5e4f3a2b1" start="7680" length="7680" offset="480"/>
+      </Placements>
+      <AutomationLanes/>
+      <Knobs>
+        <Knob cc="74" label="Cutoff"/>
+        <Knob cc="71" label="Res"/>
+      </Knobs>
+      <Slots>
+        <Slot scene="0" clipId="5a0c7e1b3d2f4a6988b7c6d5e4f3a2b1"/>
+      </Slots>
+    </Track>
+    <Track id="0e2a4c6e8a1c4d3f9b7d5f3b1d2f4a6c" name="Drums" playerId="9b1d6f3a2c4e4f708192a3b4c5d6e7f8" channel="10">
+      <Placements/>
+      <AutomationLanes/>
+      <Knobs/>
+      <Slots>
+        <Slot scene="0" clipId="7e2a4c6e8b0d4f1a9c3e5a7b9d1f3e5c"/>
+      </Slots>
+    </Track>
+  </Tracks>
+  <Session>
+    <Scene index="0" name="A"/>
+  </Session>
+  <UiState activeTab="stepseq"/>
+</Project>

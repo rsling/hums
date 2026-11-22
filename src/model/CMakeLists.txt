@@ -11,6 +11,8 @@ hums_add_layer(hums_model
         ClipModel.h
         ClipPoolModel.cpp
         ClipPoolModel.h
+        DeclaredIdentifiers.cpp
+        DeclaredIdentifiers.h
         EventModel.cpp
         EventModel.h
         GridModel.cpp
