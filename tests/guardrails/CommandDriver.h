@@ -16,7 +16,7 @@ namespace guardrails
 // Applies random commands of model/commands/ to a document, for the property
 // tests (docs/GUARDRAILS.md -> 3): valid ones and deliberately invalid ones
 // (a port that is not there, a pad number that is taken, a tempo of 0, the
-// tempo at tick 0 removed).
+// tempo at tick 0 removed, a track on channel 17).
 //
 // It looks at the document as it is now to know what is valid: which ids
 // there are, which pad numbers are taken. A valid form that needs something
@@ -70,6 +70,9 @@ private:
     std::vector<std::int64_t> ticksOf (const juce::Identifier& timelineEventType) const;
     std::vector<juce::ValueTree> markers() const;
     juce::ValueTree noMarker();
+    std::vector<juce::ValueTree> tracks() const;
+    std::vector<juce::ValueTree> tracksWithKnobs() const;
+    juce::String colour();
 
     // Routing.
     Attempt addPerformer();
@@ -103,6 +106,28 @@ private:
     // Session.
     Attempt setLaunchQuantise();
     Attempt setSceneName();
+
+    // Tracks and their knobs.
+    Attempt addTrack();
+    Attempt removeTrack();
+    Attempt moveTrack();
+    Attempt setTrackName();
+    Attempt setTrackColour();
+    Attempt setTrackPlayer();
+    Attempt setTrackChannel();
+    Attempt setTrackPerformer();
+    Attempt setTrackMute();
+    Attempt setTrackSolo();
+    Attempt addKnob();
+    Attempt removeKnob();
+    Attempt moveKnob();
+    Attempt setKnobCc();
+    Attempt setKnobLabel();
+
+    // A setter of one Track property that names a port, and of one that is
+    // a flag.
+    Attempt setTrackPort (const char* name, const juce::Identifier& portType, model::commands::CommandResult (*command) (juce::ValueTree, const juce::String&, const juce::String&, juce::UndoManager&));
+    Attempt setTrackFlag (const char* name, model::commands::CommandResult (*command) (juce::ValueTree, const juce::String&, bool, juce::UndoManager&));
 
     struct TableEntry
     {

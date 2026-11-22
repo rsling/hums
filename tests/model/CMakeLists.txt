@@ -35,6 +35,7 @@ hums_add_test_executable(model_tests
     TimeSigEventModelTest.cpp
     TimelineCommandsTest.cpp
     TimelineModelTest.cpp
+    TrackCommandsTest.cpp
     TrackModelTest.cpp
     TracksModelTest.cpp
     ValidatorTest.cpp)

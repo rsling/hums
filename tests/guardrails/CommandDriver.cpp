@@ -7,6 +7,7 @@
 #include "model/commands/RoutingCommands.h"
 #include "model/commands/SessionCommands.h"
 #include "model/commands/TimelineCommands.h"
+#include "model/commands/TrackCommands.h"
 
 #include <algorithm>
 #include <limits>
@@ -31,6 +32,18 @@ namespace
     bool contains (const std::vector<std::int64_t>& numbers, std::int64_t number)
     {
         return std::find (numbers.begin(), numbers.end(), number) != numbers.end();
+    }
+
+    bool anyNodeHasId (const juce::ValueTree& node, const juce::String& id)
+    {
+        if (PropertyReader::getString (node, ids::id, "") == id)
+            return true;
+
+        for (const auto& child : node)
+            if (anyNodeHasId (child, id))
+                return true;
+
+        return false;
     }
 
 } // namespace
@@ -66,6 +79,21 @@ const std::vector<CommandDriver::TableEntry>& CommandDriver::table()
         { "renameMarker", &CommandDriver::renameMarker, true },
         { "setLaunchQuantise", &CommandDriver::setLaunchQuantise, true },
         { "setSceneName", &CommandDriver::setSceneName, true },
+        { "addTrack", &CommandDriver::addTrack, false },
+        { "removeTrack", &CommandDriver::removeTrack, true },
+        { "moveTrack", &CommandDriver::moveTrack, true },
+        { "setTrackName", &CommandDriver::setTrackName, true },
+        { "setTrackColour", &CommandDriver::setTrackColour, true },
+        { "setTrackPlayer", &CommandDriver::setTrackPlayer, true },
+        { "setTrackChannel", &CommandDriver::setTrackChannel, true },
+        { "setTrackPerformer", &CommandDriver::setTrackPerformer, true },
+        { "setTrackMute", &CommandDriver::setTrackMute, true },
+        { "setTrackSolo", &CommandDriver::setTrackSolo, true },
+        { "addKnob", &CommandDriver::addKnob, true },
+        { "removeKnob", &CommandDriver::removeKnob, true },
+        { "moveKnob", &CommandDriver::moveKnob, true },
+        { "setKnobCc", &CommandDriver::setKnobCc, true },
+        { "setKnobLabel", &CommandDriver::setKnobLabel, true },
     };
 
     return entries;
@@ -149,12 +177,20 @@ juce::String CommandDriver::unknownId()
         return random.chance (50) ? juce::String() : juce::String ("no id");
 
     static const char* const digits = "0123456789abcdef";
-    juce::String id;
 
-    for (int digit = 0; digit < 32; ++digit)
-        id << digits[random.indexBelow (16)];
+    // Drawn again in the rare case that a node has it: the document's ids
+    // come from random numbers too, and with the same seed from the same
+    // ones.
+    for (;;)
+    {
+        juce::String id;
 
-    return id;
+        for (int digit = 0; digit < 32; ++digit)
+            id << digits[random.indexBelow (16)];
+
+        if (! anyNodeHasId (project, id))
+            return id;
+    }
 }
 
 // A position: mostly on a sixteenth, sometimes anywhere, now and then far
@@ -245,6 +281,37 @@ juce::ValueTree CommandDriver::noMarker()
         default:
             return project.getChildWithName (ids::Timeline).getChildWithName (ids::TempoEvent);
     }
+}
+
+std::vector<juce::ValueTree> CommandDriver::tracks() const
+{
+    return NodeLookup::childrenOfType (project.getChildWithName (ids::Tracks), ids::Track);
+}
+
+std::vector<juce::ValueTree> CommandDriver::tracksWithKnobs() const
+{
+    std::vector<juce::ValueTree> found;
+
+    for (const auto& track : tracks())
+        if (track.getChildWithName (ids::Knobs).getChildWithName (ids::Knob).isValid())
+            found.push_back (track);
+
+    return found;
+}
+
+// "#AARRGGBB" in either case, or empty for no colour.
+juce::String CommandDriver::colour()
+{
+    if (random.chance (20))
+        return {};
+
+    const auto* const digits = random.chance (50) ? "0123456789abcdef" : "0123456789ABCDEF";
+    juce::String result ("#");
+
+    for (int digit = 0; digit < 8; ++digit)
+        result << digits[random.indexBelow (16)];
+
+    return result;
 }
 
 //==============================================================================
@@ -648,6 +715,316 @@ CommandChecks::Attempt CommandDriver::setSceneName()
     const auto name = text();
 
     return made ("setSceneName (" + juce::String (sceneIndex) + ", " + quoted (name) + ")", isValidForm, commands::setSceneName (project, sceneIndex, name, undoManager));
+}
+
+//==============================================================================
+// Tracks and their knobs.
+
+namespace
+{
+
+    juce::String idOf (const juce::ValueTree& node)
+    {
+        return PropertyReader::getRequiredString (node, ids::id);
+    }
+
+    std::vector<juce::ValueTree> knobsOf (const juce::ValueTree& track)
+    {
+        return NodeLookup::childrenOfType (track.getChildWithName (ids::Knobs), ids::Knob);
+    }
+
+    int controllerOf (const juce::ValueTree& knob)
+    {
+        return PropertyReader::getRequiredInt (knob, ids::cc);
+    }
+
+    // The controller numbers the track has a knob for, and those it has
+    // none for.
+    void sortControllers (const juce::ValueTree& track, std::vector<int>& taken, std::vector<int>& free)
+    {
+        for (int cc = 0; cc <= 127; ++cc)
+            (NodeLookup::childWithNumber (track.getChildWithName (ids::Knobs), ids::Knob, ids::cc, cc).isValid() ? taken : free).push_back (cc);
+    }
+
+    int positionThatIsNotThere (RandomSource& random, int count)
+    {
+        return random.oneOf (std::vector<int> { -1, count, count + 7, std::numeric_limits<int>::min(), std::numeric_limits<int>::max() });
+    }
+
+} // namespace
+
+CommandChecks::Attempt CommandDriver::addTrack()
+{
+    const auto name = text();
+    return made ("addTrack (" + quoted (name) + ")", true, commands::addTrack (project, name, undoManager));
+}
+
+CommandChecks::Attempt CommandDriver::removeTrack()
+{
+    const auto known = tracks();
+    const auto isValidForm = wantsValidForm() && ! known.empty();
+    const auto id = isValidForm ? idOf (random.oneOf (known)) : unknownId();
+
+    return made ("removeTrack (" + quoted (id) + ")", isValidForm, commands::removeTrack (project, id, undoManager));
+}
+
+CommandChecks::Attempt CommandDriver::moveTrack()
+{
+    const auto known = tracks();
+    const auto count = static_cast<int> (known.size());
+    const auto isValidForm = wantsValidForm() && ! known.empty();
+
+    // Invalid: no such track, or a track and no such position.
+    const auto hasKnownId = isValidForm || (! known.empty() && random.chance (50));
+    const auto id = hasKnownId ? idOf (random.oneOf (known)) : unknownId();
+    const auto toPosition = (isValidForm || ! hasKnownId) ? random.intBetween (0, std::max (count - 1, 0)) : positionThatIsNotThere (random, count);
+
+    return made ("moveTrack (" + quoted (id) + ", " + juce::String (toPosition) + ")", isValidForm, commands::moveTrack (project, id, toPosition, undoManager));
+}
+
+CommandChecks::Attempt CommandDriver::setTrackName()
+{
+    const auto known = tracks();
+    const auto isValidForm = wantsValidForm() && ! known.empty();
+    const auto id = isValidForm ? idOf (random.oneOf (known)) : unknownId();
+    const auto name = text();
+
+    return made ("setTrackName (" + quoted (id) + ", " + quoted (name) + ")", isValidForm, commands::setTrackName (project, id, name, undoManager));
+}
+
+CommandChecks::Attempt CommandDriver::setTrackColour()
+{
+    const auto known = tracks();
+    const auto isValidForm = wantsValidForm() && ! known.empty();
+
+    // Invalid: no such track, or a track and no colour.
+    const auto hasKnownId = isValidForm || (! known.empty() && random.chance (50));
+    const auto id = hasKnownId ? idOf (random.oneOf (known)) : unknownId();
+    const auto value = (isValidForm || ! hasKnownId) ? colour() : random.oneOf (std::vector<juce::String> { "red", "#ff0000", "ff00ff00", "#ff00ff0g", "#ff00ff0000", "#", " #ff00ff00" });
+
+    return made ("setTrackColour (" + quoted (id) + ", " + quoted (value) + ")", isValidForm, commands::setTrackColour (project, id, value, undoManager));
+}
+
+CommandChecks::Attempt CommandDriver::setTrackPort (const char* name, const juce::Identifier& portType, commands::CommandResult (*command) (juce::ValueTree, const juce::String&, const juce::String&, juce::UndoManager&))
+{
+    const auto known = tracks();
+    const auto ports = idsOf (portType);
+    const auto isValidForm = wantsValidForm() && ! known.empty();
+
+    // Invalid: no such track, or a track and no such port.
+    const auto hasKnownId = isValidForm || (! known.empty() && random.chance (50));
+    const auto id = hasKnownId ? idOf (random.oneOf (known)) : unknownId();
+
+    juce::String portId; // empty = unassigned, which is valid
+
+    if (isValidForm || ! hasKnownId)
+    {
+        if (! ports.empty() && random.chance (75))
+            portId = random.oneOf (ports);
+    }
+    else
+    {
+        // Never empty here: an id in the right form that no port has.
+        do
+            portId = unknownId();
+        while (portId.length() != 32);
+    }
+
+    return made (juce::String (name) + " (" + quoted (id) + ", " + quoted (portId) + ")", isValidForm, command (project, id, portId, undoManager));
+}
+
+CommandChecks::Attempt CommandDriver::setTrackPlayer()
+{
+    return setTrackPort ("setTrackPlayer", ids::Player, &commands::setTrackPlayer);
+}
+
+CommandChecks::Attempt CommandDriver::setTrackPerformer()
+{
+    return setTrackPort ("setTrackPerformer", ids::Performer, &commands::setTrackPerformer);
+}
+
+CommandChecks::Attempt CommandDriver::setTrackChannel()
+{
+    const auto known = tracks();
+    const auto isValidForm = wantsValidForm() && ! known.empty();
+
+    // Invalid: no such track, or a track and no such channel.
+    const auto hasKnownId = isValidForm || (! known.empty() && random.chance (50));
+    const auto id = hasKnownId ? idOf (random.oneOf (known)) : unknownId();
+    const auto channel = (isValidForm || ! hasKnownId) ? random.intBetween (1, 16) : random.oneOf (std::vector<int> { 0, -1, 17, 100, std::numeric_limits<int>::min() });
+
+    return made ("setTrackChannel (" + quoted (id) + ", " + juce::String (channel) + ")", isValidForm, commands::setTrackChannel (project, id, channel, undoManager));
+}
+
+CommandChecks::Attempt CommandDriver::setTrackFlag (const char* name, commands::CommandResult (*command) (juce::ValueTree, const juce::String&, bool, juce::UndoManager&))
+{
+    const auto known = tracks();
+    const auto isValidForm = wantsValidForm() && ! known.empty();
+    const auto id = isValidForm ? idOf (random.oneOf (known)) : unknownId();
+    const auto flag = random.chance (50);
+
+    return made (juce::String (name) + " (" + quoted (id) + ", " + juce::String (flag ? 1 : 0) + ")", isValidForm, command (project, id, flag, undoManager));
+}
+
+CommandChecks::Attempt CommandDriver::setTrackMute()
+{
+    return setTrackFlag ("setTrackMute", &commands::setTrackMute);
+}
+
+CommandChecks::Attempt CommandDriver::setTrackSolo()
+{
+    return setTrackFlag ("setTrackSolo", &commands::setTrackSolo);
+}
+
+CommandChecks::Attempt CommandDriver::addKnob()
+{
+    const auto known = tracks();
+    const auto label = text();
+
+    if (known.empty())
+    {
+        const auto id = unknownId();
+        return made ("addKnob (" + quoted (id) + ", 74, " + quoted (label) + ")", false, commands::addKnob (project, id, 74, label, undoManager));
+    }
+
+    const auto track = random.oneOf (known);
+    std::vector<int> taken;
+    std::vector<int> free;
+    sortControllers (track, taken, free);
+
+    const auto isValidForm = wantsValidForm() && ! free.empty();
+
+    auto id = idOf (track);
+    auto cc = free.empty() ? 0 : random.oneOf (free);
+
+    if (! isValidForm)
+    {
+        const auto fault = random.intBetween (0, 2);
+
+        if (fault == 0 && ! taken.empty())
+            cc = random.oneOf (taken);
+        else if (fault == 1 || free.empty())
+            cc = notAPitch(); // a controller number has the range of a pitch
+        else
+            id = unknownId();
+    }
+
+    return made ("addKnob (" + quoted (id) + ", " + juce::String (cc) + ", " + quoted (label) + ")", isValidForm, commands::addKnob (project, id, cc, label, undoManager));
+}
+
+CommandChecks::Attempt CommandDriver::removeKnob()
+{
+    const auto withKnobs = tracksWithKnobs();
+    const auto isValidForm = wantsValidForm() && ! withKnobs.empty();
+
+    juce::String id = unknownId();
+    int cc = random.intBetween (0, 127);
+
+    if (isValidForm)
+    {
+        const auto track = random.oneOf (withKnobs);
+        id = idOf (track);
+        cc = controllerOf (random.oneOf (knobsOf (track)));
+    }
+    else if (const auto known = tracks(); ! known.empty() && random.chance (50))
+    {
+        // A track, and a controller it has no knob for.
+        const auto track = random.oneOf (known);
+        std::vector<int> taken;
+        std::vector<int> free;
+        sortControllers (track, taken, free);
+
+        id = idOf (track);
+        cc = free.empty() ? notAPitch() : random.oneOf (free);
+    }
+
+    return made ("removeKnob (" + quoted (id) + ", " + juce::String (cc) + ")", isValidForm, commands::removeKnob (project, id, cc, undoManager));
+}
+
+CommandChecks::Attempt CommandDriver::moveKnob()
+{
+    const auto withKnobs = tracksWithKnobs();
+    const auto isValidForm = wantsValidForm() && ! withKnobs.empty();
+
+    juce::String id = unknownId();
+    int cc = random.intBetween (0, 127);
+    int toPosition = 0;
+
+    if (isValidForm || (! withKnobs.empty() && random.chance (50)))
+    {
+        // Invalid: a knob, and a position that is not there.
+        const auto track = random.oneOf (withKnobs);
+        const auto knobs = knobsOf (track);
+        const auto count = static_cast<int> (knobs.size());
+
+        id = idOf (track);
+        cc = controllerOf (random.oneOf (knobs));
+        toPosition = isValidForm ? random.intBetween (0, count - 1) : positionThatIsNotThere (random, count);
+    }
+
+    return made ("moveKnob (" + quoted (id) + ", " + juce::String (cc) + ", " + juce::String (toPosition) + ")", isValidForm, commands::moveKnob (project, id, cc, toPosition, undoManager));
+}
+
+CommandChecks::Attempt CommandDriver::setKnobCc()
+{
+    const auto withKnobs = tracksWithKnobs();
+    const auto isValidForm = wantsValidForm() && ! withKnobs.empty();
+
+    if (withKnobs.empty())
+    {
+        const auto id = unknownId();
+        return made ("setKnobCc (" + quoted (id) + ", 74, 71)", false, commands::setKnobCc (project, id, 74, 71, undoManager));
+    }
+
+    const auto track = random.oneOf (withKnobs);
+    std::vector<int> taken;
+    std::vector<int> free;
+    sortControllers (track, taken, free);
+
+    const auto id = idOf (track);
+    auto cc = random.oneOf (taken);
+
+    // Free for this knob: every number no knob has, and its own.
+    auto newCc = (free.empty() || random.chance (10)) ? cc : random.oneOf (free);
+
+    if (! isValidForm)
+    {
+        std::vector<int> ofOthers;
+
+        for (const auto other : taken)
+            if (other != cc)
+                ofOthers.push_back (other);
+
+        const auto fault = random.intBetween (0, 2);
+
+        if (fault == 0 && ! ofOthers.empty())
+            newCc = random.oneOf (ofOthers);
+        else if (fault == 1 && ! free.empty())
+            cc = random.oneOf (free); // no knob for it
+        else
+            newCc = notAPitch();
+    }
+
+    return made ("setKnobCc (" + quoted (id) + ", " + juce::String (cc) + ", " + juce::String (newCc) + ")", isValidForm, commands::setKnobCc (project, id, cc, newCc, undoManager));
+}
+
+CommandChecks::Attempt CommandDriver::setKnobLabel()
+{
+    const auto withKnobs = tracksWithKnobs();
+    const auto isValidForm = wantsValidForm() && ! withKnobs.empty();
+    const auto label = text();
+
+    juce::String id = unknownId();
+    int cc = random.intBetween (0, 127);
+
+    if (isValidForm)
+    {
+        const auto track = random.oneOf (withKnobs);
+        id = idOf (track);
+        cc = controllerOf (random.oneOf (knobsOf (track)));
+    }
+
+    return made ("setKnobLabel (" + quoted (id) + ", " + juce::String (cc) + ", " + quoted (label) + ")", isValidForm, commands::setKnobLabel (project, id, cc, label, undoManager));
 }
 
 } // namespace guardrails

@@ -53,6 +53,7 @@ TEST_CASE ("guardrail 3: over the first 100 seeds every command is applied in a 
 
             // What is expected of a form is what happened; that every form
             // is expected rightly is the property test's to show.
+            INFO (attempt.description);
             REQUIRE (attempt.expectedToApply == attempt.wasApplied);
             (attempt.wasApplied ? applied : refused).insert (nameIn (attempt.description));
         }

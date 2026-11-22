@@ -75,5 +75,7 @@ hums_add_layer(hums_model
         commands/SessionCommands.h
         commands/TimelineCommands.cpp
         commands/TimelineCommands.h
+        commands/TrackCommands.cpp
+        commands/TrackCommands.h
     LAYERS
     JUCE)
