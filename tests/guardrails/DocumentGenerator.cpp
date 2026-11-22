@@ -276,13 +276,28 @@ namespace
             return node;
         }
 
+        // A name for a Performer or a Player: never empty, and none that
+        // is among `taken`, the names of the ports of its kind so far
+        // (invariants 10 and 11). The name joins them.
+        juce::String portName (std::vector<juce::String>& taken)
+        {
+            auto name = text();
+
+            while (name.isEmpty() || std::find (taken.begin(), taken.end(), name) != taken.end())
+                name << random.intBetween (0, 9);
+
+            taken.push_back (name);
+
+            return name;
+        }
+
         juce::ValueTree performer()
         {
             juce::ValueTree node (ids::Performer);
             const auto id = uuid();
 
             setText (node, ids::id, id);
-            setText (node, ids::name, text());
+            setText (node, ids::name, portName (performerNames));
             setTextOrOmit (node, ids::deviceIdentifier, text(), "");
             setTextOrOmit (node, ids::deviceName, text(), "");
             setIntOrOmit (node, ids::channelFilter, random.intBetween (0, 16), 0);
@@ -298,7 +313,7 @@ namespace
             const auto id = uuid();
 
             setText (node, ids::id, id);
-            setText (node, ids::name, text());
+            setText (node, ids::name, portName (playerNames));
             setTextOrOmit (node, ids::deviceIdentifier, text(), "");
             setTextOrOmit (node, ids::deviceName, text(), "");
             setBoolOrOmit (node, ids::sendClock, random.chance (50), false);
@@ -832,6 +847,8 @@ namespace
 
         std::vector<juce::String> performerIds;
         std::vector<juce::String> playerIds;
+        std::vector<juce::String> performerNames;
+        std::vector<juce::String> playerNames;
         std::vector<ClipRecord> clips;
     };
 

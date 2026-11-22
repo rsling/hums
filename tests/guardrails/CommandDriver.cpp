@@ -63,12 +63,12 @@ namespace
 const std::vector<CommandDriver::TableEntry>& CommandDriver::table()
 {
     static const std::vector<TableEntry> entries {
-        { "addPerformer", &CommandDriver::addPerformer, false },
+        { "addPerformer", &CommandDriver::addPerformer, true },
         { "removePerformer", &CommandDriver::removePerformer, true },
         { "setPerformerName", &CommandDriver::setPerformerName, true },
         { "setPerformerDevice", &CommandDriver::setPerformerDevice, true },
         { "setPerformerChannelFilter", &CommandDriver::setPerformerChannelFilter, true },
-        { "addPlayer", &CommandDriver::addPlayer, false },
+        { "addPlayer", &CommandDriver::addPlayer, true },
         { "removePlayer", &CommandDriver::removePlayer, true },
         { "setPlayerName", &CommandDriver::setPlayerName, true },
         { "setPlayerDevice", &CommandDriver::setPlayerDevice, true },
@@ -385,10 +385,92 @@ int CommandDriver::refcountOf (const juce::ValueTree& clip) const
 //==============================================================================
 // Routing.
 
+std::vector<juce::String> CommandDriver::namesOf (const juce::Identifier& portType) const
+{
+    std::vector<juce::String> found;
+
+    for (const auto& port : NodeLookup::childrenOfType (project.getChildWithName (ids::Routing), portType))
+        found.push_back (PropertyReader::getRequiredString (port, ids::name));
+
+    return found;
+}
+
+// A name a new port of this kind can have: not empty, and none that a port
+// of the kind has.
+juce::String CommandDriver::freeNameFor (const juce::Identifier& portType)
+{
+    const auto taken = namesOf (portType);
+    auto name = text();
+
+    while (name.isEmpty() || std::find (taken.begin(), taken.end(), name) != taken.end())
+        name << random.intBetween (0, 9);
+
+    return name;
+}
+
+// Invalid: no name, or the name of another port of the kind.
+CommandChecks::Attempt CommandDriver::addPort (const char* call, const juce::Identifier& portType, commands::CommandResult (*command) (juce::ValueTree, const juce::String&, juce::UndoManager&))
+{
+    const auto isValidForm = wantsValidForm();
+    const auto taken = namesOf (portType);
+    juce::String name;
+
+    if (isValidForm)
+        name = freeNameFor (portType);
+    else if (! taken.empty() && random.chance (60))
+        name = random.oneOf (taken);
+
+    return made (juce::String (call) + " (" + quoted (name) + ")", isValidForm, command (project, name, undoManager));
+}
+
+// Valid: a free name, or the one the port has. Invalid: no such port, no
+// name, or the name of another port of the kind.
+CommandChecks::Attempt CommandDriver::setPortName (const char* call, const juce::Identifier& portType, commands::CommandResult (*command) (juce::ValueTree, const juce::String&, const juce::String&, juce::UndoManager&))
+{
+    const auto ports = NodeLookup::childrenOfType (project.getChildWithName (ids::Routing), portType);
+    const auto isValidForm = wantsValidForm() && ! ports.empty();
+
+    juce::String id = unknownId();
+    juce::String name = freeNameFor (portType);
+
+    if (! ports.empty())
+    {
+        const auto port = random.oneOf (ports);
+        const auto ownName = PropertyReader::getRequiredString (port, ids::name);
+
+        id = PropertyReader::getRequiredString (port, ids::id);
+
+        if (isValidForm)
+        {
+            if (random.chance (15))
+                name = ownName;
+        }
+        else
+        {
+            // One thing wrong.
+            std::vector<juce::String> namesOfOthers;
+
+            for (const auto& other : ports)
+                if (other != port)
+                    namesOfOthers.push_back (PropertyReader::getRequiredString (other, ids::name));
+
+            const auto fault = random.intBetween (0, 2);
+
+            if (fault == 0)
+                id = unknownId();
+            else if (fault == 1 && ! namesOfOthers.empty())
+                name = random.oneOf (namesOfOthers);
+            else
+                name = juce::String();
+        }
+    }
+
+    return made (juce::String (call) + " (" + quoted (id) + ", " + quoted (name) + ")", isValidForm, command (project, id, name, undoManager));
+}
+
 CommandChecks::Attempt CommandDriver::addPerformer()
 {
-    const auto name = text();
-    return made ("addPerformer (" + quoted (name) + ")", true, commands::addPerformer (project, name, undoManager));
+    return addPort ("addPerformer", ids::Performer, &commands::addPerformer);
 }
 
 CommandChecks::Attempt CommandDriver::removePerformer()
@@ -402,12 +484,7 @@ CommandChecks::Attempt CommandDriver::removePerformer()
 
 CommandChecks::Attempt CommandDriver::setPerformerName()
 {
-    const auto known = idsOf (ids::Performer);
-    const auto isValidForm = wantsValidForm() && ! known.empty();
-    const auto id = isValidForm ? random.oneOf (known) : unknownId();
-    const auto name = text();
-
-    return made ("setPerformerName (" + quoted (id) + ", " + quoted (name) + ")", isValidForm, commands::setPerformerName (project, id, name, undoManager));
+    return setPortName ("setPerformerName", ids::Performer, &commands::setPerformerName);
 }
 
 CommandChecks::Attempt CommandDriver::setPerformerDevice()
@@ -437,8 +514,7 @@ CommandChecks::Attempt CommandDriver::setPerformerChannelFilter()
 
 CommandChecks::Attempt CommandDriver::addPlayer()
 {
-    const auto name = text();
-    return made ("addPlayer (" + quoted (name) + ")", true, commands::addPlayer (project, name, undoManager));
+    return addPort ("addPlayer", ids::Player, &commands::addPlayer);
 }
 
 CommandChecks::Attempt CommandDriver::removePlayer()
@@ -452,12 +528,7 @@ CommandChecks::Attempt CommandDriver::removePlayer()
 
 CommandChecks::Attempt CommandDriver::setPlayerName()
 {
-    const auto known = idsOf (ids::Player);
-    const auto isValidForm = wantsValidForm() && ! known.empty();
-    const auto id = isValidForm ? random.oneOf (known) : unknownId();
-    const auto name = text();
-
-    return made ("setPlayerName (" + quoted (id) + ", " + quoted (name) + ")", isValidForm, commands::setPlayerName (project, id, name, undoManager));
+    return setPortName ("setPlayerName", ids::Player, &commands::setPlayerName);
 }
 
 CommandChecks::Attempt CommandDriver::setPlayerDevice()

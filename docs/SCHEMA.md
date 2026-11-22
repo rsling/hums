@@ -2,7 +2,7 @@
 
 Authoritative description of the document model. `src/model/Ids.h` mirrors this file exactly; if they disagree, fix one and bump `schemaVersion`.
 
-Revision history: v1 drafted Sept 2026; amended 3 Oct 2026 after external review (renderer decoupled from routing, equal-tick order, loop-length invariants, PadMap moved out of UiState, quantisation added, validated load boundary); quantisation grid origin, wrap rule and validation tightened the same day; later the same day: transport-loop command path, view-state identifiers in `Ids.h`, `stepCount` change rules, automation ownership window, arrangement end; 21 Nov 2026: a hand-edited file with an error is refused, never repaired, and invariant 10 covers `UiState`'s own properties, the tab names and the six digits of a double **[D17]**; later the same day: two `TempoEvent`s or `TimeSigEvent`s at one tick are refused too, where the text still said the loader keeps the last.; 22 Nov 2026: the canonical form says where an undeclared property goes and how the text is laid out. Later the same day: the load sequence says what it does with text between nodes, with a file that has no usable `schemaVersion`, and how the document is installed; a migration step fails by throwing and leaves `schemaVersion` to the load path; the save says how the `.bak` is named and made and that a read-only file is refused; a command stores a double as its saved text; the scene commands renumber the `Scene` nodes with the slots; a clip on an AutomationLane is on AutomationLanes only, which invariant 9 now holds too **[D21]**. `schemaVersion` is still 1 because nothing has shipped.
+Revision history: v1 drafted Sept 2026; amended 3 Oct 2026 after external review (renderer decoupled from routing, equal-tick order, loop-length invariants, PadMap moved out of UiState, quantisation added, validated load boundary); quantisation grid origin, wrap rule and validation tightened the same day; later the same day: transport-loop command path, view-state identifiers in `Ids.h`, `stepCount` change rules, automation ownership window, arrangement end; 21 Nov 2026: a hand-edited file with an error is refused, never repaired, and invariant 10 covers `UiState`'s own properties, the tab names and the six digits of a double **[D17]**; later the same day: two `TempoEvent`s or `TimeSigEvent`s at one tick are refused too, where the text still said the loader keeps the last.; 22 Nov 2026: the canonical form says where an undeclared property goes and how the text is laid out. Later the same day: the load sequence says what it does with text between nodes, with a file that has no usable `schemaVersion`, and how the document is installed; a migration step fails by throwing and leaves `schemaVersion` to the load path; the save says how the `.bak` is named and made and that a read-only file is refused; a command stores a double as its saved text; the scene commands renumber the `Scene` nodes with the slots; a clip on an AutomationLane is on AutomationLanes only, which invariant 9 now holds too **[D21]**; a port has a name, unique among the ports of its kind (invariants 10 and 11) **[D22]**. `schemaVersion` is still 1 because nothing has shipped.
 
 ## Conventions
 
@@ -77,7 +77,7 @@ Logical ports and the pad map. Persisted by name; bound to physical devices at r
 | property | type | default | notes |
 |---|---|---|---|
 | `id` | uuid | — | |
-| `name` | string | — | what the user sees everywhere |
+| `name` | string | — | what the user sees everywhere; not empty, and unique among the Performers **[D22]** |
 | `deviceIdentifier` | string | "" | last bound `MidiDeviceInfo::identifier` |
 | `deviceName` | string | "" | fallback match if the identifier is gone |
 | `channelFilter` | int | 0 | 0 = omni, 1–16 = only that channel |
@@ -87,12 +87,14 @@ Logical ports and the pad map. Persisted by name; bound to physical devices at r
 | property | type | default | notes |
 |---|---|---|---|
 | `id` | uuid | — | |
-| `name` | string | — | |
+| `name` | string | — | not empty, and unique among the Players **[D22]** |
 | `deviceIdentifier` | string | "" | |
 | `deviceName` | string | "" | |
 | `sendClock` | bool | 0 | MIDI clock + Start/Stop/Continue/SPP |
 
 Why no channel on Player: the channel belongs to the Track. One Player, many Tracks, many channels.
+
+**Port names [D22].** A port's name is what every menu shows, so every port has one and no two Performers share a name, nor two Players. A Performer and a Player may have the same name (a keyboard's input and its output). Names are compared exactly as written: upper and lower case and spaces count. The command layer refuses an empty name and one that another port of the kind has; a project file that breaks either is refused on load (invariants 10 and 11).
 
 Two Players bound to the same physical port both sending clock would emit duplicate pulses. The router sends clock once per physical port if any bound Player has `sendClock`.
 
@@ -332,8 +334,8 @@ Each view may add one child node named after itself (`PianoRollState`, `StepSeqS
 7. `Project.ppq == 960`.
 8. Every event clip has `loopLength > 0`; `loopLength` and `quantise` are absent on step clips; every `Note` has `length > 0`; no negative tick anywhere.
 9. A clip referenced by any AutomationLane placement contains only `cc` events, and no placement of a track itself and no slot references it **[D21]**.
-10. All MIDI ranges hold (pitch, velocity, CC, bend, program, pressure, channel 1–16); `gate` is finite and in `(0, 4]`; `bpm` is finite and > 0; `sysex` payloads are valid hex of even length; `quantise`, when present, is one of the seven listed values. `UiState`'s own properties are held to the same standard **[D17]**: `sharedEditPolicy`, when present, is `updateAll` or `makeUnique`; `loopStart`, `loopEnd` and `exportLength` are ≥ 0; `loopStart < loopEnd` when `loopEnabled`; `activeTab`, when present, is one of the six listed tab names. A double (`bpm`, `gate`) is the value its canonical text reads back as, i.e. it carries no more than six significant digits **[D14]**, **[D17]**.
-11. Index-keyed children are unique in their scope: `Pad.index`, `Pad.inputPitch`, `Scene.index`, `Slot.scene` per track, `Knob.cc` per track, `CcValue.cc` per cell.
+10. All MIDI ranges hold (pitch, velocity, CC, bend, program, pressure, channel 1–16); `gate` is finite and in `(0, 4]`; `bpm` is finite and > 0; `sysex` payloads are valid hex of even length; `quantise`, when present, is one of the seven listed values. The `name` of a Performer and of a Player is not empty **[D22]**. `UiState`'s own properties are held to the same standard **[D17]**: `sharedEditPolicy`, when present, is `updateAll` or `makeUnique`; `loopStart`, `loopEnd` and `exportLength` are ≥ 0; `loopStart < loopEnd` when `loopEnabled`; `activeTab`, when present, is one of the six listed tab names. A double (`bpm`, `gate`) is the value its canonical text reads back as, i.e. it carries no more than six significant digits **[D14]**, **[D17]**.
+11. Index-keyed children are unique in their scope: `Pad.index`, `Pad.inputPitch`, `Scene.index`, `Slot.scene` per track, `Knob.cc` per track, `CcValue.cc` per cell. So are the names of the ports of one kind **[D22]**: `Performer.name` among the Performers, `Player.name` among the Players.
 12. `Project` has exactly one of each required container; every `Track` has exactly one `Placements`, `AutomationLanes`, `Knobs`, `Slots`.
 
 `src/model/Validator` checks all of these on a tree and reports `(node path, property, reason)`. It runs on every loaded document before installation and, in tests, after every command. It distinguishes "absent, default applies" from "present and malformed": a property that is present but not in the text form of its type (`loopEnabled="yes"`, `channel="one"`) is a violation on every node the Validator looks at, `UiState` included, whichever invariant covers its value.

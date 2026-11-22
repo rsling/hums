@@ -48,12 +48,12 @@ TEST_CASE ("addPerformer makes an unbound Performer with a new id, and undo take
     CHECK (fixture.xml() == after);
 }
 
-TEST_CASE ("Two ports that are added get two ids, and may share a name", "[model][commands][RoutingCommands]")
+TEST_CASE ("Two ports that are added get two ids", "[model][commands][RoutingCommands]")
 {
     CommandFixture fixture;
 
-    const auto first = commands::addPlayer (fixture.project, "Minimoog", fixture.undoManager);
-    const auto second = commands::addPlayer (fixture.project, "Minimoog", fixture.undoManager);
+    const auto first = commands::addPlayer (fixture.project, "Odyssey", fixture.undoManager);
+    const auto second = commands::addPlayer (fixture.project, "Pro-One", fixture.undoManager);
 
     REQUIRE (first.wasApplied());
     REQUIRE (second.wasApplied());
@@ -62,10 +62,67 @@ TEST_CASE ("Two ports that are added get two ids, and may share a name", "[model
     CHECK (routingOf (fixture).getPlayers().size() == 4);
 }
 
+// The fixture has the Players "Minimoog" and "Prophet" and the Performer
+// "Keyboard".
+TEST_CASE ("A port is not given the name another port of its kind has, nor an empty one", "[model][commands][RoutingCommands]")
+{
+    CommandFixture fixture;
+    const auto before = fixture.xml();
+
+    const auto results = {
+        commands::addPlayer (fixture.project, "Minimoog", fixture.undoManager),
+        commands::addPlayer (fixture.project, "Prophet", fixture.undoManager),
+        commands::addPlayer (fixture.project, "", fixture.undoManager),
+        commands::addPerformer (fixture.project, "Keyboard", fixture.undoManager),
+        commands::addPerformer (fixture.project, "", fixture.undoManager),
+        commands::setPlayerName (fixture.project, CommandFixture::minimoogId, "Prophet", fixture.undoManager),
+        commands::setPlayerName (fixture.project, CommandFixture::minimoogId, "", fixture.undoManager),
+        commands::setPerformerName (fixture.project, CommandFixture::keyboardId, "", fixture.undoManager),
+    };
+
+    for (const auto& result : results)
+    {
+        CHECK (! result.wasApplied());
+        CHECK (result.refusal.isNotEmpty());
+        CHECK (result.createdId.isEmpty());
+    }
+
+    CHECK (fixture.isUntouchedSince (before));
+}
+
+TEST_CASE ("A Performer and a Player may share a name, and names are compared as they are written", "[model][commands][RoutingCommands]")
+{
+    CommandFixture fixture;
+
+    // An input and an output of one device.
+    CHECK (commands::addPerformer (fixture.project, "Minimoog", fixture.undoManager).wasApplied());
+    CHECK (commands::addPlayer (fixture.project, "Keyboard", fixture.undoManager).wasApplied());
+    CHECK (commands::setPerformerName (fixture.project, CommandFixture::keyboardId, "Prophet", fixture.undoManager).wasApplied());
+
+    // Another case, a space more: another name.
+    CHECK (commands::addPlayer (fixture.project, "minimoog", fixture.undoManager).wasApplied());
+    CHECK (commands::addPlayer (fixture.project, "Minimoog ", fixture.undoManager).wasApplied());
+
+    CHECK (fixture.isValid());
+}
+
+TEST_CASE ("A name is free again once its port is renamed or removed", "[model][commands][RoutingCommands]")
+{
+    CommandFixture fixture;
+
+    REQUIRE (commands::setPlayerName (fixture.project, CommandFixture::minimoogId, "Model D", fixture.undoManager).wasApplied());
+    const auto added = commands::addPlayer (fixture.project, "Minimoog", fixture.undoManager);
+    REQUIRE (added.wasApplied());
+
+    REQUIRE (commands::removePlayer (fixture.project, added.createdId, fixture.undoManager).wasApplied());
+    CHECK (commands::setPlayerName (fixture.project, CommandFixture::minimoogId, "Minimoog", fixture.undoManager).wasApplied());
+    CHECK (fixture.isValid());
+}
+
 TEST_CASE ("addPlayer makes an unbound Player that sends no clock", "[model][commands][RoutingCommands]")
 {
     CommandFixture fixture;
-    const auto result = commands::addPlayer (fixture.project, "", fixture.undoManager);
+    const auto result = commands::addPlayer (fixture.project, "Odyssey", fixture.undoManager);
 
     REQUIRE (result.wasApplied());
     CHECK (fixture.isValid());
@@ -73,7 +130,7 @@ TEST_CASE ("addPlayer makes an unbound Player that sends no clock", "[model][com
     const auto players = routingOf (fixture).getPlayers();
     REQUIRE (players.size() == 3);
     CHECK (players[2].getId() == result.createdId);
-    CHECK (players[2].getName().isEmpty());
+    CHECK (players[2].getName() == "Odyssey");
     CHECK (! players[2].getSendClock());
 }
 

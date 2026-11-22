@@ -646,11 +646,15 @@ namespace
             addMalformed (violations, node, property);
     }
 
-    // A string the schema lists without a default. It may be empty.
-    void checkRequiredString (const juce::ValueTree& node, const juce::Identifier& property, Violations& violations)
+    // The name of a Performer or a Player: there, and not empty [D22].
+    void checkPortName (const juce::ValueTree& port, Violations& violations)
     {
-        if (PropertyReader::readString (node, property).isAbsent())
-            addViolation (violations, node, property, "is required and missing");
+        const auto stored = PropertyReader::readString (port, ids::name);
+
+        if (stored.isAbsent())
+            addViolation (violations, port, ids::name, "is required and missing");
+        else if (stored.value.isEmpty())
+            addViolation (violations, port, ids::name, "is empty; a " + port.getType().toString() + " has a name");
     }
 
     // A string that, when present, is one of a list.
@@ -883,13 +887,13 @@ namespace
     {
         for (const auto& performer : itemsOf (project, ids::Routing, ids::Performer))
         {
-            checkRequiredString (performer, ids::name, violations);
+            checkPortName (performer, violations);
             checkOptionalInt (performer, ids::channelFilter, 0, 16, violations);
         }
 
         for (const auto& player : itemsOf (project, ids::Routing, ids::Player))
         {
-            checkRequiredString (player, ids::name, violations);
+            checkPortName (player, violations);
             checkBool (player, ids::sendClock, violations);
         }
 
@@ -1120,7 +1124,8 @@ namespace
     }
 
     //==========================================================================
-    // Invariant 11: index-keyed children are unique in their scope.
+    // Invariant 11: index-keyed children are unique in their scope. So are
+    // the names of the Performers, and those of the Players [D22].
 
     // The nodes are those of one scope. A key that is missing or malformed
     // is invariant 10's finding and takes no part.
@@ -1142,8 +1147,31 @@ namespace
         }
     }
 
+    // The nodes are the ports of one kind. A name that is missing is
+    // invariant 10's finding and takes no part; nor does an empty one, which
+    // is refused there as well. Compared as written.
+    void checkUniqueNames (const std::vector<juce::ValueTree>& ports, Violations& violations)
+    {
+        std::map<juce::String, juce::ValueTree> firstPortWithName;
+
+        for (const auto& port : ports)
+        {
+            const auto stored = PropertyReader::readString (port, ids::name);
+
+            if (! stored.isValid() || stored.value.isEmpty())
+                continue;
+
+            const auto [holder, isFirst] = firstPortWithName.emplace (stored.value, port);
+
+            if (! isFirst)
+                addViolation (violations, port, ids::name, "is \"" + stored.value + "\", and so is that of " + pathOf (holder->second));
+        }
+    }
+
     void checkUniqueKeys (const juce::ValueTree& project, Violations& violations)
     {
+        checkUniqueNames (itemsOf (project, ids::Routing, ids::Performer), violations);
+        checkUniqueNames (itemsOf (project, ids::Routing, ids::Player), violations);
         checkUniqueKey (padsOf (project), ids::index, violations);
         checkUniqueKey (padsOf (project), ids::inputPitch, violations);
         checkUniqueKey (itemsOf (project, ids::Session, ids::Scene), ids::index, violations);

@@ -15,11 +15,15 @@ namespace model::commands
 // command checks everything before it touches the tree, applies completely
 // or refuses and changes nothing, and never begins a transaction.
 //
-// A name may be any text, also an empty one and one another port already
-// has: the schema asks no more, and a port is told from another by its id.
+// A port has a name, and no two Performers share one, nor two Players
+// [D22]: the name is what the user sees in every menu. A Performer and a
+// Player may have the same name (a keyboard's input and its output). Names
+// are compared as they are written, upper and lower case and spaces
+// included. A command that would store an empty name, or one another port
+// of the kind already has, is refused.
 
 // Makes a Performer with a new id, unbound, listening on every channel. The
-// result carries the id.
+// result carries the id. Refused for a name that is empty or taken.
 CommandResult addPerformer (juce::ValueTree project, const juce::String& name, juce::UndoManager& undoManager);
 
 // Removes the Performer. Every Track that records from it becomes
@@ -28,6 +32,8 @@ CommandResult addPerformer (juce::ValueTree project, const juce::String& name, j
 // this id.
 CommandResult removePerformer (juce::ValueTree project, const juce::String& performerId, juce::UndoManager& undoManager);
 
+// Refused when no Performer has this id, and for a name that is empty or
+// that another Performer has.
 CommandResult setPerformerName (juce::ValueTree project, const juce::String& performerId, const juce::String& name, juce::UndoManager& undoManager);
 
 // Which physical device the Performer was last bound to: its identifier and,
@@ -38,7 +44,7 @@ CommandResult setPerformerDevice (juce::ValueTree project, const juce::String& p
 CommandResult setPerformerChannelFilter (juce::ValueTree project, const juce::String& performerId, int channelFilter, juce::UndoManager& undoManager);
 
 // Makes a Player with a new id, unbound, sending no clock. The result
-// carries the id.
+// carries the id. Refused for a name that is empty or taken.
 CommandResult addPlayer (juce::ValueTree project, const juce::String& name, juce::UndoManager& undoManager);
 
 // Removes the Player. Every Track that plays through it becomes unassigned
@@ -46,6 +52,8 @@ CommandResult addPlayer (juce::ValueTree project, const juce::String& name, juce
 // renders and exports. Refused when no Player has this id.
 CommandResult removePlayer (juce::ValueTree project, const juce::String& playerId, juce::UndoManager& undoManager);
 
+// Refused when no Player has this id, and for a name that is empty or that
+// another Player has.
 CommandResult setPlayerName (juce::ValueTree project, const juce::String& playerId, const juce::String& name, juce::UndoManager& undoManager);
 
 CommandResult setPlayerDevice (juce::ValueTree project, const juce::String& playerId, const juce::String& deviceIdentifier, const juce::String& deviceName, juce::UndoManager& undoManager);

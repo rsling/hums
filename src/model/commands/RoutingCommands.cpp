@@ -27,12 +27,32 @@ namespace
         return CommandResult::refused ("There is no " + portType.toString() + " with the id \"" + id + "\".");
     }
 
+    // Why a port of this type cannot have this name; empty when it can
+    // [D22]. `renamed` is the port that gets the name, which is not in its
+    // own way; invalid for a new port.
+    juce::String whyNotThisName (const juce::ValueTree& routing, const juce::Identifier& portType, const juce::String& name, const juce::ValueTree& renamed)
+    {
+        if (name.isEmpty())
+            return "A " + portType.toString() + " has a name; an empty one is none.";
+
+        for (const auto& port : NodeLookup::childrenOfType (routing, portType))
+            if (port != renamed && PropertyReader::getRequiredString (port, ids::name) == name)
+                return "Another " + portType.toString() + " is already called \"" + name + "\".";
+
+        return {};
+    }
+
     CommandResult addPort (juce::ValueTree project, const juce::Identifier& portType, const juce::String& name, juce::UndoManager& undoManager)
     {
         auto routing = routingOf (project);
 
         if (! routing.isValid())
             return CommandResult::refused ("The project has no Routing.");
+
+        const auto whyNot = whyNotThisName (routing, portType, name, {});
+
+        if (whyNot.isNotEmpty())
+            return CommandResult::refused (whyNot);
 
         const auto id = juce::Uuid().toString();
 
@@ -71,6 +91,11 @@ namespace
 
         if (! port.isValid())
             return noSuchPort (portType, id);
+
+        const auto whyNot = whyNotThisName (port.getParent(), portType, name, port);
+
+        if (whyNot.isNotEmpty())
+            return CommandResult::refused (whyNot);
 
         port.setProperty (ids::name, name, &undoManager);
 

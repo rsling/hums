@@ -68,6 +68,8 @@ private:
     // Values.
     bool wantsValidForm();
     juce::String text();
+    std::vector<juce::String> namesOf (const juce::Identifier& portType) const;
+    juce::String freeNameFor (const juce::Identifier& portType);
     juce::String unknownId();
     std::int64_t tick();
     std::int64_t negativeTick();
@@ -258,6 +260,8 @@ private:
 
     // A setter of one Track property that names a port, and of one that is
     // a flag.
+    Attempt addPort (const char* call, const juce::Identifier& portType, model::commands::CommandResult (*command) (juce::ValueTree, const juce::String&, juce::UndoManager&));
+    Attempt setPortName (const char* call, const juce::Identifier& portType, model::commands::CommandResult (*command) (juce::ValueTree, const juce::String&, const juce::String&, juce::UndoManager&));
     Attempt setTrackPort (const char* name, const juce::Identifier& portType, model::commands::CommandResult (*command) (juce::ValueTree, const juce::String&, const juce::String&, juce::UndoManager&));
     Attempt setTrackFlag (const char* name, model::commands::CommandResult (*command) (juce::ValueTree, const juce::String&, bool, juce::UndoManager&));
 

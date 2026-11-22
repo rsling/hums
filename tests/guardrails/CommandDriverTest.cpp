@@ -53,8 +53,9 @@ TEST_CASE ("guardrail 3: over the first 100 seeds every command is applied in a 
 
         // Enough of them for every command of the table to make a clone
         // somewhere in the hundred seeds: with a longer table each command
-        // is drawn less often.
-        for (int command = 0; command < 40; ++command)
+        // is drawn less often, and removeLane and moveLane, which need a
+        // shared step clip that has lanes, clone least often of all.
+        for (int command = 0; command < 250; ++command)
         {
             const auto clipPool = project.getChildWithName (model::ids::ClipPool);
             const auto clipsBefore = clipPool.getNumChildren();

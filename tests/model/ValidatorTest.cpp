@@ -1718,9 +1718,16 @@ TEST_CASE ("Invariant 10: a Performer and a Player have a name", "[model][Valida
 {
     const auto project = validDocument();
 
-    SECTION ("an empty one is a name")
+    SECTION ("an empty one is none")
     {
-        requireAccepted (routingOf (project).getChildWithName (ids::Player), ids::name, "");
+        requireRefused (routingOf (project).getChildWithName (ids::Player), ids::name, "", "Project/Routing/Player[0]");
+        requireRefused (routingOf (project).getChildWithName (ids::Performer), ids::name, "", "Project/Routing/Performer[0]");
+    }
+
+    SECTION ("any other text is one")
+    {
+        requireAccepted (routingOf (project).getChildWithName (ids::Player), ids::name, " ");
+        requireAccepted (routingOf (project).getChildWithName (ids::Performer), ids::name, "Minimoog");
     }
 
     SECTION ("a Performer without")
@@ -2019,6 +2026,40 @@ TEST_CASE ("Invariant 11: a controller number has one CcValue per cell", "[model
     SECTION ("the same number in the same cell")
     {
         requireRefused (cellOf (project).getChild (1), ids::cc, "74", "Project/ClipPool/Clip[0]/Grid/Lane[0]/Cell[4]/CcValue[1]");
+    }
+}
+
+TEST_CASE ("Invariant 11: no two Players share a name, and no two Performers", "[model][Validator]")
+{
+    const auto project = validDocument();
+
+    SECTION ("two Players")
+    {
+        append (routingOf (project), R"(<Player id="7c2e9a0b4d6f4b8a8a9b0c1d2e3f4a5b" name="Minimoog"/>)");
+
+        requireOnlyViolation (project, "Project/Routing/Player[1]", "name");
+    }
+
+    SECTION ("two Performers")
+    {
+        append (routingOf (project), R"(<Performer id="7c2e9a0b4d6f4b8a8a9b0c1d2e3f4a5b" name="Keyboard"/>)");
+
+        requireOnlyViolation (project, "Project/Routing/Performer[1]", "name");
+    }
+
+    SECTION ("a Player and a Performer may")
+    {
+        append (routingOf (project), R"(<Performer id="7c2e9a0b4d6f4b8a8a9b0c1d2e3f4a5b" name="Minimoog"/>)");
+        append (routingOf (project), R"(<Player id="8d3f0b1c5e704c9b9bac1d2e3f405b6c" name="Keyboard"/>)");
+
+        requireNoViolation (project);
+    }
+
+    SECTION ("another case is another name")
+    {
+        append (routingOf (project), R"(<Player id="7c2e9a0b4d6f4b8a8a9b0c1d2e3f4a5b" name="minimoog"/>)");
+
+        requireNoViolation (project);
     }
 }
 

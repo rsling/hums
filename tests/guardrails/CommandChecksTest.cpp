@@ -10,6 +10,7 @@
 #include "model/Ids.h"
 #include "model/commands/RoutingCommands.h"
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -18,16 +19,6 @@ namespace
 
 namespace ids = model::ids;
 using guardrails::CommandChecks;
-
-// A document with a referenced clip of each kind is wanted for the clip-kind
-// check; seed 1 has both (the test of that check requires it).
-juce::ValueTree validDocument()
-{
-    const auto project = guardrails::DocumentGenerator::generate (1);
-    REQUIRE (guardrails::DocumentChecks::failuresOf (project).empty());
-
-    return project;
-}
 
 bool anyContains (const std::vector<std::string>& failures, const std::string& text)
 {
@@ -49,6 +40,23 @@ juce::ValueTree referencedClipOf (const juce::ValueTree& project, const juce::Va
             return clip;
 
     return {};
+}
+
+// A generated document in which a clip is referenced, which the clip-kind
+// check needs: that of the first seed that gives one.
+juce::ValueTree validDocument()
+{
+    for (std::uint64_t seed = 1;; ++seed)
+    {
+        const auto project = guardrails::DocumentGenerator::generate (seed);
+
+        if (! referencedClipOf (project, project.getChildWithName (ids::Tracks)).isValid())
+            continue;
+
+        REQUIRE (guardrails::DocumentChecks::failuresOf (project).empty());
+
+        return project;
+    }
 }
 
 const juce::Identifier inventedProperty ("swing");
