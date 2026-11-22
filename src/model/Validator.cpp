@@ -484,15 +484,22 @@ namespace
         return stepLength * *audibleColumns;
     }
 
-    void checkPlacementOffsets (const juce::ValueTree& project, Violations& violations)
+    // Clips by their id. A clip without an id is left out: a reference
+    // without a clipId must not find it.
+    std::map<juce::String, juce::ValueTree> clipsByIdOf (const juce::ValueTree& project)
     {
         std::map<juce::String, juce::ValueTree> clipsById;
 
-        // A clip without an id is left out: a placement without a clipId
-        // must not find it.
         for (const auto& clip : clipsOf (project))
             if (const auto id = PropertyReader::readString (clip, ids::id); id.isValid())
                 clipsById.emplace (id.value, clip);
+
+        return clipsById;
+    }
+
+    void checkPlacementOffsets (const juce::ValueTree& project, Violations& violations)
+    {
+        const auto clipsById = clipsByIdOf (project);
 
         for (const auto& track : tracksOf (project))
         {
@@ -566,6 +573,608 @@ namespace
         }
     }
 
+    //==========================================================================
+    // Shared by the checks of invariants 7 to 12.
+
+    // The value of a property that another check already reports when it is
+    // missing or malformed. One fault is one violation.
+    template <typename Value>
+    std::optional<Value> valueIfValid (const PropertyReader::Result<Value>& stored)
+    {
+        if (stored.isValid())
+            return stored.value;
+
+        return std::nullopt;
+    }
+
+    // Nothing to check when there is no value: whoever read it has said why.
+    void checkWithin (const juce::ValueTree& node, const juce::Identifier& property, std::optional<std::int64_t> value, std::int64_t lowest, std::int64_t highest, Violations& violations)
+    {
+        if (! value.has_value())
+            return;
+
+        if (*value < lowest)
+            addViolation (violations, node, property, "is " + juce::String (*value) + "; the lowest allowed is " + juce::String (lowest));
+        else if (*value > highest)
+            addViolation (violations, node, property, "is " + juce::String (*value) + "; the highest allowed is " + juce::String (highest));
+    }
+
+    // For an int that has no upper limit of its own.
+    const std::int64_t largestInt = std::numeric_limits<int>::max();
+    const std::int64_t largestTick = std::numeric_limits<std::int64_t>::max();
+
+    // An int the schema lists without a default.
+    void checkRequiredInt (const juce::ValueTree& node, const juce::Identifier& property, std::int64_t lowest, std::int64_t highest, Violations& violations)
+    {
+        checkWithin (node, property, requiredValue (violations, node, property, PropertyReader::readInt (node, property)), lowest, highest, violations);
+    }
+
+    // An int with a default. Every default of the schema lies inside its
+    // range, so an absent property needs no look.
+    void checkOptionalInt (const juce::ValueTree& node, const juce::Identifier& property, std::int64_t lowest, std::int64_t highest, Violations& violations)
+    {
+        const auto stored = PropertyReader::readInt (node, property);
+
+        if (stored.isMalformed())
+            addMalformed (violations, node, property);
+        else if (stored.isValid())
+            checkWithin (node, property, stored.value, lowest, highest, violations);
+    }
+
+    // A tick the schema lists without a default: there, and not negative.
+    void checkRequiredTick (const juce::ValueTree& node, const juce::Identifier& property, Violations& violations)
+    {
+        checkWithin (node, property, requiredValue (violations, node, property, PropertyReader::readInt64 (node, property)), 0, largestTick, violations);
+    }
+
+    // A tick with a default of 0 or more.
+    void checkOptionalTick (const juce::ValueTree& node, const juce::Identifier& property, Violations& violations)
+    {
+        const auto stored = PropertyReader::readInt64 (node, property);
+
+        if (stored.isMalformed())
+            addMalformed (violations, node, property);
+        else if (stored.isValid())
+            checkWithin (node, property, stored.value, 0, largestTick, violations);
+    }
+
+    // A bool can only be wrong in its text.
+    void checkBool (const juce::ValueTree& node, const juce::Identifier& property, Violations& violations)
+    {
+        if (PropertyReader::readBool (node, property).isMalformed())
+            addMalformed (violations, node, property);
+    }
+
+    // A string the schema lists without a default. It may be empty.
+    void checkRequiredString (const juce::ValueTree& node, const juce::Identifier& property, Violations& violations)
+    {
+        if (PropertyReader::readString (node, property).isAbsent())
+            addViolation (violations, node, property, "is required and missing");
+    }
+
+    // A string that, when present, is one of a list.
+    void checkListedText (const juce::ValueTree& node, const juce::Identifier& property, const juce::StringArray& allowed, Violations& violations)
+    {
+        const auto stored = PropertyReader::readString (node, property);
+
+        if (stored.isValid() && ! allowed.contains (stored.value))
+            addViolation (violations, node, property, "\"" + stored.value + "\" is not one of: " + allowed.joinIntoString (", "));
+    }
+
+    bool isHexadecimal (const juce::String& text)
+    {
+        return text.containsOnly ("0123456789abcdefABCDEF");
+    }
+
+    // "#AARRGGBB", or empty for no colour (docs/SCHEMA.md -> Conventions).
+    void checkColour (const juce::ValueTree& node, Violations& violations)
+    {
+        const auto colour = PropertyReader::readString (node, ids::colour);
+
+        if (! colour.isValid() || colour.value.isEmpty())
+            return;
+
+        if (colour.value.length() != 9 || ! colour.value.startsWithChar ('#') || ! isHexadecimal (colour.value.substring (1)))
+            addViolation (violations, node, ids::colour, "\"" + colour.value + "\" is not a colour: '#' and eight hexadecimal digits");
+    }
+
+    // A double holds no more than six significant digits [D14]: it is the
+    // value its canonical text, juce::String (double), reads back as. The
+    // test is on the value, so "118.0" is 118 and passes [D17].
+    void checkSixDigits (const juce::ValueTree& node, const juce::Identifier& property, double value, Violations& violations)
+    {
+        const auto savedText = juce::String (value);
+
+        if (! juce::exactlyEqual (savedText.getDoubleValue(), value))
+            addViolation (violations, node, property, "\"" + node[property].toString() + "\" has more than six significant digits; it would be saved as " + savedText);
+    }
+
+    std::vector<juce::ValueTree> notesOf (const juce::ValueTree& clip)
+    {
+        return itemsOf (clip, ids::Events, ids::Note);
+    }
+
+    std::vector<juce::ValueTree> eventsOf (const juce::ValueTree& clip)
+    {
+        return itemsOf (clip, ids::Events, ids::Event);
+    }
+
+    std::vector<juce::ValueTree> gridLanesOf (const juce::ValueTree& clip)
+    {
+        return itemsOf (clip, ids::Grid, ids::Lane);
+    }
+
+    std::vector<juce::ValueTree> padsOf (const juce::ValueTree& project)
+    {
+        std::vector<juce::ValueTree> pads;
+
+        for (const auto& routing : childrenOfType (project, ids::Routing))
+            for (const auto& pad : itemsOf (routing, ids::PadMap, ids::Pad))
+                pads.push_back (pad);
+
+        return pads;
+    }
+
+    //==========================================================================
+    // Invariant 7: Project.ppq == 960.
+
+    void checkPpq (const juce::ValueTree& project, Violations& violations)
+    {
+        const auto ppq = valueOrDefault (violations, project, ids::ppq, PropertyReader::readInt (project, ids::ppq), 960);
+
+        if (ppq.has_value() && *ppq != 960)
+            addViolation (violations, project, ids::ppq, "is " + juce::String (*ppq) + "; Hums works in 960 ticks per quarter note and in nothing else");
+    }
+
+    //==========================================================================
+    // Invariant 8: every event clip has a loopLength > 0; a step clip has
+    // neither loopLength nor quantise; every Note has a length > 0; no tick
+    // anywhere is negative.
+    //
+    // A placement's offset is a time too, but invariant 4 judges it, and the
+    // times of UiState and Session are with invariant 10.
+
+    void checkLoopLengthsAndTicks (const juce::ValueTree& project, Violations& violations)
+    {
+        for (const auto& timeline : childrenOfType (project, ids::Timeline))
+        {
+            // Invariant 6 reports a tempo or time signature without a tick.
+            for (const auto& eventType : { ids::TempoEvent, ids::TimeSigEvent })
+                for (const auto& event : childrenOfType (timeline, eventType))
+                    checkWithin (event, ids::tick, valueIfValid (PropertyReader::readInt64 (event, ids::tick)), 0, largestTick, violations);
+
+            for (const auto& marker : childrenOfType (timeline, ids::Marker))
+                checkRequiredTick (marker, ids::tick, violations);
+        }
+
+        for (const auto& clip : clipsOf (project))
+        {
+            if (isEventClip (clip))
+            {
+                const auto loopLength = requiredValue (violations, clip, ids::loopLength, PropertyReader::readInt64 (clip, ids::loopLength));
+
+                if (loopLength.has_value() && *loopLength <= 0)
+                    addViolation (violations, clip, ids::loopLength, "is " + juce::String (*loopLength) + "; the loop of an event clip is at least one tick long");
+            }
+            else if (isStepClip (clip))
+            {
+                // The loop of a step clip follows from its Grid; a stored
+                // length would be a second source of truth.
+                for (const auto& property : { ids::loopLength, ids::quantise })
+                    if (clip.hasProperty (property))
+                        addViolation (violations, clip, property, "is for event clips only; a step clip must not have it");
+            }
+
+            for (const auto& note : notesOf (clip))
+            {
+                checkRequiredTick (note, ids::tick, violations);
+
+                const auto length = requiredValue (violations, note, ids::length, PropertyReader::readInt64 (note, ids::length));
+
+                if (length.has_value() && *length <= 0)
+                    addViolation (violations, note, ids::length, "is " + juce::String (*length) + "; a Note is at least one tick long");
+            }
+
+            for (const auto& event : eventsOf (clip))
+                checkRequiredTick (event, ids::tick, violations);
+        }
+
+        // Invariant 3 reports a placement without a start or a length.
+        for (const auto& track : tracksOf (project))
+        {
+            for (const auto& placement : allPlacementsOf (track))
+            {
+                checkWithin (placement, ids::start, valueIfValid (PropertyReader::readInt64 (placement, ids::start)), 0, largestTick, violations);
+
+                const auto length = PropertyReader::readInt64 (placement, ids::length);
+
+                if (length.isValid() && length.value <= 0)
+                    addViolation (violations, placement, ids::length, "is " + juce::String (length.value) + "; a Placement is at least one tick long");
+            }
+        }
+    }
+
+    //==========================================================================
+    // Invariant 9: a clip referenced by any AutomationLane placement contains
+    // only cc events. That makes it an event clip without notes.
+
+    bool isOtherThanCc (const juce::String& eventKind)
+    {
+        return juce::StringArray { "pitchBend", "programChange", "channelPressure", "polyPressure", "sysex" }.contains (eventKind);
+    }
+
+    void checkAutomationClips (const juce::ValueTree& project, Violations& violations)
+    {
+        const auto clipsById = clipsByIdOf (project);
+
+        // A clip that several lane placements reference is reported once.
+        std::set<juce::String> clipIdsLookedAt;
+
+        for (const auto& track : tracksOf (project))
+        {
+            for (const auto& lane : automationLanesOf (track))
+            {
+                for (const auto& placement : childrenOfType (lane, ids::Placement))
+                {
+                    const auto clipId = PropertyReader::readString (placement, ids::clipId);
+                    const auto clip = clipId.isValid() ? clipsById.find (clipId.value) : clipsById.end();
+
+                    // A reference that names no clip is invariant 1's finding.
+                    if (clip == clipsById.end())
+                        continue;
+
+                    if (isStepClip (clip->second))
+                    {
+                        addViolation (violations, placement, ids::clipId, "names a step clip; an AutomationLane takes only an event clip that holds nothing but cc events");
+                        continue;
+                    }
+
+                    const auto isFirstLook = clipIdsLookedAt.insert (clipId.value).second;
+
+                    if (! isFirstLook)
+                        continue;
+
+                    for (const auto& note : notesOf (clip->second))
+                        addNodeViolation (violations, note, "a Note in a clip that an AutomationLane references; such a clip holds only cc events");
+
+                    // An event of no known kind is invariant 10's finding.
+                    for (const auto& event : eventsOf (clip->second))
+                        if (const auto kind = PropertyReader::readString (event, ids::kind); isOtherThanCc (kind.value))
+                            addViolation (violations, event, ids::kind, "is \"" + kind.value + "\" in a clip that an AutomationLane references; such a clip holds only cc events");
+                }
+            }
+        }
+    }
+
+    //==========================================================================
+    // Invariant 10: every value lies in its range or its list. Beyond the
+    // values the invariant names, this holds every property to its table in
+    // docs/SCHEMA.md -> Node reference: one the schema lists without a
+    // default is there, and one that is there is in the text form of its
+    // type [D17].
+
+    void checkProjectValues (const juce::ValueTree& project, Violations& violations)
+    {
+        // Which versions this build reads is the load path's question
+        // (io/ProjectFile); here it only has to be a version.
+        checkRequiredInt (project, ids::schemaVersion, 1, largestInt, violations);
+    }
+
+    void checkRoutingValues (const juce::ValueTree& project, Violations& violations)
+    {
+        for (const auto& performer : itemsOf (project, ids::Routing, ids::Performer))
+        {
+            checkRequiredString (performer, ids::name, violations);
+            checkOptionalInt (performer, ids::channelFilter, 0, 16, violations);
+        }
+
+        for (const auto& player : itemsOf (project, ids::Routing, ids::Player))
+        {
+            checkRequiredString (player, ids::name, violations);
+            checkBool (player, ids::sendClock, violations);
+        }
+
+        for (const auto& pad : padsOf (project))
+        {
+            checkRequiredInt (pad, ids::index, 0, largestInt, violations);
+            checkRequiredInt (pad, ids::inputPitch, 0, 127, violations);
+            checkRequiredInt (pad, ids::pitch, 0, 127, violations);
+        }
+    }
+
+    void checkTimelineValues (const juce::ValueTree& project, Violations& violations)
+    {
+        for (const auto& tempoEvent : itemsOf (project, ids::Timeline, ids::TempoEvent))
+        {
+            // Finite it is, or it would not have been read as a double.
+            const auto bpm = requiredValue (violations, tempoEvent, ids::bpm, PropertyReader::readDouble (tempoEvent, ids::bpm));
+
+            if (! bpm.has_value())
+                continue;
+
+            if (*bpm <= 0.0)
+                addViolation (violations, tempoEvent, ids::bpm, "is " + juce::String (*bpm) + "; a tempo is greater than 0");
+            else
+                checkSixDigits (tempoEvent, ids::bpm, *bpm, violations);
+        }
+
+        for (const auto& timeSigEvent : itemsOf (project, ids::Timeline, ids::TimeSigEvent))
+        {
+            checkRequiredInt (timeSigEvent, ids::numerator, 1, 32, violations);
+
+            const auto denominator = requiredValue (violations, timeSigEvent, ids::denominator, PropertyReader::readInt (timeSigEvent, ids::denominator));
+            const auto isPowerOfTwoUpTo64 = [] (int number) { return number >= 1 && number <= 64 && (number & (number - 1)) == 0; };
+
+            if (denominator.has_value() && ! isPowerOfTwoUpTo64 (*denominator))
+                addViolation (violations, timeSigEvent, ids::denominator, "is " + juce::String (*denominator) + "; it is one of 1, 2, 4, 8, 16, 32, 64");
+        }
+    }
+
+    void checkNoteValues (const juce::ValueTree& note, Violations& violations)
+    {
+        checkRequiredInt (note, ids::pitch, 0, 127, violations);
+        checkOptionalInt (note, ids::velocity, 1, 127, violations);
+        checkOptionalInt (note, ids::offVelocity, 0, 127, violations);
+        checkBool (note, ids::enabled, violations);
+    }
+
+    void checkEventValues (const juce::ValueTree& event, Violations& violations)
+    {
+        const auto kind = requiredValue (violations, event, ids::kind, PropertyReader::readString (event, ids::kind));
+        const auto a = valueOrDefault (violations, event, ids::a, PropertyReader::readInt (event, ids::a), 0);
+        const auto b = valueOrDefault (violations, event, ids::b, PropertyReader::readInt (event, ids::b), 0);
+
+        checkBool (event, ids::enabled, violations);
+
+        // The payload of a sysex event, without F0 and F7. At most 64 KB,
+        // and a byte is two digits.
+        const auto data = PropertyReader::readString (event, ids::data);
+        const int mostDataDigits = 2 * 64 * 1024;
+
+        if (data.isValid())
+        {
+            if (! isHexadecimal (data.value))
+                addViolation (violations, event, ids::data, "holds a character that is no hexadecimal digit");
+            else if (data.value.length() % 2 != 0)
+                addViolation (violations, event, ids::data, "has " + juce::String (data.value.length()) + " hexadecimal digits; a byte is two of them");
+            else if (data.value.length() > mostDataDigits)
+                addViolation (violations, event, ids::data, "holds " + juce::String (data.value.length() / 2) + " bytes; the most allowed is 65536");
+        }
+
+        if (! kind.has_value())
+            return;
+
+        // The table of docs/SCHEMA.md -> Event. What a kind does not use is
+        // not judged.
+        if (*kind == "cc" || *kind == "polyPressure")
+        {
+            checkWithin (event, ids::a, a, 0, 127, violations);
+            checkWithin (event, ids::b, b, 0, 127, violations);
+        }
+        else if (*kind == "pitchBend")
+        {
+            checkWithin (event, ids::a, a, 0, 16383, violations);
+        }
+        else if (*kind == "programChange" || *kind == "channelPressure")
+        {
+            checkWithin (event, ids::a, a, 0, 127, violations);
+        }
+        else if (*kind != "sysex")
+        {
+            addViolation (violations, event, ids::kind, "\"" + *kind + "\" is not one of: cc, pitchBend, programChange, channelPressure, polyPressure, sysex");
+        }
+    }
+
+    void checkGridValues (const juce::ValueTree& grid, Violations& violations)
+    {
+        // An int64 like every length, though its range is small.
+        const auto stepLength = PropertyReader::readInt64 (grid, ids::stepLength);
+
+        if (stepLength.isMalformed())
+            addMalformed (violations, grid, ids::stepLength);
+        else
+            checkWithin (grid, ids::stepLength, valueIfValid (stepLength), 1, 3840, violations);
+
+        // Invariant 2 reports a stepCount that is malformed or below 1.
+        const auto stepCount = PropertyReader::readInt (grid, ids::stepCount);
+
+        if (stepCount.isValid() && stepCount.value > 64)
+            addViolation (violations, grid, ids::stepCount, "is " + juce::String (stepCount.value) + "; the highest allowed is 64");
+
+        for (const auto& lane : childrenOfType (grid, ids::Lane))
+        {
+            // No default: a lane without it is a melodic row.
+            checkOptionalInt (lane, ids::fixedPitch, 0, 127, violations);
+
+            for (const auto& cell : childrenOfType (lane, ids::Cell))
+            {
+                checkOptionalInt (cell, ids::pitch, 0, 127, violations);
+                checkBool (cell, ids::on, violations);
+                checkOptionalInt (cell, ids::velocity, 1, 127, violations);
+
+                const auto gate = PropertyReader::readDouble (cell, ids::gate);
+
+                if (gate.isMalformed())
+                    addMalformed (violations, cell, ids::gate);
+                else if (gate.isValid() && (gate.value <= 0.0 || gate.value > 4.0))
+                    addViolation (violations, cell, ids::gate, "is " + juce::String (gate.value) + "; a gate is greater than 0 and at most 4");
+                else if (gate.isValid())
+                    checkSixDigits (cell, ids::gate, gate.value, violations);
+
+                for (const auto& ccValue : childrenOfType (cell, ids::CcValue))
+                {
+                    checkRequiredInt (ccValue, ids::cc, 0, 127, violations);
+                    checkRequiredInt (ccValue, ids::value, 0, 127, violations);
+                }
+            }
+        }
+    }
+
+    void checkClipValues (const juce::ValueTree& project, Violations& violations)
+    {
+        for (const auto& clip : clipsOf (project))
+        {
+            checkColour (clip, violations);
+
+            // On a step clip invariant 8 refuses the property as such.
+            if (isEventClip (clip))
+                checkListedText (clip, ids::quantise, { "", "1/2", "1/4", "1/8", "1/2T", "1/4T", "1/8T" }, violations);
+
+            for (const auto& note : notesOf (clip))
+                checkNoteValues (note, violations);
+
+            for (const auto& event : eventsOf (clip))
+                checkEventValues (event, violations);
+
+            for (const auto& grid : childrenOfType (clip, ids::Grid))
+                checkGridValues (grid, violations);
+        }
+    }
+
+    void checkTrackValues (const juce::ValueTree& project, Violations& violations)
+    {
+        for (const auto& track : tracksOf (project))
+        {
+            checkColour (track, violations);
+            checkOptionalInt (track, ids::channel, 1, 16, violations);
+            checkBool (track, ids::mute, violations);
+            checkBool (track, ids::solo, violations);
+
+            for (const auto& knob : itemsOf (track, ids::Knobs, ids::Knob))
+                checkRequiredInt (knob, ids::cc, 0, 127, violations);
+
+            for (const auto& slot : itemsOf (track, ids::Slots, ids::Slot))
+                checkRequiredInt (slot, ids::scene, 0, largestInt, violations);
+        }
+    }
+
+    void checkSessionValues (const juce::ValueTree& project, Violations& violations)
+    {
+        for (const auto& session : childrenOfType (project, ids::Session))
+        {
+            checkOptionalTick (session, ids::launchQuantise, violations);
+
+            for (const auto& scene : childrenOfType (session, ids::Scene))
+                checkRequiredInt (scene, ids::index, 0, largestInt, violations);
+        }
+    }
+
+    // UiState's own properties [D17]. The view-state children are not looked
+    // into (docs/SCHEMA.md -> UiState).
+    void checkUiStateValues (const juce::ValueTree& project, Violations& violations)
+    {
+        for (const auto& uiState : childrenOfType (project, ids::UiState))
+        {
+            checkListedText (uiState, ids::activeTab, { "routing", "pianoroll", "arrangement", "drums", "stepseq", "automation" }, violations);
+            checkListedText (uiState, ids::sharedEditPolicy, { "updateAll", "makeUnique" }, violations);
+            checkOptionalTick (uiState, ids::loopStart, violations);
+            checkOptionalTick (uiState, ids::loopEnd, violations);
+            checkBool (uiState, ids::loopEnabled, violations);
+            checkOptionalTick (uiState, ids::exportLength, violations);
+
+            const auto loopStart = PropertyReader::readInt64 (uiState, ids::loopStart);
+            const auto loopEnd = PropertyReader::readInt64 (uiState, ids::loopEnd);
+            const auto loopEnabled = PropertyReader::readBool (uiState, ids::loopEnabled);
+
+            // Only a loop whose three properties are in form can contradict
+            // itself. An absent start or end is 0.
+            if (loopStart.isMalformed() || loopEnd.isMalformed() || ! loopEnabled.isValid() || ! loopEnabled.value)
+                continue;
+
+            const std::int64_t start = loopStart.isValid() ? loopStart.value : 0;
+            const std::int64_t end = loopEnd.isValid() ? loopEnd.value : 0;
+
+            if (start >= end)
+                addViolation (violations, uiState, ids::loopEnabled, "the loop is enabled, but its start (" + juce::String (start) + ") is not before its end (" + juce::String (end) + ")");
+        }
+    }
+
+    void checkValues (const juce::ValueTree& project, Violations& violations)
+    {
+        checkProjectValues (project, violations);
+        checkRoutingValues (project, violations);
+        checkTimelineValues (project, violations);
+        checkClipValues (project, violations);
+        checkTrackValues (project, violations);
+        checkSessionValues (project, violations);
+        checkUiStateValues (project, violations);
+    }
+
+    //==========================================================================
+    // Invariant 11: index-keyed children are unique in their scope.
+
+    // The nodes are those of one scope. A key that is missing or malformed
+    // is invariant 10's finding and takes no part.
+    void checkUniqueKey (const std::vector<juce::ValueTree>& nodes, const juce::Identifier& key, Violations& violations)
+    {
+        std::map<int, juce::ValueTree> firstNodeWithKey;
+
+        for (const auto& node : nodes)
+        {
+            const auto stored = PropertyReader::readInt (node, key);
+
+            if (! stored.isValid())
+                continue;
+
+            const auto [holder, isFirst] = firstNodeWithKey.emplace (stored.value, node);
+
+            if (! isFirst)
+                addViolation (violations, node, key, "is " + juce::String (stored.value) + ", and so is that of " + pathOf (holder->second));
+        }
+    }
+
+    void checkUniqueKeys (const juce::ValueTree& project, Violations& violations)
+    {
+        checkUniqueKey (padsOf (project), ids::index, violations);
+        checkUniqueKey (padsOf (project), ids::inputPitch, violations);
+        checkUniqueKey (itemsOf (project, ids::Session, ids::Scene), ids::index, violations);
+
+        for (const auto& track : tracksOf (project))
+        {
+            checkUniqueKey (itemsOf (track, ids::Slots, ids::Slot), ids::scene, violations);
+            checkUniqueKey (itemsOf (track, ids::Knobs, ids::Knob), ids::cc, violations);
+        }
+
+        for (const auto& clip : clipsOf (project))
+            for (const auto& lane : gridLanesOf (clip))
+                for (const auto& cell : childrenOfType (lane, ids::Cell))
+                    checkUniqueKey (childrenOfType (cell, ids::CcValue), ids::cc, violations);
+    }
+
+    //==========================================================================
+    // Invariant 12: Project has exactly one of each required container, and
+    // every Track exactly one Placements, AutomationLanes, Knobs and Slots.
+    //
+    // Two containers the invariant does not name are held to the same
+    // standard, because the tree of docs/SCHEMA.md has each exactly once and
+    // the wrappers count on it: the PadMap of Routing and the Events of an
+    // event clip. (The Grid of a step clip is with invariant 2.)
+
+    void checkExactlyOne (const juce::ValueTree& parent, const juce::Identifier& childType, Violations& violations)
+    {
+        const auto count = childrenOfType (parent, childType).size();
+
+        if (count != 1)
+            addNodeViolation (violations, parent, "has " + juce::String (static_cast<std::int64_t> (count)) + " " + childType.toString() + " children; exactly one is required");
+    }
+
+    void checkContainers (const juce::ValueTree& project, Violations& violations)
+    {
+        for (const auto& container : { ids::Routing, ids::Timeline, ids::ClipPool, ids::Tracks, ids::Session, ids::UiState })
+            checkExactlyOne (project, container, violations);
+
+        for (const auto& routing : childrenOfType (project, ids::Routing))
+            checkExactlyOne (routing, ids::PadMap, violations);
+
+        for (const auto& clip : clipsOf (project))
+            if (isEventClip (clip))
+                checkExactlyOne (clip, ids::Events, violations);
+
+        for (const auto& track : tracksOf (project))
+            for (const auto& container : { ids::Placements, ids::AutomationLanes, ids::Knobs, ids::Slots })
+                checkExactlyOne (track, container, violations);
+    }
+
 } // namespace
 
 std::vector<Validator::Violation> Validator::validate (const juce::ValueTree& project)
@@ -585,6 +1194,12 @@ std::vector<Validator::Violation> Validator::validate (const juce::ValueTree& pr
     checkPlacementOffsets (project, violations);
     checkClipKinds (project, violations);
     checkTimelines (project, violations);
+    checkPpq (project, violations);
+    checkLoopLengthsAndTicks (project, violations);
+    checkAutomationClips (project, violations);
+    checkValues (project, violations);
+    checkUniqueKeys (project, violations);
+    checkContainers (project, violations);
 
     return violations;
 }

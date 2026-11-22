@@ -15,8 +15,11 @@ namespace model
 // tree directly and not through the typed wrappers, because those may assume
 // a document that has already passed here.
 //
-// Checked so far: invariants 1 to 6. A document without violations is
-// therefore not yet a valid document; invariants 7 to 12 are still missing.
+// All twelve invariants are checked, and with them the tables of
+// docs/SCHEMA.md -> Node reference: a property the schema lists without a
+// default is there, and a property that is there is in the text form of its
+// type and inside its range or its list. A document without violations is a
+// valid document.
 //
 // What it looks at is the tree of docs/SCHEMA.md -> Tree. A node of an
 // unknown type, and a known type in a place where the schema does not have
