@@ -16,7 +16,8 @@ namespace guardrails
 // Applies random commands of model/commands/ to a document, for the property
 // tests (docs/GUARDRAILS.md -> 3): valid ones and deliberately invalid ones
 // (a port that is not there, a pad number that is taken, a tempo of 0, the
-// tempo at tick 0 removed, a track on channel 17).
+// tempo at tick 0 removed, a track on channel 17, a clip removed that is
+// still placed).
 //
 // It looks at the document as it is now to know what is valid: which ids
 // there are, which pad numbers are taken. A valid form that needs something
@@ -73,6 +74,9 @@ private:
     std::vector<juce::ValueTree> tracks() const;
     std::vector<juce::ValueTree> tracksWithKnobs() const;
     juce::String colour();
+    juce::String noColour();
+    std::vector<juce::ValueTree> clips() const;
+    int refcountOf (const juce::ValueTree& clip) const;
 
     // Routing.
     Attempt addPerformer();
@@ -123,6 +127,14 @@ private:
     Attempt moveKnob();
     Attempt setKnobCc();
     Attempt setKnobLabel();
+
+    // The clip pool.
+    Attempt addEventClip();
+    Attempt addStepClip();
+    Attempt setClipName();
+    Attempt setClipColour();
+    Attempt removeClip();
+    Attempt removeUnusedClips();
 
     // A setter of one Track property that names a port, and of one that is
     // a flag.

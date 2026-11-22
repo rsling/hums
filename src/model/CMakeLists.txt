@@ -13,6 +13,8 @@ hums_add_layer(hums_model
         ClipModel.h
         ClipPoolModel.cpp
         ClipPoolModel.h
+        ColourText.cpp
+        ColourText.h
         DeclaredIdentifiers.cpp
         DeclaredIdentifiers.h
         EventModel.cpp
@@ -64,6 +66,8 @@ hums_add_layer(hums_model
         TracksModel.h
         Validator.cpp
         Validator.h
+        commands/ClipPoolCommands.cpp
+        commands/ClipPoolCommands.h
         commands/CommandResult.h
         commands/NodeLookup.cpp
         commands/NodeLookup.h

@@ -1,5 +1,6 @@
 #include "model/Validator.h"
 
+#include "model/ColourText.h"
 #include "model/Ids.h"
 #include "model/PropertyReader.h"
 
@@ -671,10 +672,7 @@ namespace
     {
         const auto colour = PropertyReader::readString (node, ids::colour);
 
-        if (! colour.isValid() || colour.value.isEmpty())
-            return;
-
-        if (colour.value.length() != 9 || ! colour.value.startsWithChar ('#') || ! isHexadecimal (colour.value.substring (1)))
+        if (colour.isValid() && ! ColourText::isValid (colour.value))
             addViolation (violations, node, ids::colour, "\"" + colour.value + "\" is not a colour: '#' and eight hexadecimal digits");
     }
 

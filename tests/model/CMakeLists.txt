@@ -6,7 +6,9 @@ hums_add_test_executable(model_tests
     CcValueModelTest.cpp
     CellModelTest.cpp
     ClipModelTest.cpp
+    ClipPoolCommandsTest.cpp
     ClipPoolModelTest.cpp
+    ColourTextTest.cpp
     CommandFixture.h
     DeclaredIdentifiersTest.cpp
     EventModelTest.cpp

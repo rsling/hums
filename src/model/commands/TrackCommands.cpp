@@ -1,5 +1,6 @@
 #include "model/commands/TrackCommands.h"
 
+#include "model/ColourText.h"
 #include "model/Ids.h"
 #include "model/commands/NodeLookup.h"
 
@@ -45,15 +46,6 @@ namespace
     bool isController (int cc)
     {
         return cc >= 0 && cc <= 127;
-    }
-
-    // "#AARRGGBB", or empty for no colour (docs/SCHEMA.md -> Conventions).
-    bool isColour (const juce::String& text)
-    {
-        if (text.isEmpty())
-            return true;
-
-        return text.length() == 9 && text.startsWithChar ('#') && text.substring (1).containsOnly ("0123456789abcdefABCDEF");
     }
 
     // Moves a Track or a Knob to a position among its siblings of the same
@@ -176,7 +168,7 @@ CommandResult setTrackColour (juce::ValueTree project, const juce::String& track
     if (! trackOf (project, trackId).isValid())
         return noSuchTrack (trackId);
 
-    if (! isColour (colour))
+    if (! ColourText::isValid (colour))
         return CommandResult::refused ("\"" + colour + "\" is not a colour: '#' and eight hexadecimal digits, or nothing for no colour.");
 
     return setTrackText (project, trackId, ids::colour, colour, undoManager);

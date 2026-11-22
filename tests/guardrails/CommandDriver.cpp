@@ -2,6 +2,8 @@
 
 #include "model/Ids.h"
 #include "model/PropertyReader.h"
+#include "model/TracksModel.h"
+#include "model/commands/ClipPoolCommands.h"
 #include "model/commands/NodeLookup.h"
 #include "model/commands/PadMapCommands.h"
 #include "model/commands/RoutingCommands.h"
@@ -94,6 +96,12 @@ const std::vector<CommandDriver::TableEntry>& CommandDriver::table()
         { "moveKnob", &CommandDriver::moveKnob, true },
         { "setKnobCc", &CommandDriver::setKnobCc, true },
         { "setKnobLabel", &CommandDriver::setKnobLabel, true },
+        { "addEventClip", &CommandDriver::addEventClip, true },
+        { "addStepClip", &CommandDriver::addStepClip, false },
+        { "setClipName", &CommandDriver::setClipName, true },
+        { "setClipColour", &CommandDriver::setClipColour, true },
+        { "removeClip", &CommandDriver::removeClip, true },
+        { "removeUnusedClips", &CommandDriver::removeUnusedClips, false },
     };
 
     return entries;
@@ -312,6 +320,23 @@ juce::String CommandDriver::colour()
         result << digits[random.indexBelow (16)];
 
     return result;
+}
+
+// A text that is no colour.
+juce::String CommandDriver::noColour()
+{
+    return random.oneOf (std::vector<juce::String> { "red", "#ff0000", "ff00ff00", "#ff00ff0g", "#ff00ff0000", "#", " #ff00ff00" });
+}
+
+std::vector<juce::ValueTree> CommandDriver::clips() const
+{
+    return NodeLookup::childrenOfType (project.getChildWithName (ids::ClipPool), ids::Clip);
+}
+
+// The number of Placements and Slots that reference the clip.
+int CommandDriver::refcountOf (const juce::ValueTree& clip) const
+{
+    return model::TracksModel (project.getChildWithName (ids::Tracks)).getRefcount (PropertyReader::getRequiredString (clip, ids::id));
 }
 
 //==============================================================================
@@ -800,7 +825,7 @@ CommandChecks::Attempt CommandDriver::setTrackColour()
     // Invalid: no such track, or a track and no colour.
     const auto hasKnownId = isValidForm || (! known.empty() && random.chance (50));
     const auto id = hasKnownId ? idOf (random.oneOf (known)) : unknownId();
-    const auto value = (isValidForm || ! hasKnownId) ? colour() : random.oneOf (std::vector<juce::String> { "red", "#ff0000", "ff00ff00", "#ff00ff0g", "#ff00ff0000", "#", " #ff00ff00" });
+    const auto value = (isValidForm || ! hasKnownId) ? colour() : noColour();
 
     return made ("setTrackColour (" + quoted (id) + ", " + quoted (value) + ")", isValidForm, commands::setTrackColour (project, id, value, undoManager));
 }
@@ -1025,6 +1050,84 @@ CommandChecks::Attempt CommandDriver::setKnobLabel()
     }
 
     return made ("setKnobLabel (" + quoted (id) + ", " + juce::String (cc) + ", " + quoted (label) + ")", isValidForm, commands::setKnobLabel (project, id, cc, label, undoManager));
+}
+
+//==============================================================================
+// The clip pool.
+
+CommandChecks::Attempt CommandDriver::addEventClip()
+{
+    const auto isValidForm = wantsValidForm();
+    const auto name = text();
+
+    // A loop of whole bars, of any length, or as long as an int64 allows.
+    std::int64_t loopLength = random.chance (60) ? 3840 * random.between (1, 8) : random.between (1, 40000);
+
+    if (random.chance (3))
+        loopLength = std::numeric_limits<std::int64_t>::max();
+
+    if (! isValidForm)
+        loopLength = random.chance (50) ? 0 : negativeTick();
+
+    return made ("addEventClip (" + quoted (name) + ", " + juce::String (loopLength) + ")", isValidForm, commands::addEventClip (project, name, loopLength, undoManager));
+}
+
+CommandChecks::Attempt CommandDriver::addStepClip()
+{
+    const auto name = text();
+    return made ("addStepClip (" + quoted (name) + ")", true, commands::addStepClip (project, name, undoManager));
+}
+
+CommandChecks::Attempt CommandDriver::setClipName()
+{
+    const auto known = clips();
+    const auto isValidForm = wantsValidForm() && ! known.empty();
+    const auto id = isValidForm ? idOf (random.oneOf (known)) : unknownId();
+    const auto name = text();
+
+    return made ("setClipName (" + quoted (id) + ", " + quoted (name) + ")", isValidForm, commands::setClipName (project, id, name, undoManager));
+}
+
+CommandChecks::Attempt CommandDriver::setClipColour()
+{
+    const auto known = clips();
+    const auto isValidForm = wantsValidForm() && ! known.empty();
+
+    // Invalid: no such clip, or a clip and no colour.
+    const auto hasKnownId = isValidForm || (! known.empty() && random.chance (50));
+    const auto id = hasKnownId ? idOf (random.oneOf (known)) : unknownId();
+    const auto value = (isValidForm || ! hasKnownId) ? colour() : noColour();
+
+    return made ("setClipColour (" + quoted (id) + ", " + quoted (value) + ")", isValidForm, commands::setClipColour (project, id, value, undoManager));
+}
+
+CommandChecks::Attempt CommandDriver::removeClip()
+{
+    std::vector<juce::ValueTree> unused;
+    std::vector<juce::ValueTree> inUse;
+
+    for (const auto& clip : clips())
+        (refcountOf (clip) == 0 ? unused : inUse).push_back (clip);
+
+    const auto isValidForm = wantsValidForm() && ! unused.empty();
+
+    // Invalid: a clip that a Placement or a Slot references, or no such
+    // clip.
+    juce::String id;
+
+    if (isValidForm)
+        id = idOf (random.oneOf (unused));
+    else if (! inUse.empty() && random.chance (60))
+        id = idOf (random.oneOf (inUse));
+    else
+        id = unknownId();
+
+    return made ("removeClip (" + quoted (id) + ")", isValidForm, commands::removeClip (project, id, undoManager));
+}
+
+CommandChecks::Attempt CommandDriver::removeUnusedClips()
+{
+    return made ("removeUnusedClips ()", true, commands::removeUnusedClips (project, undoManager));
 }
 
 } // namespace guardrails
