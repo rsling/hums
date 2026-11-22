@@ -15,6 +15,40 @@ target_link_libraries(guardrail_toolchain_juce PRIVATE
     juce::juce_recommended_warning_flags)
 hums_discover_tests(guardrail_toolchain_juce "guardrail.toolchain_juce.")
 
+# Guardrail 3: invariants as property tests (docs/GUARDRAILS.md -> 3). The
+# generator of random valid documents, the checks every document is held to,
+# and the run over the seeds. It saves and loads through the real load path,
+# so it links the io layer and the model layer under it.
+hums_add_test_executable(guardrail_properties
+    DocumentChecks.cpp
+    DocumentChecks.h
+    DocumentChecksTest.cpp
+    DocumentGenerator.cpp
+    DocumentGenerator.h
+    DocumentGeneratorTest.cpp
+    PropertyTest.cpp
+    RandomSource.cpp
+    RandomSource.h
+    RandomSourceTest.cpp
+    SeedRange.cpp
+    SeedRange.h
+    SeedRangeTest.cpp)
+target_link_libraries(guardrail_properties PRIVATE
+    hums_io
+    juce::juce_recommended_warning_flags)
+# How many seeds a run goes through when HUMS_PROPERTY_SEEDS does not say
+# (SeedRange.h): few enough for the loop between two edits. Fewer still in the
+# instrumented configurations, where every seed costs several times as much.
+# The 10,000 seeds of milestone 1 are asked for with the variable.
+if(HUMS_SANITIZE)
+    set(hums_property_seeds_default 200)
+else()
+    set(hums_property_seeds_default 1000)
+endif()
+target_compile_definitions(guardrail_properties PRIVATE
+    HUMS_PROPERTY_SEEDS_DEFAULT=${hums_property_seeds_default})
+hums_discover_tests(guardrail_properties "guardrail.properties.")
+
 # The negative tests for HUMS_JUCE_REPORT_REGEX (tests/CMakeLists.txt): one
 # program with a failed jassert and one with a leaked object. Each exits 0 and
 # is expected to fail, so it passes only while JUCE's printed report still
