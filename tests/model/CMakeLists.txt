@@ -14,6 +14,7 @@ hums_add_test_executable(model_tests
     CommandFixture.h
     DeclaredIdentifiersTest.cpp
     EditContextTest.cpp
+    EventClipCommandsTest.cpp
     EventModelTest.cpp
     GridModelTest.cpp
     KnobModelTest.cpp

@@ -4,6 +4,7 @@
 #include "RandomSource.h"
 #include "model/commands/CommandResult.h"
 #include "model/commands/EditContext.h"
+#include "model/commands/EventClipCommands.h"
 
 #include <juce_data_structures/juce_data_structures.h>
 
@@ -19,7 +20,8 @@ namespace guardrails
 // (a port that is not there, a pad number that is taken, a tempo of 0, the
 // tempo at tick 0 removed, a track on channel 17, a clip removed that is
 // still placed, a clip with notes on an automation lane, a clip changed
-// through a placement of another clip).
+// through a placement of another clip, a note into a clip that an automation
+// lane references, a loop of no tick).
 //
 // A command that changes a clip is a gesture with an edit context of its
 // own: of either policy, at pool level or through some of the clip's
@@ -96,6 +98,31 @@ private:
     model::Settings::SharedEditPolicy policy();
     juce::String nameReferencesOf (const juce::ValueTree& clip, model::commands::EditContext& editContext);
     juce::String nameAWrongReference (const juce::String& clipId, model::commands::EditContext& editContext);
+    bool landsOnALane (const juce::ValueTree& clip, const model::commands::EditContext& editContext) const;
+
+    // The clip and the gesture of a command on what an event clip holds.
+    struct EventClipTarget
+    {
+        // Invalid when the command names a clip that is not there.
+        juce::ValueTree clip;
+        juce::String id;
+
+        // The gesture in words, for the description of the attempt.
+        juce::String gesture;
+
+        // False when the command must refuse whatever else it is given: no
+        // such clip, a step clip, a context with a wrong reference.
+        bool isSound = false;
+
+        // Whether the clip the change lands on is on an AutomationLane.
+        bool isOnALane = false;
+    };
+
+    EventClipTarget eventClipTarget (bool wantsSound, const juce::Identifier& contentNeeded, model::commands::EditContext& editContext);
+    model::commands::NoteValues noteValues();
+    model::commands::NoteValues noNoteValues();
+    model::commands::EventValues eventValues (bool ccOnly);
+    model::commands::EventValues noEventValues();
 
     // Routing.
     Attempt addPerformer();
@@ -154,6 +181,16 @@ private:
     Attempt setClipColour();
     Attempt removeClip();
     Attempt removeUnusedClips();
+
+    // What an event clip holds.
+    Attempt addNote();
+    Attempt setNote();
+    Attempt removeNote();
+    Attempt addEvent();
+    Attempt setEvent();
+    Attempt removeEvent();
+    Attempt setClipLoopLength();
+    Attempt setClipQuantise();
 
     // Placements.
     Attempt addPlacement();

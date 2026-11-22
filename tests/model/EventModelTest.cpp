@@ -4,6 +4,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "model/EventModel.h"
+#include "model/Ids.h"
 
 namespace
 {
@@ -63,4 +64,21 @@ TEST_CASE ("A SysEx Event holds its payload as hex text", "[model][EventModel]")
 
     CHECK (event.getKind() == model::EventModel::Kind::sysex);
     CHECK (event.getData() == "7E7F0601");
+}
+
+TEST_CASE ("The text of a kind is the one an Event with that text is read as", "[model][EventModel]")
+{
+    using Kind = model::EventModel::Kind;
+
+    for (const auto kind : { Kind::cc, Kind::pitchBend, Kind::programChange, Kind::channelPressure, Kind::polyPressure, Kind::sysex })
+    {
+        juce::ValueTree event (model::ids::Event);
+        event.setProperty (model::ids::tick, 0, nullptr);
+        event.setProperty (model::ids::kind, model::EventModel::textOf (kind), nullptr);
+
+        CHECK (model::EventModel (event).getKind() == kind);
+    }
+
+    CHECK (model::EventModel::textOf (Kind::cc) == "cc");
+    CHECK (model::EventModel::textOf (Kind::pitchBend) == "pitchBend");
 }

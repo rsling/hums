@@ -75,6 +75,8 @@ hums_add_layer(hums_model
         commands/CommandResult.h
         commands/EditContext.cpp
         commands/EditContext.h
+        commands/EventClipCommands.cpp
+        commands/EventClipCommands.h
         commands/NodeLookup.cpp
         commands/NodeLookup.h
         commands/PadMapCommands.cpp

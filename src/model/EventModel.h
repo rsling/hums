@@ -25,6 +25,9 @@ public:
     // The node must be an Event node.
     explicit EventModel (juce::ValueTree eventNode);
 
+    // The kind as the document spells it: "cc", "pitchBend", ...
+    static juce::String textOf (Kind kind);
+
     std::int64_t getTick() const;
     Kind getKind() const;
     // What a and b mean depends on the kind; see Kind.

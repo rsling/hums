@@ -5,6 +5,7 @@
 #include "model/TracksModel.h"
 #include "model/commands/AutomationLaneCommands.h"
 #include "model/commands/ClipPoolCommands.h"
+#include "model/commands/EventClipCommands.h"
 #include "model/commands/NodeLookup.h"
 #include "model/commands/PadMapCommands.h"
 #include "model/commands/PlacementCommands.h"
@@ -105,6 +106,14 @@ const std::vector<CommandDriver::TableEntry>& CommandDriver::table()
         { "setClipColour", &CommandDriver::setClipColour, true },
         { "removeClip", &CommandDriver::removeClip, true },
         { "removeUnusedClips", &CommandDriver::removeUnusedClips, false },
+        { "addNote", &CommandDriver::addNote, true },
+        { "setNote", &CommandDriver::setNote, true },
+        { "removeNote", &CommandDriver::removeNote, true },
+        { "addEvent", &CommandDriver::addEvent, true },
+        { "setEvent", &CommandDriver::setEvent, true },
+        { "removeEvent", &CommandDriver::removeEvent, true },
+        { "setClipLoopLength", &CommandDriver::setClipLoopLength, true },
+        { "setClipQuantise", &CommandDriver::setClipQuantise, true },
         { "addPlacement", &CommandDriver::addPlacement, true },
         { "movePlacement", &CommandDriver::movePlacement, true },
         { "movePlacementToTrack", &CommandDriver::movePlacementToTrack, true },
@@ -1809,6 +1818,365 @@ CommandChecks::Attempt CommandDriver::addLanePlacement()
     }
 
     return made ("addLanePlacement (" + quoted (laneId) + ", " + quoted (clipId) + ", " + juce::String (start) + ", " + juce::String (length) + ")", isValidForm, commands::addLanePlacement (project, laneId, clipId, start, length, undoManager));
+}
+
+//==============================================================================
+// What an event clip holds.
+
+namespace
+{
+
+    bool isEventClip (const juce::ValueTree& clip)
+    {
+        return PropertyReader::getRequiredString (clip, ids::kind) == "event";
+    }
+
+    std::vector<juce::ValueTree> contentOf (const juce::ValueTree& clip, const juce::Identifier& type)
+    {
+        return NodeLookup::childrenOfType (clip.getChildWithName (ids::Events), type);
+    }
+
+    juce::String described (const commands::NoteValues& values)
+    {
+        return "{tick " + juce::String (values.tick) + ", length " + juce::String (values.length) + ", pitch " + juce::String (values.pitch) + ", velocity " + juce::String (values.velocity)
+             + ", offVelocity " + juce::String (values.offVelocity) + ", enabled " + juce::String (values.enabled ? 1 : 0) + "}";
+    }
+
+    juce::String described (const commands::EventValues& values)
+    {
+        return "{tick " + juce::String (values.tick) + ", " + model::EventModel::textOf (values.kind) + ", a " + juce::String (values.a) + ", b " + juce::String (values.b) + ", "
+             + juce::String (values.data.length()) + " digits of data, enabled " + juce::String (values.enabled ? 1 : 0) + "}";
+    }
+
+} // namespace
+
+// Whether the clip that a command with this context changes is referenced
+// from an AutomationLane: the clip itself, or, where the gate makes a clone,
+// the clone, which only the context's references use. Written here a second
+// time on purpose: it is what the commands are held to.
+bool CommandDriver::landsOnALane (const juce::ValueTree& clip, const commands::EditContext& editContext) const
+{
+    const auto clipId = idOf (clip);
+    const auto getsAClone = editContext.getPolicy() == model::Settings::SharedEditPolicy::makeUnique && editContext.hasReferences() && refcountOf (clip) > 1;
+    const auto& named = editContext.getPlacementIds();
+
+    for (const auto& placement : placements())
+    {
+        if (! placement.getParent().hasType (ids::AutomationLane))
+            continue;
+
+        if (getsAClone ? std::find (named.begin(), named.end(), idOf (placement)) != named.end() : PropertyReader::getRequiredString (placement, ids::clipId) == clipId)
+            return true;
+    }
+
+    return false;
+}
+
+// A sound target is an event clip, one that holds a Note or an Event when
+// `contentNeeded` says so, and a gesture on it. An unsound one, also where a
+// sound one was wanted and the document has none: no such clip, a step
+// clip, or an event clip and a context that names a reference which is none
+// of the clip's.
+CommandDriver::EventClipTarget CommandDriver::eventClipTarget (bool wantsSound, const juce::Identifier& contentNeeded, commands::EditContext& editContext)
+{
+    std::vector<juce::ValueTree> eventClips;
+    std::vector<juce::ValueTree> fitting;
+    std::vector<juce::ValueTree> stepClips;
+
+    for (const auto& clip : clips())
+    {
+        if (! isEventClip (clip))
+        {
+            stepClips.push_back (clip);
+            continue;
+        }
+
+        eventClips.push_back (clip);
+
+        if (! contentNeeded.isValid() || ! contentOf (clip, contentNeeded).empty())
+            fitting.push_back (clip);
+    }
+
+    EventClipTarget target;
+
+    if (wantsSound && ! fitting.empty())
+    {
+        target.clip = random.oneOf (fitting);
+        target.id = idOf (target.clip);
+        target.gesture = nameReferencesOf (target.clip, editContext);
+        target.isSound = true;
+        target.isOnALane = landsOnALane (target.clip, editContext);
+        return target;
+    }
+
+    const auto fault = random.intBetween (0, 2);
+
+    if (fault == 0 && ! stepClips.empty())
+    {
+        target.clip = random.oneOf (stepClips);
+        target.id = idOf (target.clip);
+        target.gesture = "a step clip, " + nameReferencesOf (target.clip, editContext);
+    }
+    else if (fault == 1 && ! eventClips.empty())
+    {
+        target.clip = random.oneOf (eventClips);
+        target.id = idOf (target.clip);
+        target.gesture = nameAWrongReference (target.id, editContext);
+    }
+    else
+    {
+        target.id = unknownId();
+        target.gesture = "at pool level";
+    }
+
+    return target;
+}
+
+commands::NoteValues CommandDriver::noteValues()
+{
+    commands::NoteValues values;
+    values.tick = tick();
+    values.length = random.chance (70) ? 120 * random.between (1, 16) : random.between (1, 10000);
+    values.pitch = random.intBetween (0, 127);
+    values.velocity = random.intBetween (1, 127);
+    values.offVelocity = random.intBetween (0, 127);
+    values.enabled = random.chance (85);
+
+    // Now and then up to the largest tick there is.
+    if (random.chance (3))
+        values.length = std::numeric_limits<std::int64_t>::max() - values.tick;
+
+    return values;
+}
+
+// A note with one thing wrong.
+commands::NoteValues CommandDriver::noNoteValues()
+{
+    auto values = noteValues();
+
+    switch (random.intBetween (0, 5))
+    {
+        case 0:
+            values.tick = negativeTick();
+            values.length = 240;
+            break;
+        case 1:
+            values.length = random.oneOf (std::vector<std::int64_t> { 0, -1, -240, std::numeric_limits<std::int64_t>::min() });
+            break;
+        case 2:
+            // Ends one tick past the largest.
+            values.tick = random.between (1, 40000);
+            values.length = std::numeric_limits<std::int64_t>::max() - values.tick + 1;
+            break;
+        case 3:
+            values.pitch = notAPitch();
+            break;
+        case 4:
+            values.velocity = random.oneOf (std::vector<int> { 0, -1, 128, 1000 });
+            break;
+        default:
+            values.offVelocity = random.oneOf (std::vector<int> { -1, 128, 1000 });
+            break;
+    }
+
+    return values;
+}
+
+commands::EventValues CommandDriver::eventValues (bool ccOnly)
+{
+    using Kind = model::EventModel::Kind;
+
+    commands::EventValues values;
+    values.tick = tick();
+    values.kind = ccOnly ? Kind::cc : random.oneOf (std::vector<Kind> { Kind::cc, Kind::cc, Kind::pitchBend, Kind::programChange, Kind::channelPressure, Kind::polyPressure, Kind::sysex });
+    values.enabled = random.chance (85);
+
+    if (values.kind == Kind::pitchBend)
+        values.a = random.intBetween (0, 16383);
+    else if (values.kind != Kind::sysex)
+        values.a = random.intBetween (0, 127);
+
+    if (values.kind == Kind::cc || values.kind == Kind::polyPressure)
+        values.b = random.intBetween (0, 127);
+
+    if (values.kind == Kind::sysex)
+        for (auto bytes = random.intBetween (0, 6); bytes > 0; --bytes)
+            values.data << random.oneOf (std::vector<juce::String> { "00", "7f", "7F", "41", "0a", "F0" });
+
+    return values;
+}
+
+// An event with one thing wrong.
+commands::EventValues CommandDriver::noEventValues()
+{
+    using Kind = model::EventModel::Kind;
+
+    auto values = eventValues (false);
+    const auto usesB = values.kind == Kind::cc || values.kind == Kind::polyPressure;
+
+    switch (random.intBetween (0, 3))
+    {
+        case 0:
+            values.tick = negativeTick();
+            break;
+        case 1:
+            // No kind has an a like these; a sysex event has none at all.
+            values.a = random.oneOf (std::vector<int> { -1, 16384, 100000, std::numeric_limits<int>::min() });
+            break;
+        case 2:
+            values.b = usesB ? random.oneOf (std::vector<int> { -1, 128, 1000 }) : random.oneOf (std::vector<int> { 1, 127, -1 });
+            break;
+        default:
+            if (values.kind == Kind::sysex)
+                values.data = random.oneOf (std::vector<juce::String> { "7", "7e7", "xy", "7e 7f", "0x7e" });
+            else
+                values.data = "7e";
+            break;
+    }
+
+    return values;
+}
+
+CommandChecks::Attempt CommandDriver::addNote()
+{
+    const auto wantsValid = wantsValidForm();
+    commands::EditContext editContext (policy());
+
+    // Invalid: an unsound target; a clip that an automation lane
+    // references; values that are no note's.
+    const auto target = eventClipTarget (wantsValid || random.chance (65), {}, editContext);
+    const auto hasRightValues = wantsValid || ! target.isSound || (target.isOnALane && random.chance (50));
+    const auto values = hasRightValues ? noteValues() : noNoteValues();
+    const auto isValidForm = wantsValid && target.isSound && ! target.isOnALane;
+
+    // A sound target with right values that was not to be valid: only a
+    // lane makes that an invalid form, and it is one.
+    jassert (isValidForm || ! target.isSound || ! hasRightValues || target.isOnALane);
+
+    return made ("addNote (" + quoted (target.id) + ", " + described (values) + ", " + target.gesture + ")", isValidForm, commands::addNote (project, target.id, values, editContext, undoManager));
+}
+
+CommandChecks::Attempt CommandDriver::setNote()
+{
+    const auto wantsValid = wantsValidForm();
+    commands::EditContext editContext (policy());
+
+    // Invalid: an unsound target; a position with no note; values that are
+    // no note's.
+    const auto target = eventClipTarget (wantsValid || random.chance (65), ids::Note, editContext);
+    const auto isValidForm = wantsValid && target.isSound;
+    const auto count = target.isSound ? static_cast<int> (contentOf (target.clip, ids::Note).size()) : 1;
+    const auto hasWrongPosition = ! isValidForm && target.isSound && random.chance (50);
+    const auto position = hasWrongPosition ? random.oneOf (std::vector<int> { -1, count, count + 7, std::numeric_limits<int>::min() }) : random.intBetween (0, count - 1);
+    const auto values = (isValidForm || ! target.isSound || hasWrongPosition) ? noteValues() : noNoteValues();
+
+    return made ("setNote (" + quoted (target.id) + ", " + juce::String (position) + ", " + described (values) + ", " + target.gesture + ")", isValidForm, commands::setNote (project, target.id, position, values, editContext, undoManager));
+}
+
+CommandChecks::Attempt CommandDriver::removeNote()
+{
+    const auto wantsValid = wantsValidForm();
+    commands::EditContext editContext (policy());
+
+    // Invalid: an unsound target, or a position with no note.
+    const auto target = eventClipTarget (wantsValid || random.chance (50), ids::Note, editContext);
+    const auto isValidForm = wantsValid && target.isSound;
+    const auto count = target.isSound ? static_cast<int> (contentOf (target.clip, ids::Note).size()) : 1;
+    const auto position = (isValidForm || ! target.isSound) ? random.intBetween (0, count - 1) : random.oneOf (std::vector<int> { -1, count, count + 7 });
+
+    return made ("removeNote (" + quoted (target.id) + ", " + juce::String (position) + ", " + target.gesture + ")", isValidForm, commands::removeNote (project, target.id, position, editContext, undoManager));
+}
+
+CommandChecks::Attempt CommandDriver::addEvent()
+{
+    const auto wantsValid = wantsValidForm();
+    commands::EditContext editContext (policy());
+
+    // Invalid: an unsound target; values that are no event's; an event
+    // that is no cc for a clip that an automation lane references.
+    const auto target = eventClipTarget (wantsValid || random.chance (65), {}, editContext);
+    const auto isValidForm = wantsValid && target.isSound;
+    auto values = eventValues (target.isOnALane);
+
+    if (! isValidForm && target.isSound)
+    {
+        values = noEventValues();
+
+        if (target.isOnALane && random.chance (50))
+            values = eventValues (false);
+
+        // What is right but for the lane must be no cc, to be wrong there.
+        if (values.kind == model::EventModel::Kind::cc && values.tick >= 0 && values.a >= 0 && values.a <= 127 && values.b >= 0 && values.b <= 127 && values.data.isEmpty())
+            values.tick = -1;
+    }
+
+    return made ("addEvent (" + quoted (target.id) + ", " + described (values) + ", " + target.gesture + ")", isValidForm, commands::addEvent (project, target.id, values, editContext, undoManager));
+}
+
+CommandChecks::Attempt CommandDriver::setEvent()
+{
+    const auto wantsValid = wantsValidForm();
+    commands::EditContext editContext (policy());
+
+    // Invalid: an unsound target; a position with no event; values that
+    // are no event's.
+    const auto target = eventClipTarget (wantsValid || random.chance (65), ids::Event, editContext);
+    const auto isValidForm = wantsValid && target.isSound;
+    const auto count = target.isSound ? static_cast<int> (contentOf (target.clip, ids::Event).size()) : 1;
+    const auto hasWrongPosition = ! isValidForm && target.isSound && random.chance (50);
+    const auto position = hasWrongPosition ? random.oneOf (std::vector<int> { -1, count, count + 7, std::numeric_limits<int>::min() }) : random.intBetween (0, count - 1);
+    const auto values = (isValidForm || ! target.isSound || hasWrongPosition) ? eventValues (target.isOnALane) : noEventValues();
+
+    return made ("setEvent (" + quoted (target.id) + ", " + juce::String (position) + ", " + described (values) + ", " + target.gesture + ")", isValidForm, commands::setEvent (project, target.id, position, values, editContext, undoManager));
+}
+
+CommandChecks::Attempt CommandDriver::removeEvent()
+{
+    const auto wantsValid = wantsValidForm();
+    commands::EditContext editContext (policy());
+
+    // Invalid: an unsound target, or a position with no event.
+    const auto target = eventClipTarget (wantsValid || random.chance (50), ids::Event, editContext);
+    const auto isValidForm = wantsValid && target.isSound;
+    const auto count = target.isSound ? static_cast<int> (contentOf (target.clip, ids::Event).size()) : 1;
+    const auto position = (isValidForm || ! target.isSound) ? random.intBetween (0, count - 1) : random.oneOf (std::vector<int> { -1, count, count + 7 });
+
+    return made ("removeEvent (" + quoted (target.id) + ", " + juce::String (position) + ", " + target.gesture + ")", isValidForm, commands::removeEvent (project, target.id, position, editContext, undoManager));
+}
+
+CommandChecks::Attempt CommandDriver::setClipLoopLength()
+{
+    const auto wantsValid = wantsValidForm();
+    commands::EditContext editContext (policy());
+
+    // Invalid: an unsound target, or a loop of no tick.
+    const auto target = eventClipTarget (wantsValid || random.chance (50), {}, editContext);
+    const auto isValidForm = wantsValid && target.isSound;
+
+    // Often short, so that offsets have to come back into the loop.
+    std::int64_t loopLength = random.chance (50) ? 240 * random.between (1, 32) : random.between (1, 40000);
+
+    if (random.chance (3))
+        loopLength = std::numeric_limits<std::int64_t>::max();
+
+    if (! isValidForm && target.isSound)
+        loopLength = random.chance (50) ? 0 : negativeTick();
+
+    return made ("setClipLoopLength (" + quoted (target.id) + ", " + juce::String (loopLength) + ", " + target.gesture + ")", isValidForm, commands::setClipLoopLength (project, target.id, loopLength, editContext, undoManager));
+}
+
+CommandChecks::Attempt CommandDriver::setClipQuantise()
+{
+    const auto wantsValid = wantsValidForm();
+    commands::EditContext editContext (policy());
+
+    // Invalid: an unsound target, or a text that is no setting.
+    const auto target = eventClipTarget (wantsValid || random.chance (50), {}, editContext);
+    const auto isValidForm = wantsValid && target.isSound;
+    const auto quantise = (isValidForm || ! target.isSound) ? random.oneOf (std::vector<juce::String> { "", "1/2", "1/4", "1/8", "1/2T", "1/4T", "1/8T" })
+                                                            : random.oneOf (std::vector<juce::String> { "1/16", "1/8t", " ", "off", "1/8 ", "480" });
+
+    return made ("setClipQuantise (" + quoted (target.id) + ", " + quoted (quantise) + ", " + target.gesture + ")", isValidForm, commands::setClipQuantise (project, target.id, quantise, editContext, undoManager));
 }
 
 //==============================================================================

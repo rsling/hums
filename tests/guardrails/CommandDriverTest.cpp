@@ -80,6 +80,12 @@ TEST_CASE ("guardrail 3: over the first 100 seeds every command is applied in a 
     // A gate that never clones in the property tests is held to nothing.
     CHECK (madeUnique.contains ("setClipName"));
     CHECK (madeUnique.contains ("setClipColour"));
+
+    for (const auto* command : { "addNote", "setNote", "removeNote", "addEvent", "setEvent", "removeEvent", "setClipLoopLength", "setClipQuantise" })
+    {
+        INFO (command);
+        CHECK (madeUnique.contains (command));
+    }
 }
 
 TEST_CASE ("guardrail 3: the same seed gives the same commands", "[guardrails][CommandDriver]")

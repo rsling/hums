@@ -14,6 +14,28 @@ EventModel::EventModel (juce::ValueTree eventNode)
     jassert (node.hasType (ids::Event));
 }
 
+juce::String EventModel::textOf (Kind kind)
+{
+    switch (kind)
+    {
+        case Kind::cc:
+            return "cc";
+        case Kind::pitchBend:
+            return "pitchBend";
+        case Kind::programChange:
+            return "programChange";
+        case Kind::channelPressure:
+            return "channelPressure";
+        case Kind::polyPressure:
+            return "polyPressure";
+        case Kind::sysex:
+            return "sysex";
+    }
+
+    jassertfalse;
+    return {};
+}
+
 std::int64_t EventModel::getTick() const
 {
     return PropertyReader::getRequiredInt64 (node, ids::tick);
