@@ -22,6 +22,7 @@ hums_add_test_executable(model_tests
     PadMapModelTest.cpp
     PadModelTest.cpp
     PerformerModelTest.cpp
+    PlacementCommandsTest.cpp
     PlacementModelTest.cpp
     PlayerModelTest.cpp
     ProjectModelTest.cpp

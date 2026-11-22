@@ -5,8 +5,10 @@
 #include "CommandFixture.h"
 #include "model/ClipModel.h"
 #include "model/ClipPoolModel.h"
+#include "model/TrackModel.h"
 #include "model/TracksModel.h"
 #include "model/commands/ClipPoolCommands.h"
+#include "model/commands/PlacementCommands.h"
 
 #include <cstdint>
 #include <limits>
@@ -42,19 +44,18 @@ int refcountOf (const CommandFixture& fixture, const juce::String& clipId)
     return model::TracksModel (fixture.project.getChildWithName (ids::Tracks)).getRefcount (clipId);
 }
 
-// The commands for placements and slots are not what is tested here, so the
-// references are put into the tree as a loaded file would hold them.
-void placeClip (CommandFixture& fixture, int trackPosition, const juce::String& clipId, std::int64_t start)
+// A placement of 960 ticks on that track, through its own command; the
+// result is its id.
+juce::String placeClip (CommandFixture& fixture, int trackPosition, const juce::String& clipId, std::int64_t start)
 {
-    juce::ValueTree placement (ids::Placement);
-    placement.setProperty (ids::id, juce::Uuid().toString(), nullptr);
-    placement.setProperty (ids::clipId, clipId, nullptr);
-    placement.setProperty (ids::start, start, nullptr);
-    placement.setProperty (ids::length, 960, nullptr);
-
-    fixture.track (trackPosition).getChildWithName (ids::Placements).appendChild (placement, nullptr);
+    const auto trackId = model::TrackModel (fixture.track (trackPosition)).getId();
+    const auto result = commands::addPlacement (fixture.project, trackId, clipId, start, 960, fixture.undoManager);
+    REQUIRE (result.wasApplied());
+    return result.createdId;
 }
 
+// The commands for slots are not what is tested here, so the slot is put
+// into the tree as a loaded file would hold it.
 void putClipInSlot (CommandFixture& fixture, int trackPosition, const juce::String& clipId, int scene)
 {
     juce::ValueTree slot (ids::Slot);
@@ -377,11 +378,10 @@ TEST_CASE ("A clip can be removed once its last reference is gone", "[model][com
 {
     CommandFixture fixture;
     const auto clipId = addedEventClip (fixture, "Riff");
-    placeClip (fixture, 0, clipId, 0);
+    const auto placementId = placeClip (fixture, 0, clipId, 0);
     REQUIRE (! commands::removeClip (fixture.project, clipId, fixture.undoManager).wasApplied());
 
-    auto placements = fixture.track (0).getChildWithName (ids::Placements);
-    placements.removeChild (0, nullptr);
+    REQUIRE (commands::removePlacement (fixture.project, placementId, fixture.undoManager).wasApplied());
 
     CHECK (commands::removeClip (fixture.project, clipId, fixture.undoManager).wasApplied());
     CHECK (fixture.isValid());

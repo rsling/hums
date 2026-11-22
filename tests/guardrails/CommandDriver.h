@@ -77,6 +77,9 @@ private:
     juce::String noColour();
     std::vector<juce::ValueTree> clips() const;
     int refcountOf (const juce::ValueTree& clip) const;
+    std::vector<juce::ValueTree> placements() const;
+    std::vector<juce::ValueTree> ownPlacements() const;
+    std::int64_t freeStartFor (const juce::ValueTree& parent, std::int64_t length, const juce::ValueTree& moving);
 
     // Routing.
     Attempt addPerformer();
@@ -135,6 +138,14 @@ private:
     Attempt setClipColour();
     Attempt removeClip();
     Attempt removeUnusedClips();
+
+    // Placements.
+    Attempt addPlacement();
+    Attempt movePlacement();
+    Attempt movePlacementToTrack();
+    Attempt resizePlacement();
+    Attempt splitPlacement();
+    Attempt removePlacement();
 
     // A setter of one Track property that names a port, and of one that is
     // a flag.

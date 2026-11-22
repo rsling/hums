@@ -73,6 +73,8 @@ hums_add_layer(hums_model
         commands/NodeLookup.h
         commands/PadMapCommands.cpp
         commands/PadMapCommands.h
+        commands/PlacementCommands.cpp
+        commands/PlacementCommands.h
         commands/RoutingCommands.cpp
         commands/RoutingCommands.h
         commands/SessionCommands.cpp

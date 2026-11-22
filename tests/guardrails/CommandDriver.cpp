@@ -6,6 +6,7 @@
 #include "model/commands/ClipPoolCommands.h"
 #include "model/commands/NodeLookup.h"
 #include "model/commands/PadMapCommands.h"
+#include "model/commands/PlacementCommands.h"
 #include "model/commands/RoutingCommands.h"
 #include "model/commands/SessionCommands.h"
 #include "model/commands/TimelineCommands.h"
@@ -102,6 +103,12 @@ const std::vector<CommandDriver::TableEntry>& CommandDriver::table()
         { "setClipColour", &CommandDriver::setClipColour, true },
         { "removeClip", &CommandDriver::removeClip, true },
         { "removeUnusedClips", &CommandDriver::removeUnusedClips, false },
+        { "addPlacement", &CommandDriver::addPlacement, true },
+        { "movePlacement", &CommandDriver::movePlacement, true },
+        { "movePlacementToTrack", &CommandDriver::movePlacementToTrack, true },
+        { "resizePlacement", &CommandDriver::resizePlacement, true },
+        { "splitPlacement", &CommandDriver::splitPlacement, true },
+        { "removePlacement", &CommandDriver::removePlacement, true },
     };
 
     return entries;
@@ -1128,6 +1135,345 @@ CommandChecks::Attempt CommandDriver::removeClip()
 CommandChecks::Attempt CommandDriver::removeUnusedClips()
 {
     return made ("removeUnusedClips ()", true, commands::removeUnusedClips (project, undoManager));
+}
+
+//==============================================================================
+// Placements.
+
+namespace
+{
+
+    // The driver's documents hold no placement anywhere near the largest
+    // tick, so the plain sums here cannot overflow.
+    std::int64_t startOf (const juce::ValueTree& placement)
+    {
+        return PropertyReader::getRequiredInt64 (placement, ids::start);
+    }
+
+    std::int64_t lengthOf (const juce::ValueTree& placement)
+    {
+        return PropertyReader::getRequiredInt64 (placement, ids::length);
+    }
+
+    std::int64_t endOf (const juce::ValueTree& placement)
+    {
+        return startOf (placement) + lengthOf (placement);
+    }
+
+    // The other placements of the same track or lane.
+    std::vector<juce::ValueTree> siblingsOf (const juce::ValueTree& parent, const juce::ValueTree& placement)
+    {
+        std::vector<juce::ValueTree> siblings;
+
+        for (const auto& sibling : NodeLookup::childrenOfType (parent, ids::Placement))
+            if (sibling != placement)
+                siblings.push_back (sibling);
+
+        return siblings;
+    }
+
+    // True when no placement under `parent`, `moving` apart, has a tick in
+    // [start, start + length). Written here a second time on purpose: it is
+    // what the commands are held to.
+    bool isFree (const juce::ValueTree& parent, std::int64_t start, std::int64_t length, const juce::ValueTree& moving)
+    {
+        for (const auto& sibling : siblingsOf (parent, moving))
+            if (start < endOf (sibling) && startOf (sibling) < start + length)
+                return false;
+
+        return true;
+    }
+
+    // A start at which a placement of this length is in the way of
+    // `sibling`: any from one that only just reaches into it to its last
+    // tick, and never a negative one.
+    std::int64_t startInTheWayOf (RandomSource& random, const juce::ValueTree& sibling, std::int64_t length)
+    {
+        return random.between (std::max (startOf (sibling) - length + 1, std::int64_t { 0 }), endOf (sibling) - 1);
+    }
+
+    // A start that no placement can have, whatever is free: a negative one,
+    // or one from which any length passes the largest tick.
+    std::int64_t startThatCannotBe (RandomSource& random, std::int64_t negative)
+    {
+        return random.chance (50) ? negative : std::numeric_limits<std::int64_t>::max() - random.between (0, 3);
+    }
+
+    // The largest length there is would be none of these: a placement at
+    // tick 0 with nothing behind it may have it.
+    std::int64_t noLength (RandomSource& random)
+    {
+        return random.oneOf (std::vector<std::int64_t> { 0, -1, -960, std::numeric_limits<std::int64_t>::min() });
+    }
+
+} // namespace
+
+// Every placement of the project: the tracks' own and those on their
+// automation lanes.
+std::vector<juce::ValueTree> CommandDriver::placements() const
+{
+    auto found = ownPlacements();
+
+    for (const auto& track : tracks())
+        for (const auto& lane : NodeLookup::childrenOfType (track.getChildWithName (ids::AutomationLanes), ids::AutomationLane))
+            for (const auto& placement : NodeLookup::childrenOfType (lane, ids::Placement))
+                found.push_back (placement);
+
+    return found;
+}
+
+std::vector<juce::ValueTree> CommandDriver::ownPlacements() const
+{
+    std::vector<juce::ValueTree> found;
+
+    for (const auto& track : tracks())
+        for (const auto& placement : NodeLookup::childrenOfType (track.getChildWithName (ids::Placements), ids::Placement))
+            found.push_back (placement);
+
+    return found;
+}
+
+// A start at which a placement of this length is in nobody's way under
+// `parent`: anywhere, if that is free, and else behind the last one.
+std::int64_t CommandDriver::freeStartFor (const juce::ValueTree& parent, std::int64_t length, const juce::ValueTree& moving)
+{
+    const auto anywhere = tick();
+
+    if (isFree (parent, anywhere, length, moving))
+        return anywhere;
+
+    std::int64_t behindTheLast = 0;
+
+    for (const auto& sibling : siblingsOf (parent, moving))
+        behindTheLast = std::max (behindTheLast, endOf (sibling));
+
+    // Right behind it, or after a gap.
+    return behindTheLast + (random.chance (50) ? 0 : random.between (1, 3840));
+}
+
+CommandChecks::Attempt CommandDriver::addPlacement()
+{
+    const auto knownTracks = tracks();
+    const auto knownClips = clips();
+    const auto isValidForm = wantsValidForm() && ! knownTracks.empty() && ! knownClips.empty();
+
+    // A whole number of bars, or any length.
+    auto length = random.chance (50) ? 3840 * random.between (1, 4) : random.between (1, 8000);
+
+    juce::String trackId = unknownId();
+    juce::String clipId = unknownId();
+    std::int64_t start = tick();
+
+    if (! knownTracks.empty() && ! knownClips.empty())
+    {
+        const auto track = random.oneOf (knownTracks);
+        const auto own = track.getChildWithName (ids::Placements);
+        const auto taken = NodeLookup::childrenOfType (own, ids::Placement);
+
+        trackId = idOf (track);
+        clipId = idOf (random.oneOf (knownClips));
+        start = freeStartFor (own, length, {});
+
+        if (! isValidForm)
+        {
+            // One thing wrong.
+            const auto fault = random.intBetween (0, 4);
+
+            if (fault == 0 && ! taken.empty())
+                start = startInTheWayOf (random, random.oneOf (taken), length);
+            else if (fault == 1)
+                start = startThatCannotBe (random, negativeTick());
+            else if (fault == 2)
+                length = noLength (random);
+            else if (fault == 3)
+                clipId = unknownId();
+            else
+                trackId = unknownId();
+        }
+    }
+
+    return made ("addPlacement (" + quoted (trackId) + ", " + quoted (clipId) + ", " + juce::String (start) + ", " + juce::String (length) + ")", isValidForm, commands::addPlacement (project, trackId, clipId, start, length, undoManager));
+}
+
+CommandChecks::Attempt CommandDriver::movePlacement()
+{
+    const auto known = placements();
+    const auto isValidForm = wantsValidForm() && ! known.empty();
+
+    juce::String id = unknownId();
+    std::int64_t toStart = tick();
+
+    if (isValidForm || (! known.empty() && random.chance (70)))
+    {
+        const auto placement = random.oneOf (known);
+        const auto parent = placement.getParent();
+        const auto siblings = siblingsOf (parent, placement);
+
+        id = idOf (placement);
+
+        // Now and then to where it is, or by less than its length: it is
+        // not in its own way.
+        if (random.chance (15))
+            toStart = startOf (placement);
+        else if (random.chance (15) && isFree (parent, startOf (placement) + lengthOf (placement) / 2, lengthOf (placement), placement))
+            toStart = startOf (placement) + lengthOf (placement) / 2;
+        else
+            toStart = freeStartFor (parent, lengthOf (placement), placement);
+
+        if (! isValidForm)
+        {
+            if (! siblings.empty() && random.chance (50))
+                toStart = startInTheWayOf (random, random.oneOf (siblings), lengthOf (placement));
+            else
+                toStart = startThatCannotBe (random, negativeTick());
+        }
+    }
+
+    return made ("movePlacement (" + quoted (id) + ", " + juce::String (toStart) + ")", isValidForm, commands::movePlacement (project, id, toStart, undoManager));
+}
+
+CommandChecks::Attempt CommandDriver::movePlacementToTrack()
+{
+    const auto known = ownPlacements();
+    const auto knownTracks = tracks();
+    const auto isValidForm = wantsValidForm() && ! known.empty();
+
+    juce::String id = unknownId();
+    juce::String toTrackId = knownTracks.empty() ? unknownId() : idOf (random.oneOf (knownTracks));
+    std::int64_t toStart = tick();
+
+    if (isValidForm || (! known.empty() && random.chance (80)))
+    {
+        // A track with a placement of its own is there. Often the track
+        // the placement is on.
+        const auto placement = random.oneOf (known);
+        const auto toTrack = random.chance (30) ? placement.getParent().getParent() : random.oneOf (knownTracks);
+        const auto to = toTrack.getChildWithName (ids::Placements);
+        const auto inTheWay = siblingsOf (to, placement);
+
+        id = idOf (placement);
+        toTrackId = idOf (toTrack);
+        toStart = freeStartFor (to, lengthOf (placement), placement);
+
+        if (! isValidForm)
+        {
+            const auto fault = random.intBetween (0, 3);
+
+            // The placements on lanes are those that are not a track's own.
+            std::vector<juce::ValueTree> onLanes;
+
+            for (const auto& any : placements())
+                if (any.getParent().hasType (ids::AutomationLane))
+                    onLanes.push_back (any);
+
+            if (fault == 0 && ! inTheWay.empty())
+                toStart = startInTheWayOf (random, random.oneOf (inTheWay), lengthOf (placement));
+            else if (fault == 1 && ! onLanes.empty())
+                id = idOf (random.oneOf (onLanes));
+            else if (fault == 2)
+                toStart = startThatCannotBe (random, negativeTick());
+            else
+                toTrackId = unknownId();
+        }
+    }
+
+    return made ("movePlacementToTrack (" + quoted (id) + ", " + quoted (toTrackId) + ", " + juce::String (toStart) + ")", isValidForm, commands::movePlacementToTrack (project, id, toTrackId, toStart, undoManager));
+}
+
+CommandChecks::Attempt CommandDriver::resizePlacement()
+{
+    const auto known = placements();
+    const auto isValidForm = wantsValidForm() && ! known.empty();
+
+    juce::String id = unknownId();
+    std::int64_t length = random.between (1, 8000);
+
+    if (isValidForm || (! known.empty() && random.chance (70)))
+    {
+        const auto placement = random.oneOf (known);
+        const auto parent = placement.getParent();
+
+        id = idOf (placement);
+
+        // Shorter than it is always fits; longer only into free ticks.
+        if (! isFree (parent, startOf (placement), length, placement))
+            length = random.between (1, lengthOf (placement));
+
+        if (! isValidForm)
+        {
+            // The siblings a longer placement would reach.
+            std::vector<juce::ValueTree> behind;
+
+            for (const auto& sibling : siblingsOf (parent, placement))
+                if (startOf (sibling) >= endOf (placement))
+                    behind.push_back (sibling);
+
+            if (! behind.empty() && random.chance (50))
+                length = startOf (random.oneOf (behind)) - startOf (placement) + random.between (1, 100);
+            else
+                length = noLength (random);
+        }
+    }
+
+    return made ("resizePlacement (" + quoted (id) + ", " + juce::String (length) + ")", isValidForm, commands::resizePlacement (project, id, length, undoManager));
+}
+
+CommandChecks::Attempt CommandDriver::splitPlacement()
+{
+    // A placement of one tick has no tick at which it can be split.
+    std::vector<juce::ValueTree> splittable;
+
+    for (const auto& placement : placements())
+        if (lengthOf (placement) > 1)
+            splittable.push_back (placement);
+
+    const auto known = placements();
+    const auto isValidForm = wantsValidForm() && ! splittable.empty();
+
+    juce::String id = unknownId();
+    std::int64_t atTick = tick();
+
+    if (isValidForm)
+    {
+        const auto placement = random.oneOf (splittable);
+
+        id = idOf (placement);
+        atTick = startOf (placement) + random.between (1, lengthOf (placement) - 1);
+    }
+    else if (! known.empty() && random.chance (70))
+    {
+        // A placement, and a tick that is not inside it.
+        const auto placement = random.oneOf (known);
+
+        id = idOf (placement);
+
+        switch (random.intBetween (0, 3))
+        {
+            case 0:
+                atTick = startOf (placement);
+                break;
+            case 1:
+                atTick = endOf (placement);
+                break;
+            case 2:
+                atTick = endOf (placement) + tick();
+                break;
+            default:
+                atTick = startOf (placement) > 0 && random.chance (50) ? random.between (0, startOf (placement) - 1) : negativeTick();
+                break;
+        }
+    }
+
+    return made ("splitPlacement (" + quoted (id) + ", " + juce::String (atTick) + ")", isValidForm, commands::splitPlacement (project, id, atTick, undoManager));
+}
+
+CommandChecks::Attempt CommandDriver::removePlacement()
+{
+    const auto known = placements();
+    const auto isValidForm = wantsValidForm() && ! known.empty();
+    const auto id = isValidForm ? idOf (random.oneOf (known)) : unknownId();
+
+    return made ("removePlacement (" + quoted (id) + ")", isValidForm, commands::removePlacement (project, id, undoManager));
 }
 
 } // namespace guardrails
