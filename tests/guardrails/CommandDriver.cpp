@@ -1,5 +1,6 @@
 #include "CommandDriver.h"
 
+#include "model/GridModel.h"
 #include "model/Ids.h"
 #include "model/PropertyReader.h"
 #include "model/TracksModel.h"
@@ -12,11 +13,13 @@
 #include "model/commands/RoutingCommands.h"
 #include "model/commands/SessionCommands.h"
 #include "model/commands/SlotCommands.h"
+#include "model/commands/StepClipCommands.h"
 #include "model/commands/TimelineCommands.h"
 #include "model/commands/TrackCommands.h"
 
 #include <algorithm>
 #include <limits>
+#include <optional>
 #include <utility>
 
 namespace guardrails
@@ -114,6 +117,18 @@ const std::vector<CommandDriver::TableEntry>& CommandDriver::table()
         { "removeEvent", &CommandDriver::removeEvent, true },
         { "setClipLoopLength", &CommandDriver::setClipLoopLength, true },
         { "setClipQuantise", &CommandDriver::setClipQuantise, true },
+        { "addLane", &CommandDriver::addLane, true },
+        { "removeLane", &CommandDriver::removeLane, true },
+        { "moveLane", &CommandDriver::moveLane, true },
+        { "setLaneName", &CommandDriver::setLaneName, true },
+        { "setLaneFixedPitch", &CommandDriver::setLaneFixedPitch, true },
+        { "setCell", &CommandDriver::setCell, true },
+        { "setCellCc", &CommandDriver::setCellCc, true },
+        { "removeCellCc", &CommandDriver::removeCellCc, true },
+        { "setStepLength", &CommandDriver::setStepLength, true },
+        { "setStepCount", &CommandDriver::setStepCount, true },
+        { "setResetAt", &CommandDriver::setResetAt, true },
+        { "setColumnSkipped", &CommandDriver::setColumnSkipped, true },
         { "addPlacement", &CommandDriver::addPlacement, true },
         { "movePlacement", &CommandDriver::movePlacement, true },
         { "movePlacementToTrack", &CommandDriver::movePlacementToTrack, true },
@@ -2177,6 +2192,498 @@ CommandChecks::Attempt CommandDriver::setClipQuantise()
                                                             : random.oneOf (std::vector<juce::String> { "1/16", "1/8t", " ", "off", "1/8 ", "480" });
 
     return made ("setClipQuantise (" + quoted (target.id) + ", " + quoted (quantise) + ", " + target.gesture + ")", isValidForm, commands::setClipQuantise (project, target.id, quantise, editContext, undoManager));
+}
+
+//==============================================================================
+// What a step clip holds.
+
+namespace
+{
+
+    std::vector<juce::ValueTree> gridLanesOf (const juce::ValueTree& clip)
+    {
+        return NodeLookup::childrenOfType (clip.getChildWithName (ids::Grid), ids::Lane);
+    }
+
+    model::GridModel gridOf (const juce::ValueTree& clip)
+    {
+        return model::GridModel (clip.getChildWithName (ids::Grid));
+    }
+
+    // A cell that has CC values, by its lane and column, with their
+    // controller numbers.
+    struct CellWithCcValues
+    {
+        int laneIndex = 0;
+        int column = 0;
+        std::vector<int> controllers;
+    };
+
+    std::vector<CellWithCcValues> cellsWithCcValuesOf (const juce::ValueTree& clip)
+    {
+        std::vector<CellWithCcValues> found;
+        const auto lanes = gridLanesOf (clip);
+
+        for (std::size_t lane = 0; lane < lanes.size(); ++lane)
+        {
+            const auto cells = NodeLookup::childrenOfType (lanes[lane], ids::Cell);
+
+            for (std::size_t column = 0; column < cells.size(); ++column)
+            {
+                CellWithCcValues cell { static_cast<int> (lane), static_cast<int> (column), {} };
+
+                for (const auto& ccValue : NodeLookup::childrenOfType (cells[column], ids::CcValue))
+                    cell.controllers.push_back (PropertyReader::getRequiredInt (ccValue, ids::cc));
+
+                if (! cell.controllers.empty())
+                    found.push_back (cell);
+            }
+        }
+
+        return found;
+    }
+
+    // Whether a grid with these skips and this reset has a column left to
+    // play (invariant 2). Written here a second time on purpose, like the
+    // two below: it is what the commands are held to.
+    bool hasAColumnToPlay (const juce::String& skipMask, int resetAt)
+    {
+        for (int column = 0; column < resetAt; ++column)
+            if (skipMask[column] != '1')
+                return true;
+
+        return false;
+    }
+
+    // Whether the grid could have this many columns (docs/SCHEMA.md ->
+    // Changing stepCount): a reset at the end follows the end, any other is
+    // kept or comes to the new end.
+    bool couldHaveColumns (const model::GridModel& grid, int stepCount)
+    {
+        const auto stepCountNow = grid.getStepCount();
+        const auto resetAt = grid.getResetAt() == stepCountNow ? stepCount : std::min (grid.getResetAt(), stepCount);
+        auto skipMask = grid.getSkipMask().substring (0, stepCount);
+
+        while (skipMask.length() < stepCount)
+            skipMask << "0";
+
+        return hasAColumnToPlay (skipMask, resetAt);
+    }
+
+    bool couldSkip (const model::GridModel& grid, int column, bool isSkipped)
+    {
+        auto skipMask = grid.getSkipMask();
+        skipMask = skipMask.substring (0, column) + (isSkipped ? "1" : "0") + skipMask.substring (column + 1);
+
+        return hasAColumnToPlay (skipMask, grid.getResetAt());
+    }
+
+    juce::String described (std::optional<int> fixedPitch)
+    {
+        return fixedPitch.has_value() ? juce::String (*fixedPitch) : juce::String ("no pitch");
+    }
+
+    juce::String described (const commands::CellValues& values)
+    {
+        return "{pitch " + juce::String (values.pitch) + ", on " + juce::String (values.on ? 1 : 0) + ", velocity " + juce::String (values.velocity) + ", gate " + juce::String (values.gate, 9) + "}";
+    }
+
+} // namespace
+
+// A sound target is a step clip, one that holds a Lane or a CcValue when
+// `contentNeeded` says so, and a gesture on it. An unsound one, also where a
+// sound one was wanted and the document has none: no such clip, an event
+// clip, or a step clip and a context that names a reference which is none
+// of the clip's.
+CommandDriver::StepClipTarget CommandDriver::stepClipTarget (bool wantsSound, const juce::Identifier& contentNeeded, commands::EditContext& editContext)
+{
+    std::vector<juce::ValueTree> stepClips;
+    std::vector<juce::ValueTree> fitting;
+    std::vector<juce::ValueTree> eventClips;
+
+    for (const auto& clip : clips())
+    {
+        if (isEventClip (clip))
+        {
+            eventClips.push_back (clip);
+            continue;
+        }
+
+        stepClips.push_back (clip);
+
+        const auto fits = contentNeeded == ids::Lane    ? ! gridLanesOf (clip).empty()
+                        : contentNeeded == ids::CcValue ? ! cellsWithCcValuesOf (clip).empty()
+                                                        : true;
+
+        if (fits)
+            fitting.push_back (clip);
+    }
+
+    StepClipTarget target;
+
+    if (wantsSound && ! fitting.empty())
+    {
+        target.clip = random.oneOf (fitting);
+        target.id = idOf (target.clip);
+        target.gesture = nameReferencesOf (target.clip, editContext);
+        target.isSound = true;
+        target.laneCount = static_cast<int> (gridLanesOf (target.clip).size());
+        target.stepCount = gridOf (target.clip).getStepCount();
+        return target;
+    }
+
+    const auto fault = random.intBetween (0, 2);
+
+    if (fault == 0 && ! eventClips.empty())
+    {
+        target.clip = random.oneOf (eventClips);
+        target.id = idOf (target.clip);
+        target.gesture = "an event clip, " + nameReferencesOf (target.clip, editContext);
+    }
+    else if (fault == 1 && ! stepClips.empty())
+    {
+        target.clip = random.oneOf (stepClips);
+        target.id = idOf (target.clip);
+        target.gesture = nameAWrongReference (target.id, editContext);
+    }
+    else
+    {
+        target.id = unknownId();
+        target.gesture = "at pool level";
+    }
+
+    return target;
+}
+
+// Any cell, its gate with more digits than the document keeps [D14]: the
+// command has to round it.
+commands::CellValues CommandDriver::cellValues()
+{
+    commands::CellValues values;
+    values.pitch = random.intBetween (0, 127);
+    values.on = random.chance (60);
+    values.velocity = random.intBetween (1, 127);
+    values.gate = random.chance (50) ? random.oneOf (std::vector<double> { 0.5, 0.25, 1.0 / 3.0, 1.0, 1.2, 4.0, 4.0000001, 0.00001, 1e-300 })
+                                     : static_cast<double> (random.between (1, 4000000000)) / 1000000000.0;
+
+    return values;
+}
+
+// A cell with one thing wrong.
+commands::CellValues CommandDriver::noCellValues()
+{
+    auto values = cellValues();
+
+    switch (random.intBetween (0, 2))
+    {
+        case 0:
+            values.pitch = notAPitch();
+            break;
+        case 1:
+            values.velocity = random.oneOf (std::vector<int> { 0, -1, 128, 1000 });
+            break;
+        default:
+            // The last is 0 in the six digits the document keeps.
+            values.gate = random.oneOf (std::vector<double> { 0.0, -0.0, -0.5, 4.00001, 4.5, 1000.0, std::numeric_limits<double>::infinity(), -std::numeric_limits<double>::infinity(),
+                                                              std::numeric_limits<double>::quiet_NaN(), std::numeric_limits<double>::denorm_min() });
+            break;
+    }
+
+    return values;
+}
+
+CommandChecks::Attempt CommandDriver::addLane()
+{
+    const auto wantsValid = wantsValidForm();
+    commands::EditContext editContext (policy());
+
+    // Invalid: an unsound target, or a fixed pitch that is no pitch.
+    const auto target = stepClipTarget (wantsValid || random.chance (50), {}, editContext);
+    const auto isValidForm = wantsValid && target.isSound;
+    const auto name = text();
+    std::optional<int> fixedPitch;
+
+    if (random.chance (50))
+        fixedPitch = random.intBetween (0, 127);
+
+    if (! isValidForm && target.isSound)
+        fixedPitch = notAPitch();
+
+    return made ("addLane (" + quoted (target.id) + ", " + quoted (name) + ", " + described (fixedPitch) + ", " + target.gesture + ")", isValidForm, commands::addLane (project, target.id, name, fixedPitch, editContext, undoManager));
+}
+
+CommandChecks::Attempt CommandDriver::removeLane()
+{
+    const auto wantsValid = wantsValidForm();
+    commands::EditContext editContext (policy());
+
+    // Invalid: an unsound target, or a position with no lane.
+    const auto target = stepClipTarget (wantsValid || random.chance (50), ids::Lane, editContext);
+    const auto isValidForm = wantsValid && target.isSound;
+    const auto laneIndex = (isValidForm || ! target.isSound) ? random.intBetween (0, target.laneCount - 1) : positionThatIsNotThere (random, target.laneCount);
+
+    return made ("removeLane (" + quoted (target.id) + ", " + juce::String (laneIndex) + ", " + target.gesture + ")", isValidForm, commands::removeLane (project, target.id, laneIndex, editContext, undoManager));
+}
+
+CommandChecks::Attempt CommandDriver::moveLane()
+{
+    const auto wantsValid = wantsValidForm();
+    commands::EditContext editContext (policy());
+
+    // Invalid: an unsound target; a position with no lane; a position to
+    // which none can move.
+    const auto target = stepClipTarget (wantsValid || random.chance (65), ids::Lane, editContext);
+    const auto isValidForm = wantsValid && target.isSound;
+    const auto hasWrongLane = ! isValidForm && target.isSound && random.chance (50);
+    const auto hasWrongTarget = ! isValidForm && target.isSound && ! hasWrongLane;
+    const auto laneIndex = hasWrongLane ? positionThatIsNotThere (random, target.laneCount) : random.intBetween (0, target.laneCount - 1);
+    const auto toPosition = hasWrongTarget ? positionThatIsNotThere (random, target.laneCount) : random.intBetween (0, target.laneCount - 1);
+
+    return made ("moveLane (" + quoted (target.id) + ", " + juce::String (laneIndex) + ", " + juce::String (toPosition) + ", " + target.gesture + ")", isValidForm, commands::moveLane (project, target.id, laneIndex, toPosition, editContext, undoManager));
+}
+
+CommandChecks::Attempt CommandDriver::setLaneName()
+{
+    const auto wantsValid = wantsValidForm();
+    commands::EditContext editContext (policy());
+
+    // Invalid: an unsound target, or a position with no lane.
+    const auto target = stepClipTarget (wantsValid || random.chance (50), ids::Lane, editContext);
+    const auto isValidForm = wantsValid && target.isSound;
+    const auto laneIndex = (isValidForm || ! target.isSound) ? random.intBetween (0, target.laneCount - 1) : positionThatIsNotThere (random, target.laneCount);
+    const auto name = text();
+
+    return made ("setLaneName (" + quoted (target.id) + ", " + juce::String (laneIndex) + ", " + quoted (name) + ", " + target.gesture + ")", isValidForm, commands::setLaneName (project, target.id, laneIndex, name, editContext, undoManager));
+}
+
+CommandChecks::Attempt CommandDriver::setLaneFixedPitch()
+{
+    const auto wantsValid = wantsValidForm();
+    commands::EditContext editContext (policy());
+
+    // Invalid: an unsound target; a position with no lane; a fixed pitch
+    // that is no pitch.
+    const auto target = stepClipTarget (wantsValid || random.chance (65), ids::Lane, editContext);
+    const auto isValidForm = wantsValid && target.isSound;
+    const auto hasWrongLane = ! isValidForm && target.isSound && random.chance (50);
+    const auto laneIndex = hasWrongLane ? positionThatIsNotThere (random, target.laneCount) : random.intBetween (0, target.laneCount - 1);
+    std::optional<int> fixedPitch;
+
+    if (random.chance (60))
+        fixedPitch = random.intBetween (0, 127);
+
+    if (! isValidForm && target.isSound && ! hasWrongLane)
+        fixedPitch = notAPitch();
+
+    return made ("setLaneFixedPitch (" + quoted (target.id) + ", " + juce::String (laneIndex) + ", " + described (fixedPitch) + ", " + target.gesture + ")", isValidForm, commands::setLaneFixedPitch (project, target.id, laneIndex, fixedPitch, editContext, undoManager));
+}
+
+CommandChecks::Attempt CommandDriver::setCell()
+{
+    const auto wantsValid = wantsValidForm();
+    commands::EditContext editContext (policy());
+
+    // Invalid: an unsound target; a position with no lane; a column the
+    // grid does not have; values that are no cell's.
+    const auto target = stepClipTarget (wantsValid || random.chance (65), ids::Lane, editContext);
+    const auto isValidForm = wantsValid && target.isSound;
+    const auto fault = (isValidForm || ! target.isSound) ? -1 : random.intBetween (0, 2);
+    const auto laneIndex = fault == 0 ? positionThatIsNotThere (random, target.laneCount) : random.intBetween (0, target.laneCount - 1);
+    const auto column = fault == 1 ? positionThatIsNotThere (random, target.stepCount) : random.intBetween (0, target.stepCount - 1);
+    const auto values = fault == 2 ? noCellValues() : cellValues();
+
+    return made ("setCell (" + quoted (target.id) + ", " + juce::String (laneIndex) + ", " + juce::String (column) + ", " + described (values) + ", " + target.gesture + ")", isValidForm, commands::setCell (project, target.id, laneIndex, column, values, editContext, undoManager));
+}
+
+CommandChecks::Attempt CommandDriver::setCellCc()
+{
+    const auto wantsValid = wantsValidForm();
+    commands::EditContext editContext (policy());
+
+    // Invalid: an unsound target; a position with no lane; a column the
+    // grid does not have; a controller number or a value that is none.
+    const auto target = stepClipTarget (wantsValid || random.chance (65), ids::Lane, editContext);
+    const auto isValidForm = wantsValid && target.isSound;
+    const auto fault = (isValidForm || ! target.isSound) ? -1 : random.intBetween (0, 3);
+    const auto laneIndex = fault == 0 ? positionThatIsNotThere (random, target.laneCount) : random.intBetween (0, target.laneCount - 1);
+    const auto column = fault == 1 ? positionThatIsNotThere (random, target.stepCount) : random.intBetween (0, target.stepCount - 1);
+
+    // Few controllers, so that a value that is there is met again.
+    const auto cc = fault == 2 ? notAPitch() : (random.chance (70) ? random.oneOf (std::vector<int> { 1, 71, 74 }) : random.intBetween (0, 127));
+    const auto value = fault == 3 ? notAPitch() : random.intBetween (0, 127);
+
+    return made ("setCellCc (" + quoted (target.id) + ", " + juce::String (laneIndex) + ", " + juce::String (column) + ", " + juce::String (cc) + ", " + juce::String (value) + ", " + target.gesture + ")", isValidForm,
+                 commands::setCellCc (project, target.id, laneIndex, column, cc, value, editContext, undoManager));
+}
+
+CommandChecks::Attempt CommandDriver::removeCellCc()
+{
+    const auto wantsValid = wantsValidForm();
+    commands::EditContext editContext (policy());
+
+    // Invalid: an unsound target; a column the grid does not have; a
+    // controller the cell has no value for.
+    const auto target = stepClipTarget (wantsValid || random.chance (65), ids::CcValue, editContext);
+    const auto isValidForm = wantsValid && target.isSound;
+
+    int laneIndex = 0;
+    int column = 0;
+    int cc = random.intBetween (0, 127);
+
+    if (target.isSound)
+    {
+        const auto cell = random.oneOf (cellsWithCcValuesOf (target.clip));
+        laneIndex = cell.laneIndex;
+        column = cell.column;
+        cc = random.oneOf (cell.controllers);
+
+        if (! isValidForm && random.chance (30))
+        {
+            column = positionThatIsNotThere (random, target.stepCount);
+        }
+        else if (! isValidForm)
+        {
+            // A cell has three values at most, so one of four numbers is
+            // free; now and then a number that is no controller's.
+            for (const auto candidate : { 0, 1, 2, 3 })
+                if (std::find (cell.controllers.begin(), cell.controllers.end(), candidate) == cell.controllers.end())
+                    cc = candidate;
+
+            if (cell.controllers.size() > 3 || random.chance (20))
+                cc = notAPitch();
+        }
+    }
+
+    return made ("removeCellCc (" + quoted (target.id) + ", " + juce::String (laneIndex) + ", " + juce::String (column) + ", " + juce::String (cc) + ", " + target.gesture + ")", isValidForm,
+                 commands::removeCellCc (project, target.id, laneIndex, column, cc, editContext, undoManager));
+}
+
+CommandChecks::Attempt CommandDriver::setStepLength()
+{
+    const auto wantsValid = wantsValidForm();
+    commands::EditContext editContext (policy());
+
+    // Invalid: an unsound target, or a step of no tick or of too many.
+    const auto target = stepClipTarget (wantsValid || random.chance (50), {}, editContext);
+    const auto isValidForm = wantsValid && target.isSound;
+
+    // Often short, so that offsets have to come back into the loop.
+    std::int64_t stepLength = random.chance (60) ? random.oneOf (std::vector<std::int64_t> { 1, 30, 60, 120, 240, 320, 480, 3840 }) : random.between (1, 3840);
+
+    if (! isValidForm && target.isSound)
+        stepLength = random.oneOf (std::vector<std::int64_t> { 0, -1, -240, 3841, 100000, std::numeric_limits<std::int64_t>::max(), std::numeric_limits<std::int64_t>::min() });
+
+    return made ("setStepLength (" + quoted (target.id) + ", " + juce::String (stepLength) + ", " + target.gesture + ")", isValidForm, commands::setStepLength (project, target.id, stepLength, editContext, undoManager));
+}
+
+CommandChecks::Attempt CommandDriver::setStepCount()
+{
+    const auto wantsValid = wantsValidForm();
+    commands::EditContext editContext (policy());
+
+    // Invalid: an unsound target; a count that is none; a count that
+    // leaves no column to play.
+    const auto target = stepClipTarget (wantsValid || random.chance (65), {}, editContext);
+    const auto isValidForm = wantsValid && target.isSound;
+    int stepCount = random.intBetween (1, 64);
+
+    if (target.isSound)
+    {
+        std::vector<int> possible;
+        std::vector<int> leavingNoColumn;
+
+        for (int count = 1; count <= 64; ++count)
+            (couldHaveColumns (gridOf (target.clip), count) ? possible : leavingNoColumn).push_back (count);
+
+        // The count the grid has is always possible.
+        if (isValidForm)
+            stepCount = random.oneOf (possible);
+        else if (! leavingNoColumn.empty() && random.chance (60))
+            stepCount = random.oneOf (leavingNoColumn);
+        else
+            stepCount = random.oneOf (std::vector<int> { 0, -1, 65, 1000, std::numeric_limits<int>::min(), std::numeric_limits<int>::max() });
+    }
+
+    return made ("setStepCount (" + quoted (target.id) + ", " + juce::String (stepCount) + ", " + target.gesture + ")", isValidForm, commands::setStepCount (project, target.id, stepCount, editContext, undoManager));
+}
+
+CommandChecks::Attempt CommandDriver::setResetAt()
+{
+    const auto wantsValid = wantsValidForm();
+    commands::EditContext editContext (policy());
+
+    // Invalid: an unsound target; a reset outside the grid; a reset before
+    // which every column is skipped.
+    const auto target = stepClipTarget (wantsValid || random.chance (65), {}, editContext);
+    const auto isValidForm = wantsValid && target.isSound;
+    int resetAt = random.intBetween (1, 16);
+
+    if (target.isSound)
+    {
+        const auto skipMask = gridOf (target.clip).getSkipMask();
+        std::vector<int> possible;
+        std::vector<int> leavingNoColumn;
+
+        for (int candidate = 1; candidate <= target.stepCount; ++candidate)
+            (hasAColumnToPlay (skipMask, candidate) ? possible : leavingNoColumn).push_back (candidate);
+
+        // The reset the grid has is always possible.
+        if (isValidForm)
+            resetAt = random.oneOf (possible);
+        else if (! leavingNoColumn.empty() && random.chance (60))
+            resetAt = random.oneOf (leavingNoColumn);
+        else
+            resetAt = random.oneOf (std::vector<int> { 0, -1, target.stepCount + 1, 1000, std::numeric_limits<int>::min(), std::numeric_limits<int>::max() });
+    }
+
+    return made ("setResetAt (" + quoted (target.id) + ", " + juce::String (resetAt) + ", " + target.gesture + ")", isValidForm, commands::setResetAt (project, target.id, resetAt, editContext, undoManager));
+}
+
+CommandChecks::Attempt CommandDriver::setColumnSkipped()
+{
+    const auto wantsValid = wantsValidForm();
+    commands::EditContext editContext (policy());
+
+    // Invalid: an unsound target; a column the grid does not have; the
+    // skip of the last column that plays.
+    const auto target = stepClipTarget (wantsValid || random.chance (65), {}, editContext);
+    const auto isValidForm = wantsValid && target.isSound;
+    int column = random.intBetween (0, 15);
+    bool isSkipped = random.chance (50);
+
+    if (target.isSound)
+    {
+        const auto grid = gridOf (target.clip);
+        std::vector<int> lastToPlay;
+
+        for (int candidate = 0; candidate < target.stepCount; ++candidate)
+            if (! couldSkip (grid, candidate, true))
+                lastToPlay.push_back (candidate);
+
+        column = random.intBetween (0, target.stepCount - 1);
+
+        if (isValidForm)
+        {
+            // Mostly the other state than the column has, so that
+            // something changes.
+            isSkipped = grid.isColumnSkipped (column) ? random.chance (10) : random.chance (90);
+
+            if (! couldSkip (grid, column, isSkipped))
+                isSkipped = false;
+        }
+        else if (! lastToPlay.empty() && random.chance (60))
+        {
+            column = random.oneOf (lastToPlay);
+            isSkipped = true;
+        }
+        else
+        {
+            column = positionThatIsNotThere (random, target.stepCount);
+        }
+    }
+
+    return made ("setColumnSkipped (" + quoted (target.id) + ", " + juce::String (column) + ", " + juce::String (isSkipped ? 1 : 0) + ", " + target.gesture + ")", isValidForm,
+                 commands::setColumnSkipped (project, target.id, column, isSkipped, editContext, undoManager));
 }
 
 //==============================================================================

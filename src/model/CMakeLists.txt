@@ -83,6 +83,8 @@ hums_add_layer(hums_model
         commands/PadMapCommands.h
         commands/PlacementCommands.cpp
         commands/PlacementCommands.h
+        commands/PlacementOffsets.cpp
+        commands/PlacementOffsets.h
         commands/RefcountGate.cpp
         commands/RefcountGate.h
         commands/RoutingCommands.cpp
@@ -93,6 +95,8 @@ hums_add_layer(hums_model
         commands/SiblingOrder.h
         commands/SlotCommands.cpp
         commands/SlotCommands.h
+        commands/StepClipCommands.cpp
+        commands/StepClipCommands.h
         commands/TimelineCommands.cpp
         commands/TimelineCommands.h
         commands/TrackCommands.cpp

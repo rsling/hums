@@ -51,7 +51,10 @@ TEST_CASE ("guardrail 3: over the first 100 seeds every command is applied in a 
         guardrails::RandomSource random (seed);
         guardrails::CommandDriver driver (project, undoManager, random);
 
-        for (int command = 0; command < 25; ++command)
+        // Enough of them for every command of the table to make a clone
+        // somewhere in the hundred seeds: with a longer table each command
+        // is drawn less often.
+        for (int command = 0; command < 40; ++command)
         {
             const auto clipPool = project.getChildWithName (model::ids::ClipPool);
             const auto clipsBefore = clipPool.getNumChildren();
@@ -81,7 +84,8 @@ TEST_CASE ("guardrail 3: over the first 100 seeds every command is applied in a 
     CHECK (madeUnique.contains ("setClipName"));
     CHECK (madeUnique.contains ("setClipColour"));
 
-    for (const auto* command : { "addNote", "setNote", "removeNote", "addEvent", "setEvent", "removeEvent", "setClipLoopLength", "setClipQuantise" })
+    for (const auto* command : { "addNote", "setNote", "removeNote", "addEvent", "setEvent", "removeEvent", "setClipLoopLength", "setClipQuantise", "addLane", "removeLane", "moveLane", "setLaneName", "setLaneFixedPitch", "setCell", "setCellCc",
+                                 "removeCellCc", "setStepLength", "setStepCount", "setResetAt", "setColumnSkipped" })
     {
         INFO (command);
         CHECK (madeUnique.contains (command));

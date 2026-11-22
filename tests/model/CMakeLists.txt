@@ -41,6 +41,7 @@ hums_add_test_executable(model_tests
     SiblingOrderTest.cpp
     SlotCommandsTest.cpp
     SlotModelTest.cpp
+    StepClipCommandsTest.cpp
     TempoEventModelTest.cpp
     TimeSigEventModelTest.cpp
     TimelineCommandsTest.cpp

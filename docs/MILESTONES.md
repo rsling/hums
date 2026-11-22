@@ -19,7 +19,6 @@ Known gaps that are not decisions (those are in `docs/DECISIONS.md`) and are not
 
 | pick up at | issue |
 |---|---|
-| milestone 1 | **[D14]** is built for `bpm` (`setTempo`, task F.17) and not yet for `gate`: the command that stores a cell's gate (task F.24) must store `model::CanonicalDouble::textOf` of it, the saved text and never a number, as `setTempo` does, and refuse a gate whose rounded value is outside `(0, 4]`. |
 | milestone 1 | The gate's TSan run filters tests by `engine\|canary`, which now also matches the five guardrail 2 fixture tests with "engine" in their names (TSan reports 6 tests, not 1). They are script runs and harmless, but the count misleads. Tighten the filter in `tools/gate.sh` when the first real engine test gets its name (a gate change: Roland's yes). |
 | milestone 3 | `MidiScheduler` has no way to ask whether a port has gone; the engine learns it only from refused sends. Decide with the Routing tab how "unassigned" reaches the message thread (JUCE's device-list change, or a query on the interface). |
 | milestone 2 | An SMF tempo event has 24 bits, so `TempoMap` **[D13]** cannot hold a tempo below about 3.58 bpm (16 777 215 µs per quarter). Decide with the Validator's `bpm` range whether such a tempo is refused on entry or clamped. |

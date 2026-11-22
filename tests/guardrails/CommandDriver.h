@@ -5,6 +5,7 @@
 #include "model/commands/CommandResult.h"
 #include "model/commands/EditContext.h"
 #include "model/commands/EventClipCommands.h"
+#include "model/commands/StepClipCommands.h"
 
 #include <juce_data_structures/juce_data_structures.h>
 
@@ -21,7 +22,8 @@ namespace guardrails
 // tempo at tick 0 removed, a track on channel 17, a clip removed that is
 // still placed, a clip with notes on an automation lane, a clip changed
 // through a placement of another clip, a note into a clip that an automation
-// lane references, a loop of no tick).
+// lane references, a loop of no tick, a gate of 0, the skip of the last
+// column that plays, a step count that leaves none).
 //
 // A command that changes a clip is a gesture with an edit context of its
 // own: of either policy, at pool level or through some of the clip's
@@ -124,6 +126,30 @@ private:
     model::commands::EventValues eventValues (bool ccOnly);
     model::commands::EventValues noEventValues();
 
+    // The clip and the gesture of a command on what a step clip holds.
+    struct StepClipTarget
+    {
+        // Invalid when the command names a clip that is not there.
+        juce::ValueTree clip;
+        juce::String id;
+
+        // The gesture in words, for the description of the attempt.
+        juce::String gesture;
+
+        // False when the command must refuse whatever else it is given: no
+        // such clip, an event clip, a context with a wrong reference.
+        bool isSound = false;
+
+        // What a sound target has; 1 and 16 otherwise, so that a position
+        // can be drawn all the same.
+        int laneCount = 1;
+        int stepCount = 16;
+    };
+
+    StepClipTarget stepClipTarget (bool wantsSound, const juce::Identifier& contentNeeded, model::commands::EditContext& editContext);
+    model::commands::CellValues cellValues();
+    model::commands::CellValues noCellValues();
+
     // Routing.
     Attempt addPerformer();
     Attempt removePerformer();
@@ -191,6 +217,20 @@ private:
     Attempt removeEvent();
     Attempt setClipLoopLength();
     Attempt setClipQuantise();
+
+    // What a step clip holds.
+    Attempt addLane();
+    Attempt removeLane();
+    Attempt moveLane();
+    Attempt setLaneName();
+    Attempt setLaneFixedPitch();
+    Attempt setCell();
+    Attempt setCellCc();
+    Attempt removeCellCc();
+    Attempt setStepLength();
+    Attempt setStepCount();
+    Attempt setResetAt();
+    Attempt setColumnSkipped();
 
     // Placements.
     Attempt addPlacement();

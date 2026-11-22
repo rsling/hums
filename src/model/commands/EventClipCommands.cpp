@@ -4,9 +4,9 @@
 #include "model/ClipModel.h"
 #include "model/Ids.h"
 #include "model/NoteModel.h"
-#include "model/PlacementModel.h"
 #include "model/PropertyReader.h"
 #include "model/commands/NodeLookup.h"
+#include "model/commands/PlacementOffsets.h"
 #include "model/commands/RefcountGate.h"
 
 #include <limits>
@@ -416,39 +416,8 @@ CommandResult setClipLoopLength (juce::ValueTree project, const juce::String& cl
     clip.setProperty (ids::loopLength, static_cast<juce::int64> (loopLength), &undoManager);
 
     // Every placement of the changed clip — after a clone, those of the
-    // clone — keeps its offset inside the loop (invariant 4). Slots have no
-    // offset. A valid document has no negative offset.
-    const auto changedClipId = PropertyReader::getRequiredString (clip, ids::id);
-
-    for (const auto& track : NodeLookup::childrenOfType (project.getChildWithName (ids::Tracks), ids::Track))
-    {
-        auto parents = NodeLookup::childrenOfType (track.getChildWithName (ids::AutomationLanes), ids::AutomationLane);
-        parents.push_back (track.getChildWithName (ids::Placements));
-
-        for (const auto& parent : parents)
-        {
-            for (auto node : NodeLookup::childrenOfType (parent, ids::Placement))
-            {
-                const PlacementModel placement (node);
-
-                if (placement.getClipId() != changedClipId)
-                    continue;
-
-                const auto offset = placement.getOffset();
-                const auto offsetInLoop = offset % loopLength;
-
-                // An offset of 0 is the default and is not stored, as on a
-                // new placement.
-                if (offsetInLoop == offset)
-                    continue;
-
-                if (offsetInLoop == 0)
-                    node.removeProperty (ids::offset, &undoManager);
-                else
-                    node.setProperty (ids::offset, static_cast<juce::int64> (offsetInLoop), &undoManager);
-            }
-        }
-    }
+    // clone — keeps its offset inside the loop (invariant 4).
+    PlacementOffsets::bringIntoLoop (project, PropertyReader::getRequiredString (clip, ids::id), loopLength, undoManager);
 
     return CommandResult::applied();
 }
