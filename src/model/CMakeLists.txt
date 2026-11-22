@@ -73,12 +73,16 @@ hums_add_layer(hums_model
         commands/ClipPoolCommands.cpp
         commands/ClipPoolCommands.h
         commands/CommandResult.h
+        commands/EditContext.cpp
+        commands/EditContext.h
         commands/NodeLookup.cpp
         commands/NodeLookup.h
         commands/PadMapCommands.cpp
         commands/PadMapCommands.h
         commands/PlacementCommands.cpp
         commands/PlacementCommands.h
+        commands/RefcountGate.cpp
+        commands/RefcountGate.h
         commands/RoutingCommands.cpp
         commands/RoutingCommands.h
         commands/SessionCommands.cpp

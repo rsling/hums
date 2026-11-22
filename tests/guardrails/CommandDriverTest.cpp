@@ -8,6 +8,7 @@
 #include "CommandDriver.h"
 #include "DocumentGenerator.h"
 #include "RandomSource.h"
+#include "model/Ids.h"
 
 #include <cstdint>
 #include <set>
@@ -39,6 +40,10 @@ TEST_CASE ("guardrail 3: over the first 100 seeds every command is applied in a 
     std::set<std::string> applied;
     std::set<std::string> refused;
 
+    // The commands that change a clip, counted when the pool was one clip
+    // larger afterwards: the refcount gate made a clone.
+    std::set<std::string> madeUnique;
+
     for (std::uint64_t seed = 1; seed <= 100; ++seed)
     {
         auto project = guardrails::DocumentGenerator::generate (seed);
@@ -48,8 +53,14 @@ TEST_CASE ("guardrail 3: over the first 100 seeds every command is applied in a 
 
         for (int command = 0; command < 25; ++command)
         {
+            const auto clipPool = project.getChildWithName (model::ids::ClipPool);
+            const auto clipsBefore = clipPool.getNumChildren();
+
             undoManager.beginNewTransaction();
             const auto attempt = driver.attemptOne();
+
+            if (clipPool.getNumChildren() == clipsBefore + 1)
+                madeUnique.insert (nameIn (attempt.description));
 
             // What is expected of a form is what happened; that every form
             // is expected rightly is the property test's to show.
@@ -65,6 +76,10 @@ TEST_CASE ("guardrail 3: over the first 100 seeds every command is applied in a 
         CHECK (applied.contains (command.name));
         CHECK (refused.contains (command.name) == command.hasInvalidForm);
     }
+
+    // A gate that never clones in the property tests is held to nothing.
+    CHECK (madeUnique.contains ("setClipName"));
+    CHECK (madeUnique.contains ("setClipColour"));
 }
 
 TEST_CASE ("guardrail 3: the same seed gives the same commands", "[guardrails][CommandDriver]")

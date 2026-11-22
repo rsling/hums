@@ -3,6 +3,7 @@
 #include "CommandChecks.h"
 #include "RandomSource.h"
 #include "model/commands/CommandResult.h"
+#include "model/commands/EditContext.h"
 
 #include <juce_data_structures/juce_data_structures.h>
 
@@ -17,7 +18,12 @@ namespace guardrails
 // tests (docs/GUARDRAILS.md -> 3): valid ones and deliberately invalid ones
 // (a port that is not there, a pad number that is taken, a tempo of 0, the
 // tempo at tick 0 removed, a track on channel 17, a clip removed that is
-// still placed, a clip with notes on an automation lane).
+// still placed, a clip with notes on an automation lane, a clip changed
+// through a placement of another clip).
+//
+// A command that changes a clip is a gesture with an edit context of its
+// own: of either policy, at pool level or through some of the clip's
+// references (docs/EDITING.md -> make unique).
 //
 // It looks at the document as it is now to know what is valid: which ids
 // there are, which pad numbers are taken. A valid form that needs something
@@ -84,6 +90,12 @@ private:
     bool isLargestRowInUse() const;
     int row();
     std::vector<juce::ValueTree> lanes() const;
+
+    // Edit contexts. Each names references in the context and gives back
+    // the words for the description of the attempt.
+    model::Settings::SharedEditPolicy policy();
+    juce::String nameReferencesOf (const juce::ValueTree& clip, model::commands::EditContext& editContext);
+    juce::String nameAWrongReference (const juce::String& clipId, model::commands::EditContext& editContext);
 
     // Routing.
     Attempt addPerformer();

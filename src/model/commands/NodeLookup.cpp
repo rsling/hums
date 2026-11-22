@@ -42,4 +42,27 @@ juce::ValueTree NodeLookup::childWithNumber (const juce::ValueTree& parent, cons
     return {};
 }
 
+juce::ValueTree NodeLookup::placementWithId (const juce::ValueTree& project, const juce::String& placementId)
+{
+    jassert (project.hasType (ids::Project));
+
+    for (const auto& track : childrenOfType (project.getChildWithName (ids::Tracks), ids::Track))
+    {
+        const auto own = childWithId (track.getChildWithName (ids::Placements), ids::Placement, placementId);
+
+        if (own.isValid())
+            return own;
+
+        for (const auto& lane : childrenOfType (track.getChildWithName (ids::AutomationLanes), ids::AutomationLane))
+        {
+            const auto onLane = childWithId (lane, ids::Placement, placementId);
+
+            if (onLane.isValid())
+                return onLane;
+        }
+    }
+
+    return {};
+}
+
 } // namespace model::commands

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "model/commands/CommandResult.h"
+#include "model/commands/EditContext.h"
 
 #include <juce_data_structures/juce_data_structures.h>
 
@@ -15,10 +16,12 @@ namespace model::commands
 // cells, the loop length of an event clip, its quantise setting — has
 // commands of its own.
 //
-// A clip is named by its id. These are commands on the pool: they name no
-// Placement and no Slot through which the clip is edited, so a name or a
-// colour that is set here is set for every reference of the clip ("update
-// all" by definition, docs/EDITING.md).
+// A clip is named by its id. Making and removing are commands on the pool.
+// Name and colour are changes to a clip, so they pass the refcount gate with
+// the gesture's edit context like every such change (docs/EDITING.md,
+// RefcountGate): set for every reference of the clip, or, under "make
+// unique" through the references the context names, for a clone that only
+// those reference. A context that names no reference sets them for all.
 //
 // Like every command: `project` is the Project node of a valid document; a
 // command checks everything before it touches the tree, applies completely
@@ -37,10 +40,13 @@ CommandResult addEventClip (juce::ValueTree project, const juce::String& name, s
 // result carries the id.
 CommandResult addStepClip (juce::ValueTree project, const juce::String& name, juce::UndoManager& undoManager);
 
-CommandResult setClipName (juce::ValueTree project, const juce::String& clipId, const juce::String& name, juce::UndoManager& undoManager);
+// Any text, also an empty one. Setting the name the clip already has
+// changes nothing and makes no clone. Refused when the gate refuses.
+CommandResult setClipName (juce::ValueTree project, const juce::String& clipId, const juce::String& name, EditContext& editContext, juce::UndoManager& undoManager);
 
-// "#AARRGGBB", or empty for no colour; anything else is refused.
-CommandResult setClipColour (juce::ValueTree project, const juce::String& clipId, const juce::String& colour, juce::UndoManager& undoManager);
+// "#AARRGGBB", or empty for no colour; anything else is refused. Otherwise
+// like setClipName.
+CommandResult setClipColour (juce::ValueTree project, const juce::String& clipId, const juce::String& colour, EditContext& editContext, juce::UndoManager& undoManager);
 
 // Takes the clip out of the pool. Refused while a Placement or a Slot
 // references it (refcount > 0): remove those first.

@@ -1101,23 +1101,47 @@ CommandChecks::Attempt CommandDriver::setClipName()
 {
     const auto known = clips();
     const auto isValidForm = wantsValidForm() && ! known.empty();
-    const auto id = isValidForm ? idOf (random.oneOf (known)) : unknownId();
     const auto name = text();
+    commands::EditContext editContext (policy());
 
-    return made ("setClipName (" + quoted (id) + ", " + quoted (name) + ")", isValidForm, commands::setClipName (project, id, name, undoManager));
+    // Invalid: no such clip, or a clip and a context that names a reference
+    // which is none of the clip's.
+    const auto hasKnownId = isValidForm || (! known.empty() && random.chance (50));
+    const auto clip = hasKnownId ? random.oneOf (known) : juce::ValueTree();
+    const auto id = hasKnownId ? idOf (clip) : unknownId();
+
+    juce::String gesture = "at pool level";
+
+    if (isValidForm)
+        gesture = nameReferencesOf (clip, editContext);
+    else if (hasKnownId)
+        gesture = nameAWrongReference (id, editContext);
+
+    return made ("setClipName (" + quoted (id) + ", " + quoted (name) + ", " + gesture + ")", isValidForm, commands::setClipName (project, id, name, editContext, undoManager));
 }
 
 CommandChecks::Attempt CommandDriver::setClipColour()
 {
     const auto known = clips();
     const auto isValidForm = wantsValidForm() && ! known.empty();
+    commands::EditContext editContext (policy());
 
-    // Invalid: no such clip, or a clip and no colour.
-    const auto hasKnownId = isValidForm || (! known.empty() && random.chance (50));
-    const auto id = hasKnownId ? idOf (random.oneOf (known)) : unknownId();
-    const auto value = (isValidForm || ! hasKnownId) ? colour() : noColour();
+    // Invalid: no such clip; a clip and no colour; a clip and a context
+    // that names a reference which is none of the clip's.
+    const auto hasKnownId = isValidForm || (! known.empty() && random.chance (60));
+    const auto clip = hasKnownId ? random.oneOf (known) : juce::ValueTree();
+    const auto id = hasKnownId ? idOf (clip) : unknownId();
+    const auto hasWrongReference = ! isValidForm && hasKnownId && random.chance (50);
+    const auto value = (isValidForm || ! hasKnownId || hasWrongReference) ? colour() : noColour();
 
-    return made ("setClipColour (" + quoted (id) + ", " + quoted (value) + ")", isValidForm, commands::setClipColour (project, id, value, undoManager));
+    juce::String gesture = "at pool level";
+
+    if (isValidForm)
+        gesture = nameReferencesOf (clip, editContext);
+    else if (hasWrongReference)
+        gesture = nameAWrongReference (id, editContext);
+
+    return made ("setClipColour (" + quoted (id) + ", " + quoted (value) + ", " + gesture + ")", isValidForm, commands::setClipColour (project, id, value, editContext, undoManager));
 }
 
 CommandChecks::Attempt CommandDriver::removeClip()
@@ -1785,6 +1809,92 @@ CommandChecks::Attempt CommandDriver::addLanePlacement()
     }
 
     return made ("addLanePlacement (" + quoted (laneId) + ", " + quoted (clipId) + ", " + juce::String (start) + ", " + juce::String (length) + ")", isValidForm, commands::addLanePlacement (project, laneId, clipId, start, length, undoManager));
+}
+
+//==============================================================================
+// Edit contexts.
+
+model::Settings::SharedEditPolicy CommandDriver::policy()
+{
+    return random.chance (50) ? model::Settings::SharedEditPolicy::makeUnique : model::Settings::SharedEditPolicy::updateAll;
+}
+
+// A gesture on this clip: at pool level, or through some of the placements
+// and slots that reference it, now and then through all of them.
+juce::String CommandDriver::nameReferencesOf (const juce::ValueTree& clip, commands::EditContext& editContext)
+{
+    const auto clipId = idOf (clip);
+    const auto share = random.oneOf (std::vector<int> { 0, 30, 60, 100 });
+
+    for (const auto& placement : placements())
+        if (PropertyReader::getRequiredString (placement, ids::clipId) == clipId && random.chance (share))
+            editContext.addPlacement (idOf (placement));
+
+    for (const auto& slot : slots())
+        if (PropertyReader::getRequiredString (slot, ids::clipId) == clipId && random.chance (share))
+            editContext.addSlot (idOf (slot.getParent().getParent()), sceneOf (slot));
+
+    const juce::String policyName = editContext.getPolicy() == model::Settings::SharedEditPolicy::makeUnique ? "make unique" : "update all";
+
+    if (! editContext.hasReferences())
+        return policyName + " at pool level";
+
+    return policyName + " through " + juce::String (editContext.getPlacementIds().size()) + " placements and " + juce::String (editContext.getSlots().size()) + " slots of " + juce::String (refcountOf (clip)) + " references";
+}
+
+// A gesture that cannot be one on this clip: its context names a placement
+// that is not there or is another clip's, a slot that is empty or holds
+// another clip, or a slot of a track that is not there.
+juce::String CommandDriver::nameAWrongReference (const juce::String& clipId, commands::EditContext& editContext)
+{
+    std::vector<juce::ValueTree> placementsOfOthers;
+    std::vector<juce::ValueTree> slotsOfOthers;
+
+    for (const auto& placement : placements())
+        if (PropertyReader::getRequiredString (placement, ids::clipId) != clipId)
+            placementsOfOthers.push_back (placement);
+
+    for (const auto& slot : slots())
+        if (PropertyReader::getRequiredString (slot, ids::clipId) != clipId)
+            slotsOfOthers.push_back (slot);
+
+    const auto known = tracks();
+    const auto choice = random.intBetween (0, 4);
+
+    if (choice == 0 && ! placementsOfOthers.empty())
+    {
+        editContext.addPlacement (idOf (random.oneOf (placementsOfOthers)));
+        return "through a placement of another clip";
+    }
+
+    if (choice == 1 && ! slotsOfOthers.empty())
+    {
+        const auto slot = random.oneOf (slotsOfOthers);
+        editContext.addSlot (idOf (slot.getParent().getParent()), sceneOf (slot));
+        return "through a slot that holds another clip";
+    }
+
+    if (choice == 2 && ! known.empty())
+    {
+        // A row of this track that nothing is stored for.
+        const auto track = random.oneOf (known);
+        int scene = 0;
+
+        while (NodeLookup::childWithNumber (track.getChildWithName (ids::Slots), ids::Slot, ids::scene, scene).isValid())
+            ++scene;
+
+        editContext.addSlot (idOf (track), scene);
+        return "through an empty slot";
+    }
+
+    if (choice == 3)
+    {
+        editContext.addSlot (unknownId(), 0);
+        return "through a slot of a track that is not there";
+    }
+
+    editContext.addPlacement (unknownId());
+    return "through a placement that is not there";
 }
 
 } // namespace guardrails

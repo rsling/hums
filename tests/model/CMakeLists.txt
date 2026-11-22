@@ -13,6 +13,7 @@ hums_add_test_executable(model_tests
     ColourTextTest.cpp
     CommandFixture.h
     DeclaredIdentifiersTest.cpp
+    EditContextTest.cpp
     EventModelTest.cpp
     GridModelTest.cpp
     KnobModelTest.cpp
@@ -29,6 +30,7 @@ hums_add_test_executable(model_tests
     PlayerModelTest.cpp
     ProjectModelTest.cpp
     PropertyReaderTest.cpp
+    RefcountGateTest.cpp
     RoutingCommandsTest.cpp
     RoutingModelTest.cpp
     SceneModelTest.cpp

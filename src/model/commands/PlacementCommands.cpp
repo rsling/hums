@@ -27,31 +27,6 @@ namespace
         return NodeLookup::childWithId (project.getChildWithName (ids::ClipPool), ids::Clip, clipId);
     }
 
-    // The placement with this id, wherever it is: among a track's own, or
-    // on one of its automation lanes.
-    juce::ValueTree placementOf (const juce::ValueTree& project, const juce::String& placementId)
-    {
-        jassert (project.hasType (ids::Project));
-
-        for (const auto& track : NodeLookup::childrenOfType (project.getChildWithName (ids::Tracks), ids::Track))
-        {
-            const auto own = NodeLookup::childWithId (track.getChildWithName (ids::Placements), ids::Placement, placementId);
-
-            if (own.isValid())
-                return own;
-
-            for (const auto& lane : NodeLookup::childrenOfType (track.getChildWithName (ids::AutomationLanes), ids::AutomationLane))
-            {
-                const auto onLane = NodeLookup::childWithId (lane, ids::Placement, placementId);
-
-                if (onLane.isValid())
-                    return onLane;
-            }
-        }
-
-        return {};
-    }
-
     // The automation lane with this id, on whichever track it is.
     juce::ValueTree laneOf (const juce::ValueTree& project, const juce::String& laneId)
     {
@@ -242,7 +217,7 @@ CommandResult addLanePlacement (juce::ValueTree project, const juce::String& lan
 
 CommandResult movePlacement (juce::ValueTree project, const juce::String& placementId, std::int64_t toStart, juce::UndoManager& undoManager)
 {
-    auto placement = placementOf (project, placementId);
+    auto placement = NodeLookup::placementWithId (project, placementId);
 
     if (! placement.isValid())
         return noSuchPlacement (placementId);
@@ -259,7 +234,7 @@ CommandResult movePlacement (juce::ValueTree project, const juce::String& placem
 
 CommandResult movePlacementToTrack (juce::ValueTree project, const juce::String& placementId, const juce::String& toTrackId, std::int64_t toStart, juce::UndoManager& undoManager)
 {
-    auto placement = placementOf (project, placementId);
+    auto placement = NodeLookup::placementWithId (project, placementId);
 
     if (! placement.isValid())
         return noSuchPlacement (placementId);
@@ -296,7 +271,7 @@ CommandResult movePlacementToTrack (juce::ValueTree project, const juce::String&
 
 CommandResult resizePlacement (juce::ValueTree project, const juce::String& placementId, std::int64_t length, juce::UndoManager& undoManager)
 {
-    auto placement = placementOf (project, placementId);
+    auto placement = NodeLookup::placementWithId (project, placementId);
 
     if (! placement.isValid())
         return noSuchPlacement (placementId);
@@ -313,7 +288,7 @@ CommandResult resizePlacement (juce::ValueTree project, const juce::String& plac
 
 CommandResult splitPlacement (juce::ValueTree project, const juce::String& placementId, std::int64_t atTick, juce::UndoManager& undoManager)
 {
-    auto placement = placementOf (project, placementId);
+    auto placement = NodeLookup::placementWithId (project, placementId);
 
     if (! placement.isValid())
         return noSuchPlacement (placementId);
@@ -357,7 +332,7 @@ CommandResult splitPlacement (juce::ValueTree project, const juce::String& place
 
 CommandResult removePlacement (juce::ValueTree project, const juce::String& placementId, juce::UndoManager& undoManager)
 {
-    const auto placement = placementOf (project, placementId);
+    const auto placement = NodeLookup::placementWithId (project, placementId);
 
     if (! placement.isValid())
         return noSuchPlacement (placementId);

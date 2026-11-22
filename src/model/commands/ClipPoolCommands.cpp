@@ -5,6 +5,7 @@
 #include "model/PropertyReader.h"
 #include "model/TracksModel.h"
 #include "model/commands/NodeLookup.h"
+#include "model/commands/RefcountGate.h"
 
 namespace model::commands
 {
@@ -90,31 +91,41 @@ CommandResult addStepClip (juce::ValueTree project, const juce::String& name, ju
     return CommandResult::appliedAndCreated (id);
 }
 
-CommandResult setClipName (juce::ValueTree project, const juce::String& clipId, const juce::String& name, juce::UndoManager& undoManager)
+namespace
 {
-    auto clip = clipOf (project, clipId);
 
-    if (! clip.isValid())
-        return noSuchClip (clipId);
+    // Sets one text property of a clip through the refcount gate. A clip
+    // that has the value already is left alone, so that an edit that
+    // changes nothing makes no clone either.
+    CommandResult setClipText (juce::ValueTree project, const juce::String& clipId, const juce::Identifier& property, const juce::String& value, EditContext& editContext, juce::UndoManager& undoManager)
+    {
+        const auto admission = RefcountGate::admit (project, clipId, editContext, undoManager);
 
-    clip.setProperty (ids::name, name, &undoManager);
+        if (! admission.wasAdmitted())
+            return CommandResult::refused (admission.refusal);
 
-    return CommandResult::applied();
+        if (PropertyReader::getString (admission.clip, property, "") == value)
+            return CommandResult::applied();
+
+        auto clip = RefcountGate::open (project, admission, editContext, undoManager);
+        clip.setProperty (property, value, &undoManager);
+
+        return CommandResult::applied();
+    }
+
+} // namespace
+
+CommandResult setClipName (juce::ValueTree project, const juce::String& clipId, const juce::String& name, EditContext& editContext, juce::UndoManager& undoManager)
+{
+    return setClipText (project, clipId, ids::name, name, editContext, undoManager);
 }
 
-CommandResult setClipColour (juce::ValueTree project, const juce::String& clipId, const juce::String& colour, juce::UndoManager& undoManager)
+CommandResult setClipColour (juce::ValueTree project, const juce::String& clipId, const juce::String& colour, EditContext& editContext, juce::UndoManager& undoManager)
 {
-    auto clip = clipOf (project, clipId);
-
-    if (! clip.isValid())
-        return noSuchClip (clipId);
-
     if (! ColourText::isValid (colour))
         return CommandResult::refused ("\"" + colour + "\" is not a colour: '#' and eight hexadecimal digits, or nothing for no colour.");
 
-    clip.setProperty (ids::colour, colour, &undoManager);
-
-    return CommandResult::applied();
+    return setClipText (project, clipId, ids::colour, colour, editContext, undoManager);
 }
 
 CommandResult removeClip (juce::ValueTree project, const juce::String& clipId, juce::UndoManager& undoManager)

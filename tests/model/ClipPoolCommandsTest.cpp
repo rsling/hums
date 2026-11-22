@@ -65,6 +65,20 @@ void putClipInSlot (CommandFixture& fixture, int trackPosition, const juce::Stri
     fixture.track (trackPosition).getChildWithName (ids::Slots).appendChild (slot, nullptr);
 }
 
+// Name and colour set at pool level: by a gesture of its own that names no
+// reference. What a context with references does is in RefcountGateTest.
+commands::CommandResult renameInPool (CommandFixture& fixture, const juce::String& clipId, const juce::String& name)
+{
+    commands::EditContext poolLevel (model::Settings::SharedEditPolicy::updateAll);
+    return commands::setClipName (fixture.project, clipId, name, poolLevel, fixture.undoManager);
+}
+
+commands::CommandResult colourInPool (CommandFixture& fixture, const juce::String& clipId, const juce::String& colour)
+{
+    commands::EditContext poolLevel (model::Settings::SharedEditPolicy::updateAll);
+    return commands::setClipColour (fixture.project, clipId, colour, poolLevel, fixture.undoManager);
+}
+
 juce::String addedEventClip (CommandFixture& fixture, const juce::String& name)
 {
     const auto result = commands::addEventClip (fixture.project, name, 3840, fixture.undoManager);
@@ -205,10 +219,10 @@ TEST_CASE ("The name and the colour of a clip are set through commands, for clip
     const auto eventClipId = addedEventClip (fixture, "Lead");
     const auto stepClipId = addedStepClip (fixture, "Bass");
 
-    REQUIRE (commands::setClipName (fixture.project, eventClipId, "Lead 2", fixture.undoManager).wasApplied());
-    REQUIRE (commands::setClipColour (fixture.project, eventClipId, "#ff00AA10", fixture.undoManager).wasApplied());
-    REQUIRE (commands::setClipName (fixture.project, stepClipId, "", fixture.undoManager).wasApplied());
-    REQUIRE (commands::setClipColour (fixture.project, stepClipId, "#80102030", fixture.undoManager).wasApplied());
+    REQUIRE (renameInPool (fixture, eventClipId, "Lead 2").wasApplied());
+    REQUIRE (colourInPool (fixture, eventClipId, "#ff00AA10").wasApplied());
+    REQUIRE (renameInPool (fixture, stepClipId, "").wasApplied());
+    REQUIRE (colourInPool (fixture, stepClipId, "#80102030").wasApplied());
 
     CHECK (fixture.isValid());
 
@@ -223,12 +237,12 @@ TEST_CASE ("The name and the colour of a clip are set through commands, for clip
     CHECK (clips[0].getLoopLength() == 3840);
     CHECK (clips[1].getKind() == model::ClipModel::Kind::step);
 
-    REQUIRE (commands::setClipColour (fixture.project, eventClipId, "", fixture.undoManager).wasApplied());
+    REQUIRE (colourInPool (fixture, eventClipId, "").wasApplied());
     CHECK (fixture.isValid());
     CHECK (clipsOf (fixture)[0].getColour().isEmpty());
 }
 
-TEST_CASE ("A clip's name and colour are set for every reference of the clip, whatever its refcount", "[model][commands][ClipPoolCommands]")
+TEST_CASE ("A clip's name and colour set at pool level are set for every reference of the clip, whatever its refcount", "[model][commands][ClipPoolCommands]")
 {
     CommandFixture fixture;
     const auto clipId = addedEventClip (fixture, "Riff");
@@ -238,8 +252,8 @@ TEST_CASE ("A clip's name and colour are set for every reference of the clip, wh
     REQUIRE (fixture.isValid());
     REQUIRE (refcountOf (fixture, clipId) == 3);
 
-    REQUIRE (commands::setClipName (fixture.project, clipId, "Riff B", fixture.undoManager).wasApplied());
-    REQUIRE (commands::setClipColour (fixture.project, clipId, "#ffffffff", fixture.undoManager).wasApplied());
+    REQUIRE (renameInPool (fixture, clipId, "Riff B").wasApplied());
+    REQUIRE (colourInPool (fixture, clipId, "#ffffffff").wasApplied());
 
     // No clone: still the one clip, and its three references.
     CHECK (fixture.isValid());
@@ -254,7 +268,7 @@ TEST_CASE ("A change of a clip's name or colour is taken back by one undo", "[mo
     const auto before = fixture.xml();
 
     fixture.undoManager.beginNewTransaction();
-    REQUIRE (commands::setClipName (fixture.project, clipId, "Solo", fixture.undoManager).wasApplied());
+    REQUIRE (renameInPool (fixture, clipId, "Solo").wasApplied());
     const auto renamed = fixture.xml();
     REQUIRE (fixture.undoManager.undo());
     CHECK (fixture.xml() == before);
@@ -263,7 +277,7 @@ TEST_CASE ("A change of a clip's name or colour is taken back by one undo", "[mo
     REQUIRE (fixture.undoManager.undo());
 
     fixture.undoManager.beginNewTransaction();
-    REQUIRE (commands::setClipColour (fixture.project, clipId, "#ff000000", fixture.undoManager).wasApplied());
+    REQUIRE (colourInPool (fixture, clipId, "#ff000000").wasApplied());
     REQUIRE (fixture.undoManager.undo());
     CHECK (fixture.xml() == before);
 }
@@ -272,12 +286,12 @@ TEST_CASE ("Setting a clip's name or colour to the one it has is applied and lea
 {
     CommandFixture fixture;
     const auto clipId = addedEventClip (fixture, "Lead");
-    REQUIRE (commands::setClipColour (fixture.project, clipId, "#ff000000", fixture.undoManager).wasApplied());
+    REQUIRE (colourInPool (fixture, clipId, "#ff000000").wasApplied());
     fixture.undoManager.clearUndoHistory();
     const auto before = fixture.xml();
 
-    CHECK (commands::setClipName (fixture.project, clipId, "Lead", fixture.undoManager).wasApplied());
-    CHECK (commands::setClipColour (fixture.project, clipId, "#ff000000", fixture.undoManager).wasApplied());
+    CHECK (renameInPool (fixture, clipId, "Lead").wasApplied());
+    CHECK (colourInPool (fixture, clipId, "#ff000000").wasApplied());
 
     CHECK (fixture.isUntouchedSince (before));
 }
@@ -291,7 +305,7 @@ TEST_CASE ("setClipColour refuses a text that is no colour", "[model][commands][
 
     for (const auto* colour : { "red", "#ff0000", "ffff00000", "#ff00000g", "#ffff000000", "#" })
     {
-        const auto result = commands::setClipColour (fixture.project, clipId, colour, fixture.undoManager);
+        const auto result = colourInPool (fixture, clipId, colour);
 
         CHECK (! result.wasApplied());
         CHECK (result.refusal.isNotEmpty());
@@ -457,13 +471,13 @@ TEST_CASE ("A clip command for a clip that is not there is refused and changes n
     const auto before = fixture.xml();
 
     const auto results = {
-        commands::setClipName (fixture.project, unknownId, "x", fixture.undoManager),
-        commands::setClipColour (fixture.project, unknownId, "", fixture.undoManager),
+        renameInPool (fixture, unknownId, "x"),
+        colourInPool (fixture, unknownId, ""),
         commands::removeClip (fixture.project, unknownId, fixture.undoManager),
         commands::removeClip (fixture.project, "", fixture.undoManager),
         // A Track's id names no Clip.
         commands::removeClip (fixture.project, "4c6e8a0c2e4f4b1d8a6c4e2a0c1e3f5b", fixture.undoManager),
-        commands::setClipName (fixture.project, CommandFixture::minimoogId, "x", fixture.undoManager),
+        renameInPool (fixture, CommandFixture::minimoogId, "x"),
     };
 
     for (const auto& result : results)

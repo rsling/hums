@@ -27,6 +27,10 @@ public:
     // Pad by its index, a TempoEvent by its tick). A child without the
     // property takes no part.
     static juce::ValueTree childWithNumber (const juce::ValueTree& parent, const juce::Identifier& type, const juce::Identifier& property, std::int64_t value);
+
+    // The Placement with this id, wherever it is: among a track's own, or
+    // on one of its automation lanes. `project` is the Project node.
+    static juce::ValueTree placementWithId (const juce::ValueTree& project, const juce::String& placementId);
 };
 
 } // namespace model::commands

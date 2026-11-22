@@ -50,3 +50,31 @@ TEST_CASE ("NodeLookup finds a child by a number, whether it is held as text or 
     // A child without the property takes no part, also when 0 is asked for.
     CHECK (! NodeLookup::childWithNumber (fixture.routing(), ids::Player, ids::channelFilter, 0).isValid());
 }
+
+TEST_CASE ("NodeLookup finds a placement by its id among a track's own and on its automation lanes", "[model][NodeLookup]")
+{
+    CommandFixture fixture;
+
+    const auto placement = [] (const char* id) {
+        juce::ValueTree node (ids::Placement);
+        node.setProperty (ids::id, id, nullptr);
+        return node;
+    };
+
+    juce::ValueTree lane (ids::AutomationLane);
+    lane.setProperty (ids::id, "a lane", nullptr);
+    lane.appendChild (placement ("on the lane"), nullptr);
+
+    fixture.track (0).getChildWithName (ids::Placements).appendChild (placement ("on the first track"), nullptr);
+    fixture.track (2).getChildWithName (ids::Placements).appendChild (placement ("on the third track"), nullptr);
+    fixture.track (1).getChildWithName (ids::AutomationLanes).appendChild (lane, nullptr);
+
+    CHECK (NodeLookup::placementWithId (fixture.project, "on the first track").getParent().getParent() == fixture.track (0));
+    CHECK (NodeLookup::placementWithId (fixture.project, "on the third track").getParent().getParent() == fixture.track (2));
+    CHECK (NodeLookup::placementWithId (fixture.project, "on the lane").getParent() == lane);
+
+    // A lane's id names no placement, nor does a track's.
+    CHECK (! NodeLookup::placementWithId (fixture.project, "a lane").isValid());
+    CHECK (! NodeLookup::placementWithId (fixture.project, "4c6e8a0c2e4f4b1d8a6c4e2a0c1e3f5b").isValid());
+    CHECK (! NodeLookup::placementWithId (fixture.project, "").isValid());
+}
