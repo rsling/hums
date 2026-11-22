@@ -384,6 +384,60 @@ namespace
         return std::nullopt;
     }
 
+    //==========================================================================
+    // Saving.
+
+    using SaveResult = ProjectFile::SaveResult;
+
+    SaveResult saveFailure (SaveResult::Outcome outcome, const juce::String& message)
+    {
+        SaveResult result;
+        result.outcome = outcome;
+        result.message = message;
+
+        return result;
+    }
+
+    // Writes the text to the file, which must not exist yet, and forces it to
+    // disk. Gives the reason if that failed.
+    std::optional<juce::String> writeNewFile (const juce::File& file, const juce::String& text)
+    {
+        {
+            juce::FileOutputStream stream (file);
+
+            if (! stream.openedOk())
+                return stream.getStatus().getErrorMessage();
+
+            const auto written = stream.write (text.toRawUTF8(), text.getNumBytesAsUTF8());
+            // The destructor alone would leave the data in the system's cache.
+            stream.flush();
+
+            if (! written || stream.getStatus().failed())
+                return stream.getStatus().failed() ? stream.getStatus().getErrorMessage() : juce::String ("not all of it could be written");
+        }
+
+        // A write that came up short leaves no error in the stream's status,
+        // so the file is asked what it holds.
+        if (file.loadFileAsString() != text)
+            return juce::String ("the file does not hold what was written to it");
+
+        return std::nullopt;
+    }
+
+    // Makes a copy of the file the backup, in place of an older backup. The
+    // copy is made under a temporary name and renamed, so that the older
+    // backup is there until the new one is complete.
+    bool keepAsBackup (const juce::File& file, const juce::File& backup)
+    {
+        // rename() puts a file over a file, not over a directory.
+        if (backup.isDirectory())
+            return false;
+
+        const juce::TemporaryFile temporary (backup, juce::TemporaryFile::useHiddenFile);
+
+        return file.copyFileTo (temporary.getFile()) && temporary.getFile().replaceFileIn (backup);
+    }
+
 } // namespace
 
 ProjectFile::LoadResult ProjectFile::load (const juce::File& file,
@@ -467,6 +521,41 @@ ProjectFile::LoadResult ProjectFile::loadFromText (const juce::String& xmlText,
     // 5. Install. Nothing above has touched the document or the history.
     document = candidate;
     undoManager.clearUndoHistory();
+
+    return {};
+}
+
+ProjectFile::SaveResult ProjectFile::save (const juce::ValueTree& project, const juce::File& file)
+{
+    const auto path = file.getFullPathName();
+
+    if (file.isDirectory())
+        return saveFailure (SaveResult::Outcome::targetNotWritable, "The project was not saved: " + path + " is a directory.");
+
+    // rename() asks only the directory for permission, and would replace a
+    // file its owner has marked read-only.
+    if (file.existsAsFile() && ! file.hasWriteAccess())
+        return saveFailure (SaveResult::Outcome::targetNotWritable, "The project was not saved: the file " + path + " is read-only.");
+
+    // 1. The new text, beside the target. The temporary file is removed when
+    // this function returns, unless it has become the target by then.
+    const juce::TemporaryFile temporary (file, juce::TemporaryFile::useHiddenFile);
+
+    if (const auto failure = writeNewFile (temporary.getFile(), toCanonicalXml (project)))
+        return saveFailure (SaveResult::Outcome::writeFailed,
+                            "The project was not saved: nothing could be written to the folder " + file.getParentDirectory().getFullPathName() + " ("
+                                + *failure + ").");
+
+    // 2. The previous file, kept.
+    const auto backup = file.getSiblingFile (file.getFileName() + ".bak");
+
+    if (file.existsAsFile() && ! keepAsBackup (file, backup))
+        return saveFailure (SaveResult::Outcome::backupFailed,
+                            "The project was not saved: the previous file could not be kept as " + backup.getFullPathName() + ".");
+
+    // 3. The rename, which is the save.
+    if (! temporary.getFile().replaceFileIn (file))
+        return saveFailure (SaveResult::Outcome::replaceFailed, "The project was not saved: the file " + path + " could not be replaced.");
 
     return {};
 }

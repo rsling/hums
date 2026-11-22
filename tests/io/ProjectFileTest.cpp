@@ -1,5 +1,6 @@
-// io::ProjectFile: the native project file. The canonical writer and the load
-// sequence, docs/SCHEMA.md -> Loading, saving, canonical form.
+// io::ProjectFile: the native project file. The canonical writer, the load
+// sequence and the atomic save, docs/SCHEMA.md -> Loading, saving, canonical
+// form.
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -1119,4 +1120,272 @@ TEST_CASE ("The Validator runs after the migrations, on what they made", "[io][P
         CHECK (result.outcome == Outcome::invalidDocument);
         CHECK (open.isUntouched());
     }
+}
+
+//------------------------------------------------------------------------------
+// Saving.
+
+namespace
+{
+
+using SaveOutcome = io::ProjectFile::SaveResult::Outcome;
+
+// A directory of its own for one test, removed with everything in it when
+// the test ends.
+struct SaveDirectory
+{
+    SaveDirectory()
+    {
+        REQUIRE (directory.createDirectory().wasOk());
+    }
+
+    ~SaveDirectory()
+    {
+        // A test may have made it read-only.
+        directory.setReadOnly (false, true);
+        directory.deleteRecursively();
+    }
+
+    juce::File file (const juce::String& name) const { return directory.getChildFile (name); }
+
+    // The names of everything in the directory, hidden files included, sorted.
+    juce::StringArray fileNames() const
+    {
+        juce::StringArray names;
+
+        for (const auto& found : directory.findChildFiles (juce::File::findFilesAndDirectories, false))
+            names.add (found.getFileName());
+
+        names.sort (false);
+
+        return names;
+    }
+
+    const juce::File directory { juce::File::getSpecialLocation (juce::File::tempDirectory)
+                                     .getNonexistentChildFile ("hums_save_test", "") };
+};
+
+void writeText (const juce::File& file, const juce::String& text)
+{
+    // JUCE would otherwise write "\r\n" line endings.
+    REQUIRE (file.replaceWithText (text, false, false, "\n"));
+}
+
+std::string textOf (const juce::File& file)
+{
+    return file.loadFileAsString().toStdString();
+}
+
+juce::ValueTree berlinProject()
+{
+    return nodeFromXml (fixtureText ("berlin_test.xml").toRawUTF8());
+}
+
+juce::ValueTree smallProjectNamed (const juce::String& name)
+{
+    auto project = nodeFromXml (smallProject (R"(schemaVersion="1")").toRawUTF8());
+    project.setProperty (ids::name, name, nullptr);
+
+    return project;
+}
+
+} // namespace
+
+TEST_CASE ("A project saved where no file was is there in canonical form, and nothing else", "[io][ProjectFile][save]")
+{
+    const SaveDirectory directory;
+    const auto file = directory.file ("song.xml");
+    const auto project = berlinProject();
+
+    const auto result = io::ProjectFile::save (project, file);
+
+    CHECK (result.wasSaved());
+    CHECK (result.outcome == SaveOutcome::saved);
+    CHECK (result.message.isEmpty());
+
+    CHECK (textOf (file) == canonical (project));
+    // No backup, because there was nothing to keep, and no temporary file.
+    CHECK (directory.fileNames() == juce::StringArray { "song.xml" });
+}
+
+TEST_CASE ("A saved project loads again as the same document", "[io][ProjectFile][save]")
+{
+    const SaveDirectory directory;
+    const auto file = directory.file ("song.xml");
+    const auto project = berlinProject();
+
+    REQUIRE (io::ProjectFile::save (project, file).wasSaved());
+
+    juce::ValueTree document;
+    juce::UndoManager undoManager;
+
+    REQUIRE (io::ProjectFile::load (file, document, undoManager).wasLoaded());
+    CHECK (canonical (document) == canonical (project));
+}
+
+TEST_CASE ("Saving does not change the document", "[io][ProjectFile][save]")
+{
+    const SaveDirectory directory;
+    const auto project = berlinProject();
+    const auto copyBefore = project.createCopy();
+
+    REQUIRE (io::ProjectFile::save (project, directory.file ("song.xml")).wasSaved());
+
+    CHECK (project.isEquivalentTo (copyBefore));
+}
+
+TEST_CASE ("Saving over a file keeps the previous file as .bak, byte for byte", "[io][ProjectFile][save]")
+{
+    const SaveDirectory directory;
+    const auto file = directory.file ("song.xml");
+    const auto backup = directory.file ("song.xml.bak");
+
+    // Not canonical, not even a project: the backup is the file that was
+    // there, whatever it held.
+    const juce::String previous = "<Project   schemaVersion='1'>\n\n  written by hand\n</Project>\n";
+    writeText (file, previous);
+
+    const auto project = smallProjectNamed ("First");
+    REQUIRE (io::ProjectFile::save (project, file).wasSaved());
+
+    CHECK (textOf (file) == canonical (project));
+    CHECK (textOf (backup) == previous.toStdString());
+    CHECK (directory.fileNames() == juce::StringArray { "song.xml", "song.xml.bak" });
+}
+
+TEST_CASE ("Each save replaces the backup with the file it saves over", "[io][ProjectFile][save]")
+{
+    const SaveDirectory directory;
+    const auto file = directory.file ("song.xml");
+    const auto backup = directory.file ("song.xml.bak");
+
+    const auto first = smallProjectNamed ("First");
+    const auto second = smallProjectNamed ("Second");
+    const auto third = smallProjectNamed ("Third");
+
+    REQUIRE (io::ProjectFile::save (first, file).wasSaved());
+    REQUIRE (io::ProjectFile::save (second, file).wasSaved());
+
+    CHECK (textOf (file) == canonical (second));
+    CHECK (textOf (backup) == canonical (first));
+
+    REQUIRE (io::ProjectFile::save (third, file).wasSaved());
+
+    CHECK (textOf (file) == canonical (third));
+    CHECK (textOf (backup) == canonical (second));
+    CHECK (directory.fileNames() == juce::StringArray { "song.xml", "song.xml.bak" });
+}
+
+TEST_CASE ("The backup of a file without a suffix, or with two dots, is its whole name plus .bak", "[io][ProjectFile][save]")
+{
+    const SaveDirectory directory;
+
+    for (const auto* name : { "song", "song.v2.xml" })
+    {
+        INFO (name);
+        const auto file = directory.file (name);
+
+        writeText (file, "previous");
+        REQUIRE (io::ProjectFile::save (smallProjectNamed ("New"), file).wasSaved());
+
+        CHECK (textOf (directory.file (juce::String (name) + ".bak")) == "previous");
+    }
+
+    CHECK (directory.fileNames() == juce::StringArray { "song", "song.bak", "song.v2.xml", "song.v2.xml.bak" });
+}
+
+TEST_CASE ("A read-only file is not saved over, and stays as it was", "[io][ProjectFile][save]")
+{
+    const SaveDirectory directory;
+    const auto file = directory.file ("song.xml");
+
+    const juce::String previous = "the previous file";
+    writeText (file, previous);
+    REQUIRE (file.setReadOnly (true));
+    const auto modifiedBefore = file.getLastModificationTime();
+
+    const auto result = io::ProjectFile::save (smallProjectNamed ("New"), file);
+
+    CHECK_FALSE (result.wasSaved());
+    CHECK (result.outcome == SaveOutcome::targetNotWritable);
+    CHECK (result.message.contains (file.getFullPathName()));
+    CHECK (result.message.contains ("read-only"));
+
+    CHECK (textOf (file) == previous.toStdString());
+    CHECK (file.getLastModificationTime() == modifiedBefore);
+    CHECK_FALSE (file.hasWriteAccess());
+    // Neither a backup nor a temporary file was left behind.
+    CHECK (directory.fileNames() == juce::StringArray { "song.xml" });
+}
+
+TEST_CASE ("A save into a read-only directory fails, and the file there stays as it was", "[io][ProjectFile][save]")
+{
+    const SaveDirectory directory;
+    const auto file = directory.file ("song.xml");
+
+    const juce::String previous = "the previous file";
+    writeText (file, previous);
+    const auto modifiedBefore = file.getLastModificationTime();
+    REQUIRE (directory.directory.setReadOnly (true));
+
+    const auto result = io::ProjectFile::save (smallProjectNamed ("New"), file);
+
+    CHECK_FALSE (result.wasSaved());
+    CHECK (result.outcome == SaveOutcome::writeFailed);
+    CHECK (result.message.contains (directory.directory.getFullPathName()));
+
+    CHECK (textOf (file) == previous.toStdString());
+    CHECK (file.getLastModificationTime() == modifiedBefore);
+    CHECK (directory.fileNames() == juce::StringArray { "song.xml" });
+}
+
+TEST_CASE ("A save into a directory that is not there fails and creates nothing", "[io][ProjectFile][save]")
+{
+    const SaveDirectory directory;
+    const auto file = directory.file ("not there").getChildFile ("song.xml");
+
+    const auto result = io::ProjectFile::save (smallProjectNamed ("New"), file);
+
+    CHECK (result.outcome == SaveOutcome::writeFailed);
+    CHECK_FALSE (file.getParentDirectory().exists());
+    CHECK (directory.fileNames().isEmpty());
+}
+
+TEST_CASE ("A directory is not saved over", "[io][ProjectFile][save]")
+{
+    const SaveDirectory directory;
+    const auto target = directory.file ("song.xml");
+    REQUIRE (target.createDirectory().wasOk());
+
+    const auto result = io::ProjectFile::save (smallProjectNamed ("New"), target);
+
+    CHECK (result.outcome == SaveOutcome::targetNotWritable);
+    CHECK (result.message.contains ("is a directory"));
+    CHECK (target.isDirectory());
+    CHECK (directory.fileNames() == juce::StringArray { "song.xml" });
+}
+
+TEST_CASE ("When the previous file cannot be kept as .bak, nothing is saved", "[io][ProjectFile][save]")
+{
+    const SaveDirectory directory;
+    const auto file = directory.file ("song.xml");
+    const auto backup = directory.file ("song.xml.bak");
+
+    const juce::String previous = "the previous file";
+    writeText (file, previous);
+    const auto modifiedBefore = file.getLastModificationTime();
+    // Something a file cannot be renamed over stands where the backup goes.
+    REQUIRE (backup.createDirectory().wasOk());
+    writeText (backup.getChildFile ("kept"), "kept");
+
+    const auto result = io::ProjectFile::save (smallProjectNamed ("New"), file);
+
+    CHECK_FALSE (result.wasSaved());
+    CHECK (result.outcome == SaveOutcome::backupFailed);
+    CHECK (result.message.contains (backup.getFullPathName()));
+
+    CHECK (textOf (file) == previous.toStdString());
+    CHECK (file.getLastModificationTime() == modifiedBefore);
+    CHECK (textOf (backup.getChildFile ("kept")) == "kept");
+    CHECK (directory.fileNames() == juce::StringArray { "song.xml", "song.xml.bak" });
 }

@@ -13,8 +13,7 @@ namespace io
 // The native project file: the document as XML (docs/SCHEMA.md -> Loading,
 // saving, canonical form).
 //
-// It holds the canonical writer and the load sequence. The atomic save
-// follows.
+// It holds the canonical writer, the load sequence and the atomic save.
 class ProjectFile
 {
 public:
@@ -102,6 +101,48 @@ public:
                                     juce::ValueTree& document,
                                     juce::UndoManager& undoManager,
                                     const Migrations::Steps& steps = Migrations::steps());
+
+    //==========================================================================
+    // Saving.
+
+    struct SaveResult
+    {
+        enum class Outcome
+        {
+            saved,
+            targetNotWritable, // the target is a directory, or a file that is read-only
+            writeFailed,       // the new text could not be written beside the target
+            backupFailed,      // the previous file could not be kept as <name>.bak
+            replaceFailed      // the new file could not be moved over the target
+        };
+
+        Outcome outcome = Outcome::saved;
+
+        // What went wrong, in words for the user. Empty when the file was
+        // saved.
+        juce::String message;
+
+        bool wasSaved() const { return outcome == Outcome::saved; }
+    };
+
+    // Saves the document as canonical XML (docs/SCHEMA.md -> Loading, saving,
+    // canonical form). The sequence:
+    //
+    //   1. the text is written to a temporary file in the target's directory,
+    //      forced to disk and read back
+    //   2. if the target exists, a copy of it becomes <file name>.bak beside
+    //      it ("song.xml.bak" for "song.xml"), in place of an older one
+    //   3. the temporary file is renamed over the target
+    //
+    // The target is never opened for writing and never removed: until the
+    // rename of step 3 it is the previous file, byte for byte, and after it
+    // the new one. A failure at any step leaves it as it was and removes the
+    // temporary file. A target that is read-only is refused, although a
+    // rename could replace it. A directory that is not there is not created.
+    //
+    // `project` must be a Project node and a valid document; like the writer,
+    // save does not check it.
+    static SaveResult save (const juce::ValueTree& project, const juce::File& file);
 };
 
 } // namespace io
