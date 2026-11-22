@@ -2,7 +2,7 @@
 
 Pinned versions for building and testing Hums. `CLAUDE.md → Toolchain` says *what* is pinned and how; this file records the exact versions. A pin moves only on purpose, after Roland agrees, with the change recorded here in the same commit. Timing numbers are valid only for the versions listed here.
 
-Started 20 Nov 2026 with the versions installed on Roland's Mac. Build-time baselines added at the close of milestone 0.
+Started 20 Nov 2026 with the versions installed on Roland's Mac. Build-time baselines added at the close of milestone 0 and measured again at the close of milestone 1.
 
 ## Pinned
 
@@ -34,15 +34,16 @@ Development host at the time of pinning: macOS 27.0.1, Apple silicon (arm64).
 
 On macOS the sanitizers `abort()` after a report by default; the canary tests set `abort_on_error=0` so CTest judges them by their output.
 
-## Build-time baselines (measured 20 Nov 2026)
+## Build-time baselines (measured 20 Nov 2026, again 22 Nov 2026)
 
 Mac Studio, Apple M1 Ultra (20 cores), macOS 27.0.1, with the pins above; `build-ninja` (plain Debug, Ninja); wall-clock time from `/usr/bin/time`. These are the reference for noticing when the build gets slow, not targets.
 
-| item | value |
-|---|---|
-| Clean build, Debug, Ninja, ccache off (`CCACHE_DISABLE=1`, after `--target clean`) | **6.7 s** wall (83 s user); 140 steps: `hums_juce`, Catch2, the layer libraries, the test executables, `miditiming` |
-| Clean build, Debug, Ninja, ccache warm | 1.2 s wall |
-| Incremental `hums_tests` rebuild after touching one layer source, ccache off — **proxy** | **0.74 s** wall (same in three runs). Touched `src/platform/mac/MidiBytesToUmp.cpp`: rebuilds that one object, re-archives `libhums_platform_mac.a`, relinks `platform_tests`; nothing else, `miditiming` included |
+| item | close of milestone 0 (20 Nov 2026) | close of milestone 1 (22 Nov 2026) |
+|---|---|---|
+| Clean build, Debug, Ninja, ccache off (`CCACHE_DISABLE=1`, after `--target clean`) | **6.7 s** wall (83 s user); 140 steps: `hums_juce`, Catch2, the layer libraries, the test executables, `miditiming` | **14.0 s** wall (196 s user); 265 steps: the same, now with the `model` and `io` layers and their tests |
+| Clean build, Debug, Ninja, ccache warm | 1.2 s wall | 3.0 s wall |
+| Incremental `hums_tests` rebuild after touching one layer source, ccache off — **proxy** | **0.74 s** wall (same in three runs). Touched `src/platform/mac/MidiBytesToUmp.cpp`: rebuilds that one object, re-archives `libhums_platform_mac.a`, relinks `platform_tests`; nothing else, `miditiming` included | **0.67 s** wall (0.66 to 0.68 in three runs); the same three steps |
+| The same after touching a `model/` source, ccache off | — (no `model/` source existed) | **1.7 s** wall (1.70 to 1.74 in three runs). Touched `src/model/Validator.cpp`: rebuilds that one object, re-archives `libhums_model.a`, relinks `model_tests`, `io_tests` and `guardrail_properties`; nothing else |
 
 **Why a proxy.** The milestone 0 criterion names a render-core source and asks that the rebuild neither compile nor link the app. At milestone 0 neither exists: the render core gets its first file at milestone 2, the app target at milestone 3, and a placeholder would be throw-away code (rule 10). The `platform/mac/` source is the only layer source with a test executable, so it stands in. Milestone 2 repeats the measurement on the first render-core source and records it here; milestone 3 rechecks that it still compiles and links no app code (`docs/MILESTONES.md`).
 
