@@ -8,6 +8,7 @@
 #include "model/PlacementModel.h"
 #include "model/TrackModel.h"
 #include "model/TracksModel.h"
+#include "model/commands/AutomationLaneCommands.h"
 #include "model/commands/ClipPoolCommands.h"
 #include "model/commands/PlacementCommands.h"
 
@@ -115,6 +116,38 @@ std::string lanePlacementsOf (const CommandFixture& fixture, int trackPosition)
     }
 
     return text;
+}
+
+// A new automation lane of the track, made by its command; the id.
+juce::String addedLane (CommandFixture& fixture, int trackPosition)
+{
+    const auto result = commands::addAutomationLane (fixture.project, idOfTrack (fixture, trackPosition), "Cutoff", fixture.undoManager);
+    REQUIRE (result.wasApplied());
+    return result.createdId;
+}
+
+// Content, put into the tree as a loaded file would hold it: the commands
+// for it are not what is tested here.
+juce::ValueTree eventsOf (const CommandFixture& fixture, const juce::String& clipId)
+{
+    return fixture.project.getChildWithName (ids::ClipPool).getChildWithProperty (ids::id, clipId).getChildWithName (ids::Events);
+}
+
+void addEvent (CommandFixture& fixture, const juce::String& clipId, const juce::String& kind, std::int64_t tick)
+{
+    juce::ValueTree event (ids::Event);
+    event.setProperty (ids::tick, static_cast<juce::int64> (tick), nullptr);
+    event.setProperty (ids::kind, kind, nullptr);
+    eventsOf (fixture, clipId).appendChild (event, nullptr);
+}
+
+void addNote (CommandFixture& fixture, const juce::String& clipId, std::int64_t tick)
+{
+    juce::ValueTree note (ids::Note);
+    note.setProperty (ids::tick, static_cast<juce::int64> (tick), nullptr);
+    note.setProperty (ids::length, 240, nullptr);
+    note.setProperty (ids::pitch, 60, nullptr);
+    eventsOf (fixture, clipId).appendChild (note, nullptr);
 }
 
 void checkRefused (const commands::CommandResult& result)
@@ -677,6 +710,117 @@ TEST_CASE ("movePlacementToTrack refuses a placement that is on an automation la
     checkRefused (commands::movePlacementToTrack (fixture.project, id, idOfTrack (fixture, 1), 0, fixture.undoManager));
 
     CHECK (fixture.isUntouchedSince (before));
+}
+
+TEST_CASE ("addLanePlacement puts a cc-only clip on an automation lane from the beginning of its loop, and undo takes it away again", "[model][commands][PlacementCommands]")
+{
+    CommandFixture fixture;
+    const auto clipId = addedEventClip (fixture, 3840);
+    addEvent (fixture, clipId, "cc", 0);
+    addEvent (fixture, clipId, "cc", 960);
+    const auto laneId = addedLane (fixture, 0);
+
+    // On the track itself, at the same ticks: another parent, not in the way.
+    placed (fixture, 0, clipId, 0, 9000);
+    REQUIRE (fixture.isValid());
+    fixture.undoManager.clearUndoHistory();
+    const auto before = fixture.xml();
+
+    fixture.undoManager.beginNewTransaction();
+    const auto result = commands::addLanePlacement (fixture.project, laneId, clipId, 1000, 5000, fixture.undoManager);
+
+    REQUIRE (result.wasApplied());
+    CHECK (fixture.isValid());
+    CHECK (lanePlacementsOf (fixture, 0) == "1000+5000 ");
+    CHECK (placementsOf (fixture, 0) == "0+9000 ");
+    CHECK (refcountOf (fixture, clipId) == 2);
+
+    const auto placement = model::TrackModel (fixture.track (0)).getAutomationLanes()[0].getPlacements()[0];
+    CHECK (placement.getId() == result.createdId);
+    CHECK (placement.getClipId() == clipId);
+    CHECK (placement.getOffset() == 0);
+
+    // Right behind it, on the tick at which it ends.
+    fixture.undoManager.beginNewTransaction();
+    REQUIRE (commands::addLanePlacement (fixture.project, laneId, clipId, 6000, 1, fixture.undoManager).wasApplied());
+    CHECK (lanePlacementsOf (fixture, 0) == "1000+5000 6000+1 ");
+
+    REQUIRE (fixture.undoManager.undo());
+    REQUIRE (fixture.undoManager.undo());
+    CHECK (fixture.xml() == before);
+}
+
+TEST_CASE ("addLanePlacement takes an empty event clip", "[model][commands][PlacementCommands]")
+{
+    CommandFixture fixture;
+    const auto clipId = addedEventClip (fixture, 3840);
+    const auto laneId = addedLane (fixture, 0);
+
+    REQUIRE (commands::addLanePlacement (fixture.project, laneId, clipId, 0, 3840, fixture.undoManager).wasApplied());
+    CHECK (fixture.isValid());
+}
+
+TEST_CASE ("addLanePlacement refuses a clip that holds anything but cc events: invariant 9 from the side of the lane", "[model][commands][PlacementCommands]")
+{
+    CommandFixture fixture;
+    const auto laneId = addedLane (fixture, 0);
+
+    const auto withNote = addedEventClip (fixture, 3840);
+    addEvent (fixture, withNote, "cc", 0);
+    addNote (fixture, withNote, 0);
+
+    const auto withBend = addedEventClip (fixture, 3840);
+    addEvent (fixture, withBend, "cc", 0);
+    addEvent (fixture, withBend, "pitchBend", 0);
+
+    const auto stepClip = commands::addStepClip (fixture.project, "Bass", fixture.undoManager);
+    REQUIRE (stepClip.wasApplied());
+
+    REQUIRE (fixture.isValid());
+    fixture.undoManager.clearUndoHistory();
+    const auto before = fixture.xml();
+
+    checkRefused (commands::addLanePlacement (fixture.project, laneId, withNote, 0, 3840, fixture.undoManager));
+    checkRefused (commands::addLanePlacement (fixture.project, laneId, withBend, 0, 3840, fixture.undoManager));
+    checkRefused (commands::addLanePlacement (fixture.project, laneId, stepClip.createdId, 0, 3840, fixture.undoManager));
+
+    CHECK (fixture.isUntouchedSince (before));
+
+    // The same clips go on the track itself.
+    CHECK (commands::addPlacement (fixture.project, idOfTrack (fixture, 0), withNote, 0, 3840, fixture.undoManager).wasApplied());
+    CHECK (fixture.isValid());
+}
+
+TEST_CASE ("addLanePlacement refuses a lane or a clip that is not there, an extent a placement cannot have, and a place that is taken on the lane", "[model][commands][PlacementCommands]")
+{
+    CommandFixture fixture;
+    const auto clipId = addedEventClip (fixture, 3840);
+    const auto laneId = addedLane (fixture, 0);
+    const auto otherLaneId = addedLane (fixture, 0);
+    REQUIRE (commands::addLanePlacement (fixture.project, laneId, clipId, 1000, 1000, fixture.undoManager).wasApplied());
+    fixture.undoManager.clearUndoHistory();
+    const auto before = fixture.xml();
+
+    const auto results = {
+        commands::addLanePlacement (fixture.project, unknownId, clipId, 0, 100, fixture.undoManager),
+        // The id of the lane's track names no lane.
+        commands::addLanePlacement (fixture.project, idOfTrack (fixture, 0), clipId, 0, 100, fixture.undoManager),
+        commands::addLanePlacement (fixture.project, laneId, unknownId, 0, 100, fixture.undoManager),
+        commands::addLanePlacement (fixture.project, laneId, clipId, -1, 100, fixture.undoManager),
+        commands::addLanePlacement (fixture.project, laneId, clipId, 0, 0, fixture.undoManager),
+        commands::addLanePlacement (fixture.project, laneId, clipId, 2, largestTick, fixture.undoManager),
+        commands::addLanePlacement (fixture.project, laneId, clipId, 0, 1001, fixture.undoManager),
+        commands::addLanePlacement (fixture.project, laneId, clipId, 1999, 1, fixture.undoManager),
+    };
+
+    for (const auto& result : results)
+        checkRefused (result);
+
+    CHECK (fixture.isUntouchedSince (before));
+
+    // Another lane of the same track is another parent.
+    CHECK (commands::addLanePlacement (fixture.project, otherLaneId, clipId, 1000, 1000, fixture.undoManager).wasApplied());
+    CHECK (fixture.isValid());
 }
 
 TEST_CASE ("A placement command for a placement that is not there is refused and changes nothing", "[model][commands][PlacementCommands]")

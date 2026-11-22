@@ -1,6 +1,8 @@
 # model/: one test file per model type. Links the model layer only, never
 # io/, render/ or the engine.
 hums_add_test_executable(model_tests
+    AutomationClipRuleTest.cpp
+    AutomationLaneCommandsTest.cpp
     AutomationLaneModelTest.cpp
     CanonicalDoubleTest.cpp
     CcValueModelTest.cpp
@@ -33,6 +35,8 @@ hums_add_test_executable(model_tests
     SessionCommandsTest.cpp
     SessionModelTest.cpp
     SettingsTest.cpp
+    SiblingOrderTest.cpp
+    SlotCommandsTest.cpp
     SlotModelTest.cpp
     TempoEventModelTest.cpp
     TimeSigEventModelTest.cpp

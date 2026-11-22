@@ -17,7 +17,7 @@ namespace guardrails
 // tests (docs/GUARDRAILS.md -> 3): valid ones and deliberately invalid ones
 // (a port that is not there, a pad number that is taken, a tempo of 0, the
 // tempo at tick 0 removed, a track on channel 17, a clip removed that is
-// still placed).
+// still placed, a clip with notes on an automation lane).
 //
 // It looks at the document as it is now to know what is valid: which ids
 // there are, which pad numbers are taken. A valid form that needs something
@@ -80,6 +80,10 @@ private:
     std::vector<juce::ValueTree> placements() const;
     std::vector<juce::ValueTree> ownPlacements() const;
     std::int64_t freeStartFor (const juce::ValueTree& parent, std::int64_t length, const juce::ValueTree& moving);
+    std::vector<juce::ValueTree> slots() const;
+    bool isLargestRowInUse() const;
+    int row();
+    std::vector<juce::ValueTree> lanes() const;
 
     // Routing.
     Attempt addPerformer();
@@ -146,6 +150,20 @@ private:
     Attempt resizePlacement();
     Attempt splitPlacement();
     Attempt removePlacement();
+
+    // The session grid.
+    Attempt setSlot();
+    Attempt clearSlot();
+    Attempt insertScene();
+    Attempt removeScene();
+    Attempt moveScene();
+
+    // Automation lanes.
+    Attempt addAutomationLane();
+    Attempt removeAutomationLane();
+    Attempt moveAutomationLane();
+    Attempt setAutomationLaneName();
+    Attempt addLanePlacement();
 
     // A setter of one Track property that names a port, and of one that is
     // a flag.

@@ -11,7 +11,8 @@ namespace model::commands
 
 // The commands for the Session node (docs/SCHEMA.md -> Session): the launch
 // grid and the names of the scenes. Inserting, deleting and moving a scene
-// renumber every track's slots and come with the slot commands.
+// renumber every track's slots and are with the slot commands
+// (model/commands/SlotCommands).
 //
 // Like every command: `project` is the Project node of a valid document; a
 // command applies completely or refuses and changes nothing, and never

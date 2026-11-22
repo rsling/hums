@@ -1,6 +1,8 @@
 # model/: ValueTree schema ids, typed wrappers, commands, Validator.
 hums_add_layer(hums_model
     SOURCES
+        AutomationClipRule.cpp
+        AutomationClipRule.h
         AutomationLaneModel.cpp
         AutomationLaneModel.h
         CanonicalDouble.cpp
@@ -66,6 +68,8 @@ hums_add_layer(hums_model
         TracksModel.h
         Validator.cpp
         Validator.h
+        commands/AutomationLaneCommands.cpp
+        commands/AutomationLaneCommands.h
         commands/ClipPoolCommands.cpp
         commands/ClipPoolCommands.h
         commands/CommandResult.h
@@ -79,6 +83,10 @@ hums_add_layer(hums_model
         commands/RoutingCommands.h
         commands/SessionCommands.cpp
         commands/SessionCommands.h
+        commands/SiblingOrder.cpp
+        commands/SiblingOrder.h
+        commands/SlotCommands.cpp
+        commands/SlotCommands.h
         commands/TimelineCommands.cpp
         commands/TimelineCommands.h
         commands/TrackCommands.cpp

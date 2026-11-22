@@ -18,8 +18,9 @@ namespace model::commands
 // and every command here that names a placement takes either: moving it in
 // time, resizing, splitting and removing it leave the clip it references
 // alone, so none of them can break what a lane requires of its clips. Only
-// putting a placement on a lane, and the lanes themselves, have commands of
-// their own.
+// putting a clip on a lane is a command of its own, addLanePlacement,
+// because a lane does not take every clip. The lanes themselves are with
+// the AutomationLane commands.
 //
 // None of these commands changes a clip, so none needs an edit context: the
 // pool is untouched by all of them.
@@ -40,6 +41,16 @@ namespace model::commands
 // there, the start is negative, the length is not at least one tick, or the
 // track already has a placement in those ticks.
 CommandResult addPlacement (juce::ValueTree project, const juce::String& trackId, const juce::String& clipId, std::int64_t start, std::int64_t length, juce::UndoManager& undoManager);
+
+// Puts the clip on the automation lane, as addPlacement puts one on a
+// track: a placement of its own with a new id, from the beginning of the
+// loop; the result carries the id. A lane takes only an event clip that
+// holds nothing but cc events (model/AutomationClipRule) — an empty event
+// clip is one. Refused for any other clip, and when the lane or the clip is
+// not there, the start is negative, the length is not at least one tick, or
+// the lane already has a placement in those ticks. What the lane's track
+// has in its own placements is never in the way.
+CommandResult addLanePlacement (juce::ValueTree project, const juce::String& laneId, const juce::String& clipId, std::int64_t start, std::int64_t length, juce::UndoManager& undoManager);
 
 // Moves the placement along the timeline, on the track or lane it is on. Its
 // length and its offset stay. Refused when the new start is negative or

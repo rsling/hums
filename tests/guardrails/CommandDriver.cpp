@@ -3,12 +3,14 @@
 #include "model/Ids.h"
 #include "model/PropertyReader.h"
 #include "model/TracksModel.h"
+#include "model/commands/AutomationLaneCommands.h"
 #include "model/commands/ClipPoolCommands.h"
 #include "model/commands/NodeLookup.h"
 #include "model/commands/PadMapCommands.h"
 #include "model/commands/PlacementCommands.h"
 #include "model/commands/RoutingCommands.h"
 #include "model/commands/SessionCommands.h"
+#include "model/commands/SlotCommands.h"
 #include "model/commands/TimelineCommands.h"
 #include "model/commands/TrackCommands.h"
 
@@ -109,6 +111,16 @@ const std::vector<CommandDriver::TableEntry>& CommandDriver::table()
         { "resizePlacement", &CommandDriver::resizePlacement, true },
         { "splitPlacement", &CommandDriver::splitPlacement, true },
         { "removePlacement", &CommandDriver::removePlacement, true },
+        { "setSlot", &CommandDriver::setSlot, true },
+        { "clearSlot", &CommandDriver::clearSlot, true },
+        { "insertScene", &CommandDriver::insertScene, true },
+        { "removeScene", &CommandDriver::removeScene, true },
+        { "moveScene", &CommandDriver::moveScene, true },
+        { "addAutomationLane", &CommandDriver::addAutomationLane, true },
+        { "removeAutomationLane", &CommandDriver::removeAutomationLane, true },
+        { "moveAutomationLane", &CommandDriver::moveAutomationLane, true },
+        { "setAutomationLaneName", &CommandDriver::setAutomationLaneName, true },
+        { "addLanePlacement", &CommandDriver::addLanePlacement, true },
     };
 
     return entries;
@@ -1474,6 +1486,305 @@ CommandChecks::Attempt CommandDriver::removePlacement()
     const auto id = isValidForm ? idOf (random.oneOf (known)) : unknownId();
 
     return made ("removePlacement (" + quoted (id) + ")", isValidForm, commands::removePlacement (project, id, undoManager));
+}
+
+//==============================================================================
+// The session grid.
+
+namespace
+{
+
+    const int largestRow = std::numeric_limits<int>::max();
+
+    int sceneOf (const juce::ValueTree& slot)
+    {
+        return PropertyReader::getRequiredInt (slot, ids::scene);
+    }
+
+    int negativeRow (RandomSource& random)
+    {
+        return random.oneOf (std::vector<int> { -1, -2, -1000, std::numeric_limits<int>::min() });
+    }
+
+} // namespace
+
+// Every occupied slot of every track.
+std::vector<juce::ValueTree> CommandDriver::slots() const
+{
+    std::vector<juce::ValueTree> found;
+
+    for (const auto& track : tracks())
+        for (const auto& slot : NodeLookup::childrenOfType (track.getChildWithName (ids::Slots), ids::Slot))
+            found.push_back (slot);
+
+    return found;
+}
+
+// True when a Slot or a Scene stands in the last row an int can number;
+// no row can then be inserted before it.
+bool CommandDriver::isLargestRowInUse() const
+{
+    for (const auto& slot : slots())
+        if (sceneOf (slot) == largestRow)
+            return true;
+
+    return NodeLookup::childWithNumber (project.getChildWithName (ids::Session), ids::Scene, ids::index, largestRow).isValid();
+}
+
+// A row of the session grid: mostly one of the first few, where the slots
+// and the names are, now and then one of the last there are.
+int CommandDriver::row()
+{
+    if (random.chance (95))
+        return random.intBetween (0, 9);
+
+    return largestRow - random.intBetween (0, 2);
+}
+
+CommandChecks::Attempt CommandDriver::setSlot()
+{
+    const auto knownTracks = tracks();
+    const auto knownClips = clips();
+    const auto isValidForm = wantsValidForm() && ! knownTracks.empty() && ! knownClips.empty();
+
+    juce::String trackId = unknownId();
+    juce::String clipId = unknownId();
+    int scene = row();
+
+    if (! knownTracks.empty() && ! knownClips.empty())
+    {
+        trackId = idOf (random.oneOf (knownTracks));
+        clipId = idOf (random.oneOf (knownClips));
+
+        if (! isValidForm)
+        {
+            // One thing wrong.
+            const auto fault = random.intBetween (0, 2);
+
+            if (fault == 0)
+                scene = negativeRow (random);
+            else if (fault == 1)
+                clipId = unknownId();
+            else
+                trackId = unknownId();
+        }
+    }
+
+    return made ("setSlot (" + quoted (trackId) + ", " + juce::String (scene) + ", " + quoted (clipId) + ")", isValidForm, commands::setSlot (project, trackId, scene, clipId, undoManager));
+}
+
+CommandChecks::Attempt CommandDriver::clearSlot()
+{
+    const auto known = slots();
+    const auto knownTracks = tracks();
+    const auto isValidForm = wantsValidForm() && ! known.empty();
+
+    juce::String trackId = unknownId();
+    int scene = row();
+
+    if (isValidForm)
+    {
+        const auto slot = random.oneOf (known);
+
+        trackId = idOf (slot.getParent().getParent());
+        scene = sceneOf (slot);
+    }
+    else if (! knownTracks.empty() && random.chance (60))
+    {
+        // A track, and a row in which its slot is empty.
+        const auto track = random.oneOf (knownTracks);
+        const auto ownSlots = track.getChildWithName (ids::Slots);
+
+        trackId = idOf (track);
+
+        do
+            scene = random.chance (80) ? row() : negativeRow (random);
+        while (NodeLookup::childWithNumber (ownSlots, ids::Slot, ids::scene, scene).isValid());
+    }
+
+    return made ("clearSlot (" + quoted (trackId) + ", " + juce::String (scene) + ")", isValidForm, commands::clearSlot (project, trackId, scene, undoManager));
+}
+
+CommandChecks::Attempt CommandDriver::insertScene()
+{
+    // While the last row is in use there is no valid form.
+    const auto isValidForm = wantsValidForm() && ! isLargestRowInUse();
+
+    int atScene = row();
+
+    if (! isValidForm && ! (isLargestRowInUse() && random.chance (50)))
+        atScene = negativeRow (random);
+
+    return made ("insertScene (" + juce::String (atScene) + ")", isValidForm, commands::insertScene (project, atScene, undoManager));
+}
+
+CommandChecks::Attempt CommandDriver::removeScene()
+{
+    const auto isValidForm = wantsValidForm();
+    const auto scene = isValidForm ? row() : negativeRow (random);
+
+    return made ("removeScene (" + juce::String (scene) + ")", isValidForm, commands::removeScene (project, scene, undoManager));
+}
+
+CommandChecks::Attempt CommandDriver::moveScene()
+{
+    const auto isValidForm = wantsValidForm();
+
+    int fromScene = row();
+    int toScene = row();
+
+    if (! isValidForm)
+        (random.chance (50) ? fromScene : toScene) = negativeRow (random);
+
+    return made ("moveScene (" + juce::String (fromScene) + ", " + juce::String (toScene) + ")", isValidForm, commands::moveScene (project, fromScene, toScene, undoManager));
+}
+
+//==============================================================================
+// Automation lanes.
+
+namespace
+{
+
+    // True when an automation lane may reference the clip: an event clip
+    // with no note and no event of another kind than cc (invariant 9).
+    // Written here a second time on purpose: it is what the command is held
+    // to.
+    bool isFitForALane (const juce::ValueTree& clip)
+    {
+        if (PropertyReader::getRequiredString (clip, ids::kind) != "event")
+            return false;
+
+        const auto content = clip.getChildWithName (ids::Events);
+
+        if (content.getChildWithName (ids::Note).isValid())
+            return false;
+
+        for (const auto& event : NodeLookup::childrenOfType (content, ids::Event))
+            if (PropertyReader::getRequiredString (event, ids::kind) != "cc")
+                return false;
+
+        return true;
+    }
+
+} // namespace
+
+// Every automation lane of every track.
+std::vector<juce::ValueTree> CommandDriver::lanes() const
+{
+    std::vector<juce::ValueTree> found;
+
+    for (const auto& track : tracks())
+        for (const auto& lane : NodeLookup::childrenOfType (track.getChildWithName (ids::AutomationLanes), ids::AutomationLane))
+            found.push_back (lane);
+
+    return found;
+}
+
+CommandChecks::Attempt CommandDriver::addAutomationLane()
+{
+    const auto known = tracks();
+    const auto isValidForm = wantsValidForm() && ! known.empty();
+    const auto id = isValidForm ? idOf (random.oneOf (known)) : unknownId();
+    const auto name = text();
+
+    return made ("addAutomationLane (" + quoted (id) + ", " + quoted (name) + ")", isValidForm, commands::addAutomationLane (project, id, name, undoManager));
+}
+
+CommandChecks::Attempt CommandDriver::removeAutomationLane()
+{
+    const auto known = lanes();
+    const auto isValidForm = wantsValidForm() && ! known.empty();
+    const auto id = isValidForm ? idOf (random.oneOf (known)) : unknownId();
+
+    return made ("removeAutomationLane (" + quoted (id) + ")", isValidForm, commands::removeAutomationLane (project, id, undoManager));
+}
+
+CommandChecks::Attempt CommandDriver::moveAutomationLane()
+{
+    const auto known = lanes();
+    const auto isValidForm = wantsValidForm() && ! known.empty();
+
+    juce::String id = unknownId();
+    int toPosition = 0;
+
+    if (isValidForm || (! known.empty() && random.chance (50)))
+    {
+        // Invalid: a lane, and a position that is not there among the
+        // lanes of its track.
+        const auto lane = random.oneOf (known);
+        const auto count = static_cast<int> (NodeLookup::childrenOfType (lane.getParent(), ids::AutomationLane).size());
+
+        id = idOf (lane);
+        toPosition = isValidForm ? random.intBetween (0, count - 1) : positionThatIsNotThere (random, count);
+    }
+
+    return made ("moveAutomationLane (" + quoted (id) + ", " + juce::String (toPosition) + ")", isValidForm, commands::moveAutomationLane (project, id, toPosition, undoManager));
+}
+
+CommandChecks::Attempt CommandDriver::setAutomationLaneName()
+{
+    const auto known = lanes();
+    const auto isValidForm = wantsValidForm() && ! known.empty();
+    const auto id = isValidForm ? idOf (random.oneOf (known)) : unknownId();
+    const auto name = text();
+
+    return made ("setAutomationLaneName (" + quoted (id) + ", " + quoted (name) + ")", isValidForm, commands::setAutomationLaneName (project, id, name, undoManager));
+}
+
+CommandChecks::Attempt CommandDriver::addLanePlacement()
+{
+    std::vector<juce::ValueTree> fit;
+    std::vector<juce::ValueTree> unfit;
+
+    for (const auto& clip : clips())
+        (isFitForALane (clip) ? fit : unfit).push_back (clip);
+
+    const auto knownLanes = lanes();
+    const auto isValidForm = wantsValidForm() && ! knownLanes.empty() && ! fit.empty();
+
+    // A whole number of bars, or any length.
+    auto length = random.chance (50) ? 3840 * random.between (1, 4) : random.between (1, 8000);
+
+    juce::String laneId = unknownId();
+    juce::String clipId = unknownId();
+    std::int64_t start = tick();
+
+    if (! knownLanes.empty() && ! fit.empty())
+    {
+        const auto lane = random.oneOf (knownLanes);
+        const auto taken = NodeLookup::childrenOfType (lane, ids::Placement);
+
+        laneId = idOf (lane);
+        clipId = idOf (random.oneOf (fit));
+        start = freeStartFor (lane, length, {});
+
+        if (! isValidForm)
+        {
+            // One thing wrong; most often a clip the lane does not take.
+            const auto fault = random.intBetween (0, 6);
+
+            if (fault <= 1 && ! unfit.empty())
+                clipId = idOf (random.oneOf (unfit));
+            else if (fault == 2 && ! taken.empty())
+                start = startInTheWayOf (random, random.oneOf (taken), length);
+            else if (fault == 3)
+                start = startThatCannotBe (random, negativeTick());
+            else if (fault == 4)
+                length = noLength (random);
+            else if (fault == 5)
+                clipId = unknownId();
+            else
+                laneId = unknownId();
+        }
+    }
+    else if (! knownLanes.empty() && ! unfit.empty())
+    {
+        // A lane and no clip it takes: one it does not take.
+        laneId = idOf (random.oneOf (knownLanes));
+        clipId = idOf (random.oneOf (unfit));
+    }
+
+    return made ("addLanePlacement (" + quoted (laneId) + ", " + quoted (clipId) + ", " + juce::String (start) + ", " + juce::String (length) + ")", isValidForm, commands::addLanePlacement (project, laneId, clipId, start, length, undoManager));
 }
 
 } // namespace guardrails

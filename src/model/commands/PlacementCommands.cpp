@@ -1,5 +1,6 @@
 #include "model/commands/PlacementCommands.h"
 
+#include "model/AutomationClipRule.h"
 #include "model/ClipModel.h"
 #include "model/Ids.h"
 #include "model/PlacementModel.h"
@@ -49,6 +50,27 @@ namespace
         }
 
         return {};
+    }
+
+    // The automation lane with this id, on whichever track it is.
+    juce::ValueTree laneOf (const juce::ValueTree& project, const juce::String& laneId)
+    {
+        jassert (project.hasType (ids::Project));
+
+        for (const auto& track : NodeLookup::childrenOfType (project.getChildWithName (ids::Tracks), ids::Track))
+        {
+            const auto lane = NodeLookup::childWithId (track.getChildWithName (ids::AutomationLanes), ids::AutomationLane, laneId);
+
+            if (lane.isValid())
+                return lane;
+        }
+
+        return {};
+    }
+
+    CommandResult noSuchClip (const juce::String& clipId)
+    {
+        return CommandResult::refused ("There is no Clip with the id \"" + clipId + "\".");
     }
 
     CommandResult noSuchPlacement (const juce::String& placementId)
@@ -136,6 +158,27 @@ namespace
         return CommandResult::applied();
     }
 
+    // Makes a placement of the clip with a new id and puts it behind the
+    // others under `parent`, a track's Placements or an AutomationLane.
+    // Everything has been checked by then. The result carries the id.
+    CommandResult appendNewPlacement (juce::ValueTree parent, const juce::String& clipId, std::int64_t start, std::int64_t length, juce::UndoManager& undoManager)
+    {
+        const auto id = juce::Uuid().toString();
+
+        // Built apart and added whole, so that undo knows one action. No
+        // offset is stored: a new placement starts the loop at its
+        // beginning.
+        juce::ValueTree placement (ids::Placement);
+        placement.setProperty (ids::id, id, nullptr);
+        placement.setProperty (ids::clipId, clipId, nullptr);
+        placement.setProperty (ids::start, static_cast<juce::int64> (start), nullptr);
+        placement.setProperty (ids::length, static_cast<juce::int64> (length), nullptr);
+
+        parent.appendChild (placement, &undoManager);
+
+        return CommandResult::appliedAndCreated (id);
+    }
+
     // (offset + elapsed) mod loopLength, for 0 <= offset < loopLength and
     // elapsed >= 0. Both are brought below the loop length first and added
     // as unsigned numbers: a loop may be as long as an int64 allows, and the
@@ -160,7 +203,7 @@ CommandResult addPlacement (juce::ValueTree project, const juce::String& trackId
         return noSuchTrack (trackId);
 
     if (! clipOf (project, clipId).isValid())
-        return CommandResult::refused ("There is no Clip with the id \"" + clipId + "\".");
+        return noSuchClip (clipId);
 
     auto placements = track.getChildWithName (ids::Placements);
 
@@ -169,19 +212,32 @@ CommandResult addPlacement (juce::ValueTree project, const juce::String& trackId
     if (! extentCheck.wasApplied())
         return extentCheck;
 
-    const auto id = juce::Uuid().toString();
+    return appendNewPlacement (placements, clipId, start, length, undoManager);
+}
 
-    // Built apart and added whole, so that undo knows one action. No offset
-    // is stored: a new placement starts the loop at its beginning.
-    juce::ValueTree placement (ids::Placement);
-    placement.setProperty (ids::id, id, nullptr);
-    placement.setProperty (ids::clipId, clipId, nullptr);
-    placement.setProperty (ids::start, static_cast<juce::int64> (start), nullptr);
-    placement.setProperty (ids::length, static_cast<juce::int64> (length), nullptr);
+CommandResult addLanePlacement (juce::ValueTree project, const juce::String& laneId, const juce::String& clipId, std::int64_t start, std::int64_t length, juce::UndoManager& undoManager)
+{
+    auto lane = laneOf (project, laneId);
 
-    placements.appendChild (placement, &undoManager);
+    if (! lane.isValid())
+        return CommandResult::refused ("There is no AutomationLane with the id \"" + laneId + "\".");
 
-    return CommandResult::appliedAndCreated (id);
+    const auto clip = clipOf (project, clipId);
+
+    if (! clip.isValid())
+        return noSuchClip (clipId);
+
+    const auto whyNot = AutomationClipRule::whyNotForALane (clip);
+
+    if (whyNot.isNotEmpty())
+        return CommandResult::refused (whyNot);
+
+    const auto extentCheck = checkExtent (lane, start, length, {});
+
+    if (! extentCheck.wasApplied())
+        return extentCheck;
+
+    return appendNewPlacement (lane, clipId, start, length, undoManager);
 }
 
 CommandResult movePlacement (juce::ValueTree project, const juce::String& placementId, std::int64_t toStart, juce::UndoManager& undoManager)

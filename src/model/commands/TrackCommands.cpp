@@ -3,8 +3,7 @@
 #include "model/ColourText.h"
 #include "model/Ids.h"
 #include "model/commands/NodeLookup.h"
-
-#include <cstddef>
+#include "model/commands/SiblingOrder.h"
 
 namespace model::commands
 {
@@ -46,27 +45,6 @@ namespace
     bool isController (int cc)
     {
         return cc >= 0 && cc <= 127;
-    }
-
-    // Moves a Track or a Knob to a position among its siblings of the same
-    // type. The position is counted among those only, so a child of another
-    // type (data from a newer build) neither counts nor moves. `what` names
-    // the siblings in the refusal.
-    CommandResult moveAmongItsKind (juce::ValueTree child, int toPosition, const juce::String& what, juce::UndoManager& undoManager)
-    {
-        auto parent = child.getParent();
-        const auto siblings = NodeLookup::childrenOfType (parent, child.getType());
-        const auto count = static_cast<int> (siblings.size());
-
-        if (toPosition < 0 || toPosition >= count)
-            return CommandResult::refused ("There are " + juce::String (count) + " " + what + ", so a position is 0 to " + juce::String (count - 1) + ", not " + juce::String (toPosition) + ".");
-
-        // Taking the place of the sibling that is there now puts the child
-        // behind it when it comes from above and before it when it comes
-        // from below: at that position either way.
-        parent.moveChild (parent.indexOf (child), parent.indexOf (siblings[static_cast<std::size_t> (toPosition)]), &undoManager);
-
-        return CommandResult::applied();
     }
 
     CommandResult setTrackText (juce::ValueTree project, const juce::String& trackId, const juce::Identifier& property, const juce::String& text, juce::UndoManager& undoManager)
@@ -155,7 +133,7 @@ CommandResult moveTrack (juce::ValueTree project, const juce::String& trackId, i
     if (! track.isValid())
         return noSuchTrack (trackId);
 
-    return moveAmongItsKind (track, toPosition, "tracks", undoManager);
+    return SiblingOrder::moveTo (track, toPosition, "tracks", undoManager);
 }
 
 CommandResult setTrackName (juce::ValueTree project, const juce::String& trackId, const juce::String& name, juce::UndoManager& undoManager)
@@ -260,7 +238,7 @@ CommandResult moveKnob (juce::ValueTree project, const juce::String& trackId, in
     if (! knob.isValid())
         return noSuchKnob (cc);
 
-    return moveAmongItsKind (knob, toPosition, "knobs", undoManager);
+    return SiblingOrder::moveTo (knob, toPosition, "knobs", undoManager);
 }
 
 CommandResult setKnobCc (juce::ValueTree project, const juce::String& trackId, int cc, int newCc, juce::UndoManager& undoManager)
