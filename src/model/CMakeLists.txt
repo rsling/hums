@@ -58,5 +58,7 @@ hums_add_layer(hums_model
         TrackModel.h
         TracksModel.cpp
         TracksModel.h
+        Validator.cpp
+        Validator.h
     LAYERS
     JUCE)
