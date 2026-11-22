@@ -147,3 +147,32 @@ TEST_CASE ("isOnALane is true for a clip a lane placement references, and for no
     REQUIRE (commands::removePlacement (fixture.project, placement.createdId, fixture.undoManager).wasApplied());
     CHECK (! AutomationClipRule::isOnALane (fixture.project, onLane));
 }
+
+TEST_CASE ("isOnATrackOrInASlot is true for a clip a track's own placement or a slot references, and not for a lane's clip", "[model][AutomationClipRule]")
+{
+    CommandFixture fixture;
+    const auto trackId = model::TrackModel (fixture.track (0)).getId();
+    const auto onLane = model::ClipModel (addedEventClip (fixture)).getId();
+    const auto onTrack = model::ClipModel (addedEventClip (fixture)).getId();
+    const auto inSlot = model::ClipModel (addedEventClip (fixture)).getId();
+    const auto nowhere = model::ClipModel (addedEventClip (fixture)).getId();
+
+    const auto lane = commands::addAutomationLane (fixture.project, trackId, "Cutoff", fixture.undoManager);
+    REQUIRE (lane.wasApplied());
+    REQUIRE (commands::addLanePlacement (fixture.project, lane.createdId, onLane, 0, 3840, fixture.undoManager).wasApplied());
+    const auto placement = commands::addPlacement (fixture.project, trackId, onTrack, 0, 3840, fixture.undoManager);
+    REQUIRE (placement.wasApplied());
+    REQUIRE (commands::setSlot (fixture.project, trackId, 0, inSlot, fixture.undoManager).wasApplied());
+    REQUIRE (fixture.isValid());
+
+    CHECK (AutomationClipRule::isOnATrackOrInASlot (fixture.project, onTrack));
+    CHECK (AutomationClipRule::isOnATrackOrInASlot (fixture.project, inSlot));
+    CHECK (! AutomationClipRule::isOnATrackOrInASlot (fixture.project, onLane));
+    CHECK (! AutomationClipRule::isOnATrackOrInASlot (fixture.project, nowhere));
+    CHECK (! AutomationClipRule::isOnATrackOrInASlot (fixture.project, "ffffffffffffffffffffffffffffffff"));
+
+    REQUIRE (commands::removePlacement (fixture.project, placement.createdId, fixture.undoManager).wasApplied());
+    REQUIRE (commands::clearSlot (fixture.project, trackId, 0, fixture.undoManager).wasApplied());
+    CHECK (! AutomationClipRule::isOnATrackOrInASlot (fixture.project, onTrack));
+    CHECK (! AutomationClipRule::isOnATrackOrInASlot (fixture.project, inSlot));
+}

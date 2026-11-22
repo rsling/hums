@@ -37,4 +37,32 @@ bool AutomationClipRule::isOnALane (const juce::ValueTree& project, const juce::
     return false;
 }
 
+bool AutomationClipRule::isOnATrackOrInASlot (const juce::ValueTree& project, const juce::String& clipId)
+{
+    jassert (project.hasType (ids::Project));
+
+    for (const auto& track : TracksModel (project.getChildWithName (ids::Tracks)).getTracks())
+    {
+        for (const auto& placement : track.getPlacements())
+            if (placement.getClipId() == clipId)
+                return true;
+
+        for (const auto& slot : track.getSlots())
+            if (slot.getClipId() == clipId)
+                return true;
+    }
+
+    return false;
+}
+
+juce::String AutomationClipRule::refusalForAClipOfALane()
+{
+    return "An automation lane references this clip, and such a clip stays on automation lanes: it is not placed on a track and not put into a slot.";
+}
+
+juce::String AutomationClipRule::refusalForAClipOfATrack()
+{
+    return "A track's placement or a slot references this clip, and an automation lane takes only a clip that is on automation lanes and nowhere else.";
+}
+
 } // namespace model

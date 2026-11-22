@@ -180,6 +180,9 @@ CommandResult addPlacement (juce::ValueTree project, const juce::String& trackId
     if (! clipOf (project, clipId).isValid())
         return noSuchClip (clipId);
 
+    if (AutomationClipRule::isOnALane (project, clipId))
+        return CommandResult::refused (AutomationClipRule::refusalForAClipOfALane());
+
     auto placements = track.getChildWithName (ids::Placements);
 
     const auto extentCheck = checkExtent (placements, start, length, {});
@@ -206,6 +209,9 @@ CommandResult addLanePlacement (juce::ValueTree project, const juce::String& lan
 
     if (whyNot.isNotEmpty())
         return CommandResult::refused (whyNot);
+
+    if (AutomationClipRule::isOnATrackOrInASlot (project, clipId))
+        return CommandResult::refused (AutomationClipRule::refusalForAClipOfATrack());
 
     const auto extentCheck = checkExtent (lane, start, length, {});
 

@@ -11,6 +11,7 @@
 #include "model/commands/AutomationLaneCommands.h"
 #include "model/commands/ClipPoolCommands.h"
 #include "model/commands/PlacementCommands.h"
+#include "model/commands/SlotCommands.h"
 
 #include <cstdint>
 #include <limits>
@@ -663,7 +664,7 @@ TEST_CASE ("A placement on an automation lane is moved in time, resized, split a
     placedOnLane (fixture, 0, clipId, 5000, 1000);
 
     // At the same ticks as the lane's, on the track itself: another parent.
-    placed (fixture, 0, clipId, 0, 9000);
+    placed (fixture, 0, addedEventClip (fixture, 1200), 0, 9000);
     REQUIRE (fixture.isValid());
 
     REQUIRE (commands::movePlacement (fixture.project, id, 1000, fixture.undoManager).wasApplied());
@@ -721,7 +722,7 @@ TEST_CASE ("addLanePlacement puts a cc-only clip on an automation lane from the 
     const auto laneId = addedLane (fixture, 0);
 
     // On the track itself, at the same ticks: another parent, not in the way.
-    placed (fixture, 0, clipId, 0, 9000);
+    placed (fixture, 0, addedEventClip (fixture, 3840), 0, 9000);
     REQUIRE (fixture.isValid());
     fixture.undoManager.clearUndoHistory();
     const auto before = fixture.xml();
@@ -733,7 +734,7 @@ TEST_CASE ("addLanePlacement puts a cc-only clip on an automation lane from the 
     CHECK (fixture.isValid());
     CHECK (lanePlacementsOf (fixture, 0) == "1000+5000 ");
     CHECK (placementsOf (fixture, 0) == "0+9000 ");
-    CHECK (refcountOf (fixture, clipId) == 2);
+    CHECK (refcountOf (fixture, clipId) == 1);
 
     const auto placement = model::TrackModel (fixture.track (0)).getAutomationLanes()[0].getPlacements()[0];
     CHECK (placement.getId() == result.createdId);
@@ -748,6 +749,41 @@ TEST_CASE ("addLanePlacement puts a cc-only clip on an automation lane from the 
     REQUIRE (fixture.undoManager.undo());
     REQUIRE (fixture.undoManager.undo());
     CHECK (fixture.xml() == before);
+}
+
+TEST_CASE ("A clip on an automation lane stays on lanes: no track takes it, and no lane takes a clip of a track or a slot", "[model][commands][PlacementCommands]")
+{
+    CommandFixture fixture;
+    const auto ofALane = addedEventClip (fixture, 3840);
+    const auto ofATrack = addedEventClip (fixture, 3840);
+    const auto ofASlot = addedEventClip (fixture, 3840);
+    const auto laneId = addedLane (fixture, 0);
+    const auto otherLaneId = addedLane (fixture, 1);
+
+    REQUIRE (commands::addLanePlacement (fixture.project, laneId, ofALane, 0, 3840, fixture.undoManager).wasApplied());
+    placed (fixture, 0, ofATrack, 0, 3840);
+    REQUIRE (commands::setSlot (fixture.project, idOfTrack (fixture, 1), 0, ofASlot, fixture.undoManager).wasApplied());
+    REQUIRE (fixture.isValid());
+    fixture.undoManager.clearUndoHistory();
+    const auto before = fixture.xml();
+
+    // Each of the three is an empty event clip, so its content is not what
+    // is in the way.
+    checkRefused (commands::addPlacement (fixture.project, idOfTrack (fixture, 0), ofALane, 20000, 3840, fixture.undoManager));
+    checkRefused (commands::addPlacement (fixture.project, idOfTrack (fixture, 1), ofALane, 20000, 3840, fixture.undoManager));
+    checkRefused (commands::addLanePlacement (fixture.project, laneId, ofATrack, 20000, 3840, fixture.undoManager));
+    checkRefused (commands::addLanePlacement (fixture.project, otherLaneId, ofASlot, 20000, 3840, fixture.undoManager));
+    CHECK (fixture.isUntouchedSince (before));
+
+    // A lane's clip goes on any lane, any number of times.
+    CHECK (commands::addLanePlacement (fixture.project, otherLaneId, ofALane, 0, 3840, fixture.undoManager).wasApplied());
+
+    // Once nothing of the other side references a clip, it may change sides.
+    for (const auto& placement : model::TrackModel (fixture.track (0)).getPlacements())
+        REQUIRE (commands::removePlacement (fixture.project, placement.getId(), fixture.undoManager).wasApplied());
+
+    CHECK (commands::addLanePlacement (fixture.project, laneId, ofATrack, 20000, 3840, fixture.undoManager).wasApplied());
+    CHECK (fixture.isValid());
 }
 
 TEST_CASE ("addLanePlacement takes an empty event clip", "[model][commands][PlacementCommands]")

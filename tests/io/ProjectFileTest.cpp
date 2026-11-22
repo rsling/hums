@@ -1439,6 +1439,7 @@ const std::vector<RefusedFixture> refusedFixtures {
     { "refused/invariant_06_no_tempo_at_tick_0.xml", Outcome::invalidDocument, "Project/Timeline", "" },
     { "refused/invariant_07_ppq_480.xml", Outcome::invalidDocument, "Project", "ppq" },
     { "refused/invariant_08_note_without_length.xml", Outcome::invalidDocument, "Project/ClipPool/Clip[2]/Events/Note[0]", "length" },
+    { "refused/invariant_09_lane_clip_in_a_slot.xml", Outcome::invalidDocument, "Project/Tracks/Track[0]/Slots/Slot[0]", "clipId" },
     { "refused/invariant_09_note_in_automation_clip.xml", Outcome::invalidDocument, "Project/ClipPool/Clip[1]/Events/Note[0]", "" },
     { "refused/invariant_10_bool_spelled_yes.xml", Outcome::invalidDocument, "Project/UiState", "loopEnabled" },
     { "refused/invariant_10_bpm_with_seven_digits.xml", Outcome::invalidDocument, "Project/Timeline/TempoEvent[0]", "bpm" },

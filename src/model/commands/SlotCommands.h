@@ -29,8 +29,10 @@ namespace model::commands
 
 // Puts the clip into the track's slot in that scene. A clip that was there
 // gives way to it (and stays in the pool, with a smaller refcount). A clip
-// of either kind may be in any number of slots. Refused when the track or
-// the clip is not there or the scene is negative.
+// of either kind may be in any number of slots, but for a clip that an
+// AutomationLane references: that one stays on lanes [D21]. Refused for
+// such a clip, and when the track or the clip is not there or the scene is
+// negative.
 CommandResult setSlot (juce::ValueTree project, const juce::String& trackId, int scene, const juce::String& clipId, juce::UndoManager& undoManager);
 
 // Empties the track's slot in that scene. Its clip stays in the pool, with

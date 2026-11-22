@@ -89,6 +89,8 @@ private:
     int refcountOf (const juce::ValueTree& clip) const;
     std::vector<juce::ValueTree> placements() const;
     std::vector<juce::ValueTree> ownPlacements() const;
+    bool isOnALane (const juce::ValueTree& clip) const;
+    bool isOnATrackOrInASlot (const juce::ValueTree& clip) const;
     std::int64_t freeStartFor (const juce::ValueTree& parent, std::int64_t length, const juce::ValueTree& moving);
     std::vector<juce::ValueTree> slots() const;
     bool isLargestRowInUse() const;

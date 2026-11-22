@@ -583,45 +583,20 @@ TEST_CASE ("A clip that an AutomationLane references takes cc events and nothing
     CHECK (song.isValid());
 }
 
-TEST_CASE ("A clip on a lane and on a track is refused a note through the track's placement under update all", "[model][commands][EventClipCommands]")
-{
-    Song song;
-    const auto clipId = song.eventClip();
-    song.placeOnALane (0, clipId, 0);
-    const auto onTrack = song.place (1, clipId, 0);
-    const auto before = song.startGesture();
-    song.undoManager.clearUndoHistory();
-
-    EditContext throughTrack (Policy::updateAll);
-    throughTrack.addPlacement (onTrack);
-
-    CHECK (! commands::addNote (song.project, clipId, note (0, 240, 60), throughTrack, song.undoManager).wasApplied());
-    CHECK (song.isUntouchedSince (before));
-}
-
-TEST_CASE ("Under make unique a note goes into the clone of a track's placement, though a lane references the original", "[model][commands][EventClipCommands]")
+TEST_CASE ("A clip on two lanes is refused a note through one lane's placement under update all", "[model][commands][EventClipCommands]")
 {
     Song song;
     const auto clipId = song.eventClip();
     const auto onLane = song.placeOnALane (0, clipId, 0);
-    const auto onTrack = song.place (1, clipId, 0);
+    song.placeOnALane (1, clipId, 0);
     const auto before = song.startGesture();
+    song.undoManager.clearUndoHistory();
 
-    EditContext throughTrack (Policy::makeUnique);
-    throughTrack.addPlacement (onTrack);
+    EditContext throughLane (Policy::updateAll);
+    throughLane.addPlacement (onLane);
 
-    REQUIRE (commands::addNote (song.project, clipId, note (0, 240, 60), throughTrack, song.undoManager).wasApplied());
-
-    CHECK (song.isValid());
-    REQUIRE (throughTrack.hasClone());
-    CHECK (song.clip (clipId).getNotes().empty());
-    CHECK (song.clip (throughTrack.getCloneId()).getNotes().size() == 1);
-    CHECK (song.placement (onTrack).getClipId() == throughTrack.getCloneId());
-    CHECK (song.placement (onLane).getClipId() == clipId);
-
-    // The clone, the redirection and the note are one undo step.
-    REQUIRE (song.undoManager.undo());
-    CHECK (song.xml() == before);
+    CHECK (! commands::addNote (song.project, clipId, note (0, 240, 60), throughLane, song.undoManager).wasApplied());
+    CHECK (song.isUntouchedSince (before));
 }
 
 TEST_CASE ("Under make unique a note is refused through a lane's placement, and no clone is made", "[model][commands][EventClipCommands]")
@@ -629,7 +604,7 @@ TEST_CASE ("Under make unique a note is refused through a lane's placement, and 
     Song song;
     const auto clipId = song.eventClip();
     const auto onLane = song.placeOnALane (0, clipId, 0);
-    song.place (1, clipId, 0);
+    song.placeOnALane (1, clipId, 0);
     const auto before = song.startGesture();
     song.undoManager.clearUndoHistory();
 
@@ -653,7 +628,7 @@ TEST_CASE ("Once a gesture has cloned a lane's clip, the clone is held to the la
     Song song;
     const auto clipId = song.eventClip();
     const auto onLane = song.placeOnALane (0, clipId, 0);
-    song.place (1, clipId, 0);
+    song.placeOnALane (1, clipId, 0);
     song.startGesture();
 
     EditContext throughLane (Policy::makeUnique);
@@ -783,17 +758,19 @@ TEST_CASE ("setClipLoopLength brings the offset of every placement of the clip b
 {
     Song song;
     const auto clipId = song.eventClip();
+    const auto laneClipId = song.eventClip();
     const auto otherClipId = song.eventClip();
     EditContext first (Policy::updateAll);
     REQUIRE (commands::addEvent (song.project, clipId, event (0, Kind::cc, 74, 1), first, song.undoManager).wasApplied());
 
     // Offsets come from splitting: 0 | 1000 | 2000 | 3000 on the track, and
-    // 0 | 960 on a lane. The other clip's placement has one of 3000.
+    // 0 | 960 on a lane, whose clip is on lanes only. The other clip's
+    // placement has one of 3000.
     const auto whole = song.place (0, clipId, 0);
     const auto second = commands::splitPlacement (song.project, whole, 1000, song.undoManager);
     const auto third = commands::splitPlacement (song.project, second.createdId, 2000, song.undoManager);
     const auto fourth = commands::splitPlacement (song.project, third.createdId, 3000, song.undoManager);
-    const auto onLane = song.placeOnALane (1, clipId, 0);
+    const auto onLane = song.placeOnALane (1, laneClipId, 0);
     const auto onLaneSecond = commands::splitPlacement (song.project, onLane, 960, song.undoManager);
     const auto ofOther = song.place (2, otherClipId, 0);
     const auto ofOtherSecond = commands::splitPlacement (song.project, ofOther, 3000, song.undoManager);
@@ -826,10 +803,10 @@ TEST_CASE ("setClipLoopLength brings the offset of every placement of the clip b
     REQUIRE (song.undoManager.redo());
     CHECK (song.xml() == after);
 
-    // A shorter loop still: 960 mod 700.
+    // A lane's placement is brought back like a track's: 960 mod 700.
     song.undoManager.beginNewTransaction();
     EditContext again (Policy::updateAll);
-    REQUIRE (commands::setClipLoopLength (song.project, clipId, 700, again, song.undoManager).wasApplied());
+    REQUIRE (commands::setClipLoopLength (song.project, laneClipId, 700, again, song.undoManager).wasApplied());
     CHECK (song.placement (onLaneSecond.createdId).getOffset() == 260);
     CHECK (song.isValid());
 }

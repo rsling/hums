@@ -1340,6 +1340,23 @@ TEST_CASE ("Invariant 9: the same content on a Track's own Placements is fine", 
     requireNoViolation (project);
 }
 
+TEST_CASE ("Invariant 9: a clip that an AutomationLane references is on no Track's own Placements", "[model][Validator]")
+{
+    // The lane's clip, placed after the two bass placements.
+    const auto project = validDocument();
+    append (placementsOf (project), R"(<Placement id="7c2e9a0b4d6f4b8a8a9b0c1d2e3f4a5b" clipId="6b1d8f2c4e3a4b7a99c8d7e6f5a4b3c2" start="15360" length="3840"/>)");
+
+    requireOnlyViolation (project, "Project/Tracks/Track[0]/Placements/Placement[2]", "clipId");
+}
+
+TEST_CASE ("Invariant 9: a clip that an AutomationLane references is in no Slot", "[model][Validator]")
+{
+    const auto project = validDocument();
+    set (slotOf (project), ids::clipId, "6b1d8f2c4e3a4b7a99c8d7e6f5a4b3c2");
+
+    requireOnlyViolation (project, "Project/Tracks/Track[0]/Slots/Slot[0]", "clipId");
+}
+
 //==============================================================================
 // Invariant 10: ranges, lists and text forms.
 

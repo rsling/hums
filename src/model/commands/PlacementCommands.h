@@ -37,16 +37,19 @@ namespace model::commands
 // Puts the clip on the track, as a placement of its own with a new id. It
 // plays the clip's loop from its beginning (offset 0), again and again for
 // its whole length. The result carries the id. A clip of either kind may be
-// placed, any number of times. Refused when the track or the clip is not
-// there, the start is negative, the length is not at least one tick, or the
-// track already has a placement in those ticks.
+// placed, any number of times, but for a clip that an AutomationLane
+// references: that one stays on lanes [D21]. Refused for such a clip, and
+// when the track or the clip is not there, the start is negative, the
+// length is not at least one tick, or the track already has a placement in
+// those ticks.
 CommandResult addPlacement (juce::ValueTree project, const juce::String& trackId, const juce::String& clipId, std::int64_t start, std::int64_t length, juce::UndoManager& undoManager);
 
 // Puts the clip on the automation lane, as addPlacement puts one on a
 // track: a placement of its own with a new id, from the beginning of the
 // loop; the result carries the id. A lane takes only an event clip that
 // holds nothing but cc events (model/AutomationClipRule) — an empty event
-// clip is one. Refused for any other clip, and when the lane or the clip is
+// clip is one — and only one that no track's placement and no slot
+// references [D21]. Refused for any other clip, and when the lane or the clip is
 // not there, the start is negative, the length is not at least one tick, or
 // the lane already has a placement in those ticks. What the lane's track
 // has in its own placements is never in the way.

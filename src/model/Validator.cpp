@@ -794,7 +794,9 @@ namespace
 
     //==========================================================================
     // Invariant 9: a clip referenced by any AutomationLane placement contains
-    // only cc events. That makes it an event clip without notes.
+    // only cc events. That makes it an event clip without notes. And it is
+    // on lanes only: no placement of a track itself and no slot references
+    // it [D21].
 
     bool isOtherThanCc (const juce::String& eventKind)
     {
@@ -807,6 +809,11 @@ namespace
 
         // A clip that several lane placements reference is reported once.
         std::set<juce::String> clipIdsLookedAt;
+
+        // Every event clip a lane placement references. A step clip on a
+        // lane is reported there, at the lane's placement, and not again at
+        // its other references.
+        std::set<juce::String> clipIdsOnLanes;
 
         for (const auto& track : tracksOf (project))
         {
@@ -827,6 +834,8 @@ namespace
                         continue;
                     }
 
+                    clipIdsOnLanes.insert (clipId.value);
+
                     const auto isFirstLook = clipIdsLookedAt.insert (clipId.value).second;
 
                     if (! isFirstLook)
@@ -841,6 +850,18 @@ namespace
                             addViolation (violations, event, ids::kind, "is \"" + kind.value + "\" in a clip that an AutomationLane references; such a clip holds only cc events");
                 }
             }
+        }
+
+        // The other references of those clips: each is one too many.
+        for (const auto& track : tracksOf (project))
+        {
+            auto references = itemsOf (track, ids::Placements, ids::Placement);
+            const auto slots = itemsOf (track, ids::Slots, ids::Slot);
+            references.insert (references.end(), slots.begin(), slots.end());
+
+            for (const auto& reference : references)
+                if (const auto clipId = PropertyReader::readString (reference, ids::clipId); clipId.isValid() && clipIdsOnLanes.count (clipId.value) > 0)
+                    addViolation (violations, reference, ids::clipId, "names a clip that an AutomationLane references; such a clip is on AutomationLanes only");
         }
     }
 

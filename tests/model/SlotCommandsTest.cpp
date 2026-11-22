@@ -8,7 +8,9 @@
 #include "model/SessionModel.h"
 #include "model/TrackModel.h"
 #include "model/TracksModel.h"
+#include "model/commands/AutomationLaneCommands.h"
 #include "model/commands/ClipPoolCommands.h"
+#include "model/commands/PlacementCommands.h"
 #include "model/commands/SessionCommands.h"
 #include "model/commands/SlotCommands.h"
 
@@ -196,6 +198,30 @@ TEST_CASE ("setSlot refuses a track or a clip that is not there, and a negative 
     };
 
     for (const auto& result : results)
+    {
+        CHECK (! result.wasApplied());
+        CHECK (result.refusal.isNotEmpty());
+    }
+
+    CHECK (fixture.isUntouchedSince (before));
+}
+
+TEST_CASE ("setSlot refuses a clip that an AutomationLane references: such a clip stays on lanes", "[model][commands][SlotCommands]")
+{
+    SessionFixture fixture;
+    const auto trackId = idOfTrack (fixture, 0);
+    const auto lane = commands::addAutomationLane (fixture.project, trackId, "Cutoff", fixture.undoManager);
+    REQUIRE (lane.wasApplied());
+    REQUIRE (commands::addLanePlacement (fixture.project, lane.createdId, fixture.clipIds[0], 0, 3840, fixture.undoManager).wasApplied());
+    fixture.fill (0, 1, "b");
+    fixture.undoManager.clearUndoHistory();
+    const auto before = fixture.xml();
+
+    // Into an empty slot and into an occupied one, of this track and of
+    // another.
+    for (const auto& result : { commands::setSlot (fixture.project, trackId, 0, fixture.clipIds[0], fixture.undoManager),
+                                commands::setSlot (fixture.project, trackId, 1, fixture.clipIds[0], fixture.undoManager),
+                                commands::setSlot (fixture.project, idOfTrack (fixture, 1), 0, fixture.clipIds[0], fixture.undoManager) })
     {
         CHECK (! result.wasApplied());
         CHECK (result.refusal.isNotEmpty());

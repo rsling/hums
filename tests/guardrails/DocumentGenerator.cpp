@@ -26,9 +26,11 @@ namespace
         // (invariant 4).
         std::int64_t loopLength = 0;
 
-        // An event clip with nothing but cc events: the only kind an
-        // AutomationLane takes (invariant 9).
-        bool holdsOnlyCcEvents = false;
+        // An event clip with nothing but cc events, kept for the
+        // AutomationLanes: a lane takes only such a clip, and a clip on a
+        // lane is on no track and in no slot (invariant 9). Not every
+        // cc-only clip is kept for them; a track plays one as well.
+        bool isForLanes = false;
     };
 
     // One document in the making. The methods follow the tree of
@@ -465,7 +467,7 @@ namespace
                 events.appendChild (child, nullptr);
 
             node.appendChild (events, nullptr);
-            clips.push_back ({ id, loopLength, holdsOnlyCcEvents });
+            clips.push_back ({ id, loopLength, holdsOnlyCcEvents && random.chance (60) });
 
             return node;
         }
@@ -660,13 +662,13 @@ namespace
             setBoolOrOmit (node, ids::solo, random.chance (20), false);
 
             std::vector<ClipRecord> automationClips;
+            std::vector<ClipRecord> trackClips;
 
             for (const auto& clip : clips)
-                if (clip.holdsOnlyCcEvents)
-                    automationClips.push_back (clip);
+                (clip.isForLanes ? automationClips : trackClips).push_back (clip);
 
             juce::ValueTree placements (ids::Placements);
-            addPlacements (placements, clips);
+            addPlacements (placements, trackClips);
 
             juce::ValueTree automationLanes (ids::AutomationLanes);
 
@@ -696,14 +698,14 @@ namespace
             // Sparse: a few scenes of the first sixteen, each at most once.
             juce::ValueTree slots (ids::Slots);
 
-            if (! clips.empty())
+            if (! trackClips.empty())
             {
                 for (const auto scene : distinctInts (random.intBetween (0, 3), 0, 15))
                 {
                     juce::ValueTree slot (ids::Slot);
 
                     setInt (slot, ids::scene, scene);
-                    setText (slot, ids::clipId, random.oneOf (clips).id);
+                    setText (slot, ids::clipId, random.oneOf (trackClips).id);
 
                     slots.appendChild (slot, nullptr);
                 }

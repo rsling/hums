@@ -1,5 +1,6 @@
 #include "model/commands/SlotCommands.h"
 
+#include "model/AutomationClipRule.h"
 #include "model/Ids.h"
 #include "model/PropertyReader.h"
 #include "model/commands/NodeLookup.h"
@@ -98,6 +99,9 @@ CommandResult setSlot (juce::ValueTree project, const juce::String& trackId, int
 
     if (! NodeLookup::childWithId (project.getChildWithName (ids::ClipPool), ids::Clip, clipId).isValid())
         return CommandResult::refused ("There is no Clip with the id \"" + clipId + "\".");
+
+    if (AutomationClipRule::isOnALane (project, clipId))
+        return CommandResult::refused (AutomationClipRule::refusalForAClipOfALane());
 
     auto slot = slotOf (track, scene);
 

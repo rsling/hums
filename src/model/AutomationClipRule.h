@@ -12,8 +12,14 @@ namespace model
 //
 // The rule has two sides, and the commands hold both: a clip that does not
 // meet it is not placed on a lane, and a clip that a lane references is
-// given no content that would break it, whichever editor tries. This is the
-// one place that says what the rule is.
+// given no content that would break it, whichever editor tries.
+//
+// And a clip on a lane is on lanes only [D21]: one that a lane references
+// is not placed on a track and not put into a slot, and one that a track's
+// placement or a slot references is not placed on a lane. Nothing is stored
+// for this; a clip that nothing references yet may go either way.
+//
+// This is the one place that says what the rule is.
 class AutomationClipRule
 {
 public:
@@ -25,6 +31,15 @@ public:
     // the clip, so that it must stay as whyNotForALane wants it. `project`
     // is the Project node.
     static bool isOnALane (const juce::ValueTree& project, const juce::String& clipId);
+
+    // True when a placement of a track itself, or a slot, references the
+    // clip, so that no AutomationLane can.
+    static bool isOnATrackOrInASlot (const juce::ValueTree& project, const juce::String& clipId);
+
+    // What a command says when it refuses to place a clip of a lane on a
+    // track or to put it into a slot, and the other way round.
+    static juce::String refusalForAClipOfALane();
+    static juce::String refusalForAClipOfATrack();
 };
 
 } // namespace model

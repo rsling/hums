@@ -1293,6 +1293,37 @@ std::vector<juce::ValueTree> CommandDriver::ownPlacements() const
     return found;
 }
 
+// Whether a placement on an AutomationLane references the clip. Such a clip
+// is on lanes only: no track takes it and no slot (invariant 9). Written
+// here a second time on purpose: it is what the commands are held to.
+bool CommandDriver::isOnALane (const juce::ValueTree& clip) const
+{
+    const auto clipId = idOf (clip);
+
+    for (const auto& placement : placements())
+        if (placement.getParent().hasType (ids::AutomationLane) && PropertyReader::getRequiredString (placement, ids::clipId) == clipId)
+            return true;
+
+    return false;
+}
+
+// Whether a track's own placement or a slot references the clip. No
+// AutomationLane takes such a clip.
+bool CommandDriver::isOnATrackOrInASlot (const juce::ValueTree& clip) const
+{
+    const auto clipId = idOf (clip);
+
+    for (const auto& placement : ownPlacements())
+        if (PropertyReader::getRequiredString (placement, ids::clipId) == clipId)
+            return true;
+
+    for (const auto& slot : slots())
+        if (PropertyReader::getRequiredString (slot, ids::clipId) == clipId)
+            return true;
+
+    return false;
+}
+
 // A start at which a placement of this length is in nobody's way under
 // `parent`: anywhere, if that is free, and else behind the last one.
 std::int64_t CommandDriver::freeStartFor (const juce::ValueTree& parent, std::int64_t length, const juce::ValueTree& moving)
@@ -1313,8 +1344,14 @@ std::int64_t CommandDriver::freeStartFor (const juce::ValueTree& parent, std::in
 
 CommandChecks::Attempt CommandDriver::addPlacement()
 {
+    // A track takes every clip but one that is on an AutomationLane.
+    std::vector<juce::ValueTree> knownClips;
+    std::vector<juce::ValueTree> clipsOfLanes;
+
+    for (const auto& clip : clips())
+        (isOnALane (clip) ? clipsOfLanes : knownClips).push_back (clip);
+
     const auto knownTracks = tracks();
-    const auto knownClips = clips();
     const auto isValidForm = wantsValidForm() && ! knownTracks.empty() && ! knownClips.empty();
 
     // A whole number of bars, or any length.
@@ -1337,7 +1374,7 @@ CommandChecks::Attempt CommandDriver::addPlacement()
         if (! isValidForm)
         {
             // One thing wrong.
-            const auto fault = random.intBetween (0, 4);
+            const auto fault = random.intBetween (0, 5);
 
             if (fault == 0 && ! taken.empty())
                 start = startInTheWayOf (random, random.oneOf (taken), length);
@@ -1347,6 +1384,8 @@ CommandChecks::Attempt CommandDriver::addPlacement()
                 length = noLength (random);
             else if (fault == 3)
                 clipId = unknownId();
+            else if (fault == 4 && ! clipsOfLanes.empty())
+                clipId = idOf (random.oneOf (clipsOfLanes));
             else
                 trackId = unknownId();
         }
@@ -1591,8 +1630,14 @@ int CommandDriver::row()
 
 CommandChecks::Attempt CommandDriver::setSlot()
 {
+    // A slot takes every clip but one that is on an AutomationLane.
+    std::vector<juce::ValueTree> knownClips;
+    std::vector<juce::ValueTree> clipsOfLanes;
+
+    for (const auto& clip : clips())
+        (isOnALane (clip) ? clipsOfLanes : knownClips).push_back (clip);
+
     const auto knownTracks = tracks();
-    const auto knownClips = clips();
     const auto isValidForm = wantsValidForm() && ! knownTracks.empty() && ! knownClips.empty();
 
     juce::String trackId = unknownId();
@@ -1607,12 +1652,14 @@ CommandChecks::Attempt CommandDriver::setSlot()
         if (! isValidForm)
         {
             // One thing wrong.
-            const auto fault = random.intBetween (0, 2);
+            const auto fault = random.intBetween (0, 3);
 
             if (fault == 0)
                 scene = negativeRow (random);
             else if (fault == 1)
                 clipId = unknownId();
+            else if (fault == 2 && ! clipsOfLanes.empty())
+                clipId = idOf (random.oneOf (clipsOfLanes));
             else
                 trackId = unknownId();
         }
@@ -1784,8 +1831,10 @@ CommandChecks::Attempt CommandDriver::addLanePlacement()
     std::vector<juce::ValueTree> fit;
     std::vector<juce::ValueTree> unfit;
 
+    // Fit is a clip with nothing but cc events that no track's placement
+    // and no slot references.
     for (const auto& clip : clips())
-        (isFitForALane (clip) ? fit : unfit).push_back (clip);
+        (isFitForALane (clip) && ! isOnATrackOrInASlot (clip) ? fit : unfit).push_back (clip);
 
     const auto knownLanes = lanes();
     const auto isValidForm = wantsValidForm() && ! knownLanes.empty() && ! fit.empty();
