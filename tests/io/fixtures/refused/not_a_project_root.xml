@@ -1,0 +1,6 @@
+<!-- Refused: not a project file. The root node is a Clip. -->
+<Clip id="a4c6e8b0d2f44a1c8e0b2d4f6a8c0e2b" kind="event" loopLength="3840">
+  <Events>
+    <Note tick="0" length="480" pitch="60"/>
+  </Events>
+</Clip>

@@ -1389,3 +1389,227 @@ TEST_CASE ("When the previous file cannot be kept as .bak, nothing is saved", "[
     CHECK (textOf (backup.getChildFile ("kept")) == "kept");
     CHECK (directory.fileNames() == juce::StringArray { "song.xml", "song.xml.bak" });
 }
+
+//==============================================================================
+// Guardrail 5: loading is a wall (docs/GUARDRAILS.md -> 5). Every file under
+// fixtures/ goes through the real load path. A valid one installs; every
+// other one is refused, and the open project and the file stay as they were.
+//
+// The test names begin with "guardrail" so that `ctest -R guardrail` runs
+// them with the other guardrails.
+
+namespace
+{
+
+// The fixtures that load, relative to the fixtures directory.
+const std::vector<const char*> validFixtures {
+    "all_node_types.xml",
+    "berlin_test.xml",
+    "berlin_test_canonical.xml",
+};
+
+// A fixture that is refused, and how. For a file the Validator refuses, the
+// one node and property it is refused for; an empty property stands for the
+// node as a whole.
+struct RefusedFixture
+{
+    const char* fileName;
+    Outcome outcome;
+    const char* nodePath = "";
+    const char* property = "";
+};
+
+const std::vector<RefusedFixture> refusedFixtures {
+    { "refused/malformed_empty.xml", Outcome::malformedXml },
+    { "refused/malformed_not_xml.xml", Outcome::malformedXml },
+    { "refused/malformed_unclosed_tag.xml", Outcome::malformedXml },
+    { "refused/malformed_unknown_entity.xml", Outcome::malformedXml },
+    { "refused/not_a_project_root.xml", Outcome::notAProjectFile },
+    { "refused/text_between_nodes.xml", Outcome::notAProjectFile },
+    { "refused/schema_version_absent.xml", Outcome::noSchemaVersion, "Project", "schemaVersion" },
+    { "refused/schema_version_not_a_number.xml", Outcome::noSchemaVersion, "Project", "schemaVersion" },
+    { "refused/schema_version_too_new.xml", Outcome::versionTooNew, "Project", "schemaVersion" },
+    // No step exists at version 1, so the test hands in the one that throws.
+    { "refused/migration_throws.xml", Outcome::migrationFailed },
+    { "refused/invariant_01_slot_references_no_clip.xml", Outcome::invalidDocument, "Project/Tracks/Track[0]/Slots/Slot[0]", "clipId" },
+    { "refused/invariant_02_lane_with_seven_cells.xml", Outcome::invalidDocument, "Project/ClipPool/Clip[0]/Grid/Lane[0]", "" },
+    { "refused/invariant_03_overlapping_placements.xml", Outcome::invalidDocument, "Project/Tracks/Track[0]/Placements/Placement[1]", "start" },
+    { "refused/invariant_04_offset_at_loop_length.xml", Outcome::invalidDocument, "Project/Tracks/Track[0]/Placements/Placement[1]", "offset" },
+    { "refused/invariant_05_clip_of_another_kind.xml", Outcome::invalidDocument, "Project/ClipPool/Clip[2]", "kind" },
+    { "refused/invariant_06_no_tempo_at_tick_0.xml", Outcome::invalidDocument, "Project/Timeline", "" },
+    { "refused/invariant_07_ppq_480.xml", Outcome::invalidDocument, "Project", "ppq" },
+    { "refused/invariant_08_note_without_length.xml", Outcome::invalidDocument, "Project/ClipPool/Clip[2]/Events/Note[0]", "length" },
+    { "refused/invariant_09_note_in_automation_clip.xml", Outcome::invalidDocument, "Project/ClipPool/Clip[1]/Events/Note[0]", "" },
+    { "refused/invariant_10_bool_spelled_yes.xml", Outcome::invalidDocument, "Project/UiState", "loopEnabled" },
+    { "refused/invariant_10_bpm_with_seven_digits.xml", Outcome::invalidDocument, "Project/Timeline/TempoEvent[0]", "bpm" },
+    { "refused/invariant_10_pitch_128.xml", Outcome::invalidDocument, "Project/ClipPool/Clip[2]/Events/Note[0]", "pitch" },
+    { "refused/invariant_11_two_pads_with_one_index.xml", Outcome::invalidDocument, "Project/Routing/PadMap/Pad[1]", "index" },
+    { "refused/invariant_12_no_session.xml", Outcome::invalidDocument, "Project", "" },
+};
+
+juce::File fixtureFile (const char* fileName)
+{
+    return juce::File (HUMS_IO_FIXTURES_DIRECTORY).getChildFile (fileName);
+}
+
+// A file as it is on disk at one moment: its bytes and when it was last
+// written.
+struct FileState
+{
+    explicit FileState (const juce::File& file)
+        : modified (file.getLastModificationTime())
+    {
+        REQUIRE (file.loadFileAsData (bytes));
+    }
+
+    bool operator== (const FileState& other) const
+    {
+        return bytes == other.bytes && modified == other.modified;
+    }
+
+    juce::MemoryBlock bytes;
+    juce::Time modified;
+};
+
+// The steps a file meets whose migration fails.
+io::Migrations::Steps stepsWithOneThatThrows()
+{
+    return { [] (juce::ValueTree&) { throw std::runtime_error ("this step cannot migrate the file"); } };
+}
+
+std::string sortedLines (juce::StringArray names)
+{
+    names.sort (false);
+
+    return names.joinIntoString ("\n").toStdString();
+}
+
+} // namespace
+
+TEST_CASE ("guardrail 5: every file under fixtures/ is listed here as valid or as refused", "[io][ProjectFile][guardrail]")
+{
+    // So that a fixture cannot be added and never loaded: the tests below
+    // walk the two lists, and this one holds the lists to the directory.
+    const juce::File directory (HUMS_IO_FIXTURES_DIRECTORY);
+
+    juce::StringArray onDisk;
+
+    for (const auto& file : directory.findChildFiles (juce::File::findFiles | juce::File::ignoreHiddenFiles, true))
+        onDisk.add (file.getRelativePathFrom (directory));
+
+    juce::StringArray listed;
+
+    for (const auto* fileName : validFixtures)
+        listed.add (fileName);
+
+    for (const auto& fixture : refusedFixtures)
+        listed.add (fixture.fileName);
+
+    CHECK (sortedLines (onDisk) == sortedLines (listed));
+}
+
+TEST_CASE ("guardrail 5: every valid fixture installs and is left as it was on disk", "[io][ProjectFile][guardrail]")
+{
+    for (const auto* fileName : validFixtures)
+    {
+        INFO (fileName);
+        OpenProject open;
+        const auto file = fixtureFile (fileName);
+        const FileState before (file);
+
+        const auto result = io::ProjectFile::load (file, open.document, open.undoManager);
+
+        CHECK (result.wasLoaded());
+        CHECK (result.message.isEmpty());
+        CHECK (open.document != open.treeBefore);
+        CHECK (model::Validator::validate (open.document).empty());
+        CHECK_FALSE (open.undoManager.canUndo());
+        CHECK (FileState (file) == before);
+    }
+}
+
+TEST_CASE ("guardrail 5: every other fixture is refused, and the open project and the file stay as they were", "[io][ProjectFile][guardrail]")
+{
+    for (const auto& fixture : refusedFixtures)
+    {
+        INFO (fixture.fileName);
+        OpenProject open;
+        CountingListener listener;
+        open.document.addListener (&listener);
+
+        const auto file = fixtureFile (fixture.fileName);
+        const FileState before (file);
+        const auto steps = fixture.outcome == Outcome::migrationFailed ? stepsWithOneThatThrows() : io::Migrations::steps();
+
+        const auto result = io::ProjectFile::load (file, open.document, open.undoManager, steps);
+
+        CHECK_FALSE (result.wasLoaded());
+        CHECK (result.outcome == fixture.outcome);
+        CHECK (result.message.isNotEmpty());
+
+        // Refused for the one thing the fixture is there for, and for
+        // nothing else.
+        const juce::String expectedNodePath (fixture.nodePath);
+
+        if (expectedNodePath.isEmpty())
+        {
+            CHECK (result.violations.empty());
+        }
+        else
+        {
+            REQUIRE (result.violations.size() == 1);
+            CHECK (result.violations[0].nodePath.toStdString() == expectedNodePath.toStdString());
+            CHECK (result.violations[0].property.toStdString() == std::string (fixture.property));
+            CHECK (result.message.contains (expectedNodePath));
+        }
+
+        CHECK (open.isUntouched());
+        CHECK (listener.redirections == 0);
+        CHECK (listener.otherCallbacks == 0);
+        CHECK (FileState (file) == before);
+
+        open.document.removeListener (&listener);
+    }
+}
+
+TEST_CASE ("guardrail 5: the fixture whose migration throws is refused for that alone", "[io][ProjectFile][guardrail]")
+{
+    // With the steps of this build, which are none, it is a valid document.
+    // When the first real step lands, a file of the old version that the step
+    // cannot migrate takes this fixture's place.
+    OpenProject open;
+
+    CHECK (io::ProjectFile::load (fixtureFile ("refused/migration_throws.xml"), open.document, open.undoManager).wasLoaded());
+}
+
+TEST_CASE ("guardrail 5: a save that fails leaves the previous file as it was", "[io][ProjectFile][guardrail]")
+{
+    // A project file that was loaded, worked on, and cannot be saved over,
+    // because it is read-only.
+    const SaveDirectory directory;
+    const auto file = directory.file ("song.xml");
+    REQUIRE (fixtureFile ("all_node_types.xml").copyFileTo (file));
+
+    juce::ValueTree document;
+    juce::UndoManager undoManager;
+    REQUIRE (io::ProjectFile::load (file, document, undoManager).wasLoaded());
+    const auto loadedText = canonical (document);
+
+    document.setProperty (ids::name, "Edited since it was loaded", &undoManager);
+
+    REQUIRE (file.setReadOnly (true));
+    const FileState before (file);
+
+    const auto result = io::ProjectFile::save (document, file);
+
+    CHECK_FALSE (result.wasSaved());
+    CHECK (result.message.isNotEmpty());
+    CHECK (FileState (file) == before);
+    CHECK (directory.fileNames() == juce::StringArray { "song.xml" });
+
+    // And it is still the project that was loaded, not the edited one.
+    juce::ValueTree reopened;
+    juce::UndoManager otherUndoManager;
+    REQUIRE (io::ProjectFile::load (file, reopened, otherUndoManager).wasLoaded());
+    CHECK (canonical (reopened) == loadedText);
+}

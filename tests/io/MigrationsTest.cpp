@@ -26,7 +26,7 @@ TEST_CASE ("Every step raises the version by one, from 1", "[io][Migrations]")
 
 TEST_CASE ("The fixtures of valid projects are of the current version", "[io][Migrations]")
 {
-    for (const auto* fileName : { "berlin_test.xml", "berlin_test_canonical.xml" })
+    for (const auto* fileName : { "all_node_types.xml", "berlin_test.xml", "berlin_test_canonical.xml" })
     {
         INFO (fileName);
         const auto file = juce::File (HUMS_IO_FIXTURES_DIRECTORY).getChildFile (fileName);
