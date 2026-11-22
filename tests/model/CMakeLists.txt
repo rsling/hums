@@ -11,6 +11,7 @@ hums_add_test_executable(model_tests
     ClipPoolCommandsTest.cpp
     ClipPoolModelTest.cpp
     ColourTextTest.cpp
+    CopyNameTest.cpp
     CommandFixture.h
     DeclaredIdentifiersTest.cpp
     EditContextTest.cpp

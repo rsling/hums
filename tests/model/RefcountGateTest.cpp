@@ -263,11 +263,51 @@ TEST_CASE ("A clone is the clip again with a new id for the clip and for every n
     all.insert (cloneIds.begin(), cloneIds.end());
     CHECK (all.size() == 6);
 
-    // But for the ids and the colour that was set, the same clip.
+    // But for the ids, the name of a copy [D20] and the colour that was
+    // set, the same clip.
     CHECK (model::ClipModel (clone).getColour() == "#ffffffff");
+    CHECK (model::ClipModel (clone).getName() == "Drums (copy 1)");
     clone = clone.createCopy();
     clone.setProperty (ids::colour, "#ff102030", nullptr);
+    clone.setProperty (ids::name, "Drums", nullptr);
     CHECK (withoutIds (clone) == withoutIds (original));
+}
+
+TEST_CASE ("Every clone of a clip gets the next free copy name, a clone of a clone too", "[model][commands][RefcountGate]")
+{
+    SharedClip shared;
+    auto& fixture = shared.fixture;
+
+    // Through the placement on the lead track: the first copy.
+    fixture.undoManager.beginNewTransaction();
+    EditContext first (Policy::makeUnique);
+    first.addPlacement (shared.onLead);
+    REQUIRE (commands::setClipColour (fixture.project, shared.clipId, "#ff000001", first, fixture.undoManager).wasApplied());
+    REQUIRE (first.hasClone());
+    CHECK (clipNamesOf (fixture) == "Riff|Riff (copy 1)|");
+
+    // Through the slot, which still holds the original: the second.
+    fixture.undoManager.beginNewTransaction();
+    EditContext second (Policy::makeUnique);
+    second.addSlot (trackId (fixture, 0), 0);
+    REQUIRE (commands::setClipColour (fixture.project, shared.clipId, "#ff000002", second, fixture.undoManager).wasApplied());
+    REQUIRE (second.hasClone());
+    CHECK (clipNamesOf (fixture) == "Riff|Riff (copy 2)|Riff (copy 1)|");
+
+    // A copy placed twice and made unique again: the suffix is replaced,
+    // not stacked.
+    const auto copyId = first.getCloneId();
+    fixture.undoManager.beginNewTransaction();
+    const auto again = commands::addPlacement (fixture.project, trackId (fixture, 1), copyId, 1'000'000, 960, fixture.undoManager);
+    REQUIRE (again.wasApplied());
+
+    fixture.undoManager.beginNewTransaction();
+    EditContext third (Policy::makeUnique);
+    third.addPlacement (again.createdId);
+    REQUIRE (commands::setClipColour (fixture.project, copyId, "#ff000003", third, fixture.undoManager).wasApplied());
+    REQUIRE (third.hasClone());
+    CHECK (model::ClipModel (clipNode (fixture, third.getCloneId())).getName() == "Riff (copy 3)");
+    CHECK (fixture.isValid());
 }
 
 TEST_CASE ("An event clip is cloned with its notes and events", "[model][commands][RefcountGate]")

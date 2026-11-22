@@ -1,5 +1,6 @@
 #include "model/commands/RefcountGate.h"
 
+#include "model/CopyName.h"
 #include "model/Ids.h"
 #include "model/PropertyReader.h"
 #include "model/TracksModel.h"
@@ -156,7 +157,10 @@ juce::ValueTree RefcountGate::open (juce::ValueTree project, const Admission& ad
     giveNewIds (clone);
     const auto cloneId = PropertyReader::getRequiredString (clone, ids::id);
 
+    // Told apart from its original in the pool [D20].
     auto clipPool = original.getParent();
+    clone.setProperty (ids::name, CopyName::forACopyOf (PropertyReader::getString (original, ids::name, ""), clipPool), nullptr);
+
     clipPool.addChild (clone, clipPool.indexOf (original) + 1, &undoManager);
 
     for (auto reference : references)

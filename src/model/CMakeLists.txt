@@ -17,6 +17,8 @@ hums_add_layer(hums_model
         ClipPoolModel.h
         ColourText.cpp
         ColourText.h
+        CopyName.cpp
+        CopyName.h
         DeclaredIdentifiers.cpp
         DeclaredIdentifiers.h
         EventModel.cpp
