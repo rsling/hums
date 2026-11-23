@@ -7,6 +7,7 @@
 #include "model/PlacementModel.h"
 
 #include <cstdint>
+#include <limits>
 
 TEST_CASE ("A Placement gives back what is stored", "[model][PlacementModel]")
 {
@@ -49,6 +50,17 @@ TEST_CASE ("A Placement holds ticks beyond 32 bits", "[model][PlacementModel]")
 
     CHECK (placement.getStart() == std::int64_t { 5000000000 });
     CHECK (placement.getEnd() == std::int64_t { 8000000000 });
+}
+
+TEST_CASE ("A Placement may end at the largest tick there is", "[model][PlacementModel]")
+{
+    // The furthest end the Validator lets through (invariant 8); one tick
+    // more and the sum would not fit an int64.
+    const model::PlacementModel placement (juce::ValueTree::fromXml (
+        R"(<Placement id="2e4a6c8e0b1d4f3a9c7e5b3d1f0a2c4e" clipId="5a0c7e1b3d2f4a6988b7c6d5e4f3a2b1"
+                      start="9223372036854775000" length="807"/>)"));
+
+    CHECK (placement.getEnd() == std::numeric_limits<std::int64_t>::max());
 }
 
 TEST_CASE ("A Placement reads values set in this session like loaded ones", "[model][PlacementModel]")

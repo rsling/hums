@@ -26,7 +26,9 @@ public:
     std::int64_t getOffset() const;
 
     // Computed, not stored: start + length, the first tick after the
-    // placement. The placement covers [start, end).
+    // placement. The placement covers [start, end). The sum fits: the
+    // Validator refuses a placement that ends past the largest tick
+    // (invariant 8), and so do the commands.
     std::int64_t getEnd() const;
 
 private:

@@ -236,6 +236,18 @@ void requireOnlyViolation (const juce::ValueTree& project, const char* nodePath,
     CHECK (violations[0].reason.isNotEmpty());
 }
 
+// How many of the violations are at this node and property.
+int countOf (const Violations& violations, const char* nodePath, const char* property)
+{
+    int count = 0;
+
+    for (const auto& violation : violations)
+        if (violation.nodePath.toStdString() == nodePath && violation.property.toStdString() == property)
+            ++count;
+
+    return count;
+}
+
 void requireNoViolation (const juce::ValueTree& project)
 {
     const auto violations = model::Validator::validate (project);
@@ -875,12 +887,20 @@ TEST_CASE ("Invariant 3: a placement needs a start and a length to be placed at 
 TEST_CASE ("Invariant 3: a placement at the far end of the tick range is compared without overflow", "[model][Validator]")
 {
     // start + length does not fit 64 bits. The sanitizer build would report
-    // an overflowing sum.
+    // an overflowing sum. Invariant 8 refuses each of the two for its end,
+    // and the overlap of the two is still found.
     const auto project = validDocument();
     set (placementOf (project, 1), ids::start, "9223372036854775000");
     append (placementsOf (project), R"(<Placement id="7c2e9a0b4d6f4b8a8a9b0c1d2e3f4a5b" clipId="5a0c7e1b3d2f4a6988b7c6d5e4f3a2b1" start="9223372036854775800" length="7680"/>)");
 
-    requireOnlyViolation (project, "Project/Tracks/Track[0]/Placements/Placement[2]", "start");
+    const char* const thirdPlacement = "Project/Tracks/Track[0]/Placements/Placement[2]";
+    const auto violations = model::Validator::validate (project);
+
+    INFO (describe (violations));
+    REQUIRE (violations.size() == 3);
+    CHECK (countOf (violations, thirdPlacement, "start") == 1);
+    CHECK (countOf (violations, secondPlacement, "length") == 1);
+    CHECK (countOf (violations, thirdPlacement, "length") == 1);
 }
 
 //==============================================================================
@@ -1270,6 +1290,53 @@ TEST_CASE ("Invariant 8: a Placement has a length of at least one tick", "[model
     requireRefused (placementOf (project, 1), ids::length, "0", secondPlacement);
     requireRefused (placementOf (project, 1), ids::length, "-7680", secondPlacement);
     requireAccepted (placementOf (project, 1), ids::length, "1");
+}
+
+TEST_CASE ("Invariant 8: a Note does not end past the largest tick", "[model][Validator]")
+{
+    const auto project = validDocument();
+    const auto note = noteClipChildOf (project, 0);
+
+    // The largest tick is 9223372036854775807.
+    set (note, ids::tick, "9223372036854775000");
+
+    requireAccepted (note, ids::length, "1");
+    requireAccepted (note, ids::length, "807");
+    requireRefused (note, ids::length, "808", firstNote);
+    requireRefused (note, ids::length, "9223372036854775807", firstNote);
+
+    // A length that is refused for itself is reported once, not twice.
+    requireRefused (note, ids::length, "0", firstNote);
+}
+
+TEST_CASE ("Invariant 8: a Placement does not end past the largest tick", "[model][Validator]")
+{
+    const auto project = validDocument();
+
+    SECTION ("on a track")
+    {
+        const auto placement = placementOf (project, 1);
+        set (placement, ids::start, "9223372036854775000");
+
+        requireAccepted (placement, ids::length, "807");
+        requireRefused (placement, ids::length, "808", secondPlacement);
+        requireRefused (placement, ids::length, "9223372036854775807", secondPlacement);
+        requireRefused (placement, ids::length, "0", secondPlacement);
+    }
+
+    SECTION ("in an AutomationLane")
+    {
+        const auto placement = lanePlacementOf (project);
+        set (placement, ids::start, "9223372036854775000");
+
+        requireAccepted (placement, ids::length, "807");
+        requireRefused (placement, ids::length, "808", lanePlacement);
+    }
+
+    SECTION ("a start that is refused for itself is the only violation")
+    {
+        requireRefused (placementOf (project, 1), ids::start, "-1", secondPlacement);
+    }
 }
 
 //==============================================================================

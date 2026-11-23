@@ -405,8 +405,9 @@ namespace
             if (! start.has_value() || ! length.has_value() || *start < 0 || *length <= 0)
                 continue;
 
-            // An end past the largest tick is held at the largest tick, so
-            // that a nonsensical file cannot overflow the sum.
+            // An end past the largest tick is a violation of invariant 8.
+            // Here it is held at the largest tick, so that the comparison
+            // of such a file cannot overflow the sum.
             const auto largestTick = std::numeric_limits<std::int64_t>::max();
             const auto end = *length > largestTick - *start ? largestTick : *start + *length;
 
@@ -731,10 +732,25 @@ namespace
     //==========================================================================
     // Invariant 8: every event clip has a loopLength > 0; a step clip has
     // neither loopLength nor quantise; every Note has a length > 0; no tick
-    // anywhere is negative.
+    // anywhere is negative, and no Note or Placement ends past the largest
+    // tick there is.
     //
     // A placement's offset is a time too, but invariant 4 judges it, and the
     // times of UiState and Session are with invariant 10.
+
+    // A Note or a Placement that begins at this tick with this length ends
+    // past the largest tick an int64 holds. The commands refuse to make one,
+    // and whoever adds the two would overflow. Asked only of a tick and a
+    // length that are valid in themselves.
+    bool endsPastTheLargestTick (std::int64_t tick, std::int64_t length)
+    {
+        return tick >= 0 && length > 0 && length > largestTick - tick;
+    }
+
+    juce::String reasonForAnEndPastTheLargestTick (const juce::Identifier& tickProperty, std::int64_t tick, std::int64_t length)
+    {
+        return "is " + juce::String (length) + " with a " + tickProperty.toString() + " of " + juce::String (tick) + "; that ends past the largest tick there is, " + juce::String (largestTick);
+    }
 
     void checkLoopLengthsAndTicks (const juce::ValueTree& project, Violations& violations)
     {
@@ -769,12 +785,15 @@ namespace
 
             for (const auto& note : notesOf (clip))
             {
-                checkRequiredTick (note, ids::tick, violations);
+                const auto tick = requiredValue (violations, note, ids::tick, PropertyReader::readInt64 (note, ids::tick));
+                checkWithin (note, ids::tick, tick, 0, largestTick, violations);
 
                 const auto length = requiredValue (violations, note, ids::length, PropertyReader::readInt64 (note, ids::length));
 
                 if (length.has_value() && *length <= 0)
                     addViolation (violations, note, ids::length, "is " + juce::String (*length) + "; a Note is at least one tick long");
+                else if (tick.has_value() && length.has_value() && endsPastTheLargestTick (*tick, *length))
+                    addViolation (violations, note, ids::length, reasonForAnEndPastTheLargestTick (ids::tick, *tick, *length));
             }
 
             for (const auto& event : eventsOf (clip))
@@ -786,12 +805,15 @@ namespace
         {
             for (const auto& placement : allPlacementsOf (track))
             {
-                checkWithin (placement, ids::start, valueIfValid (PropertyReader::readInt64 (placement, ids::start)), 0, largestTick, violations);
+                const auto start = valueIfValid (PropertyReader::readInt64 (placement, ids::start));
+                checkWithin (placement, ids::start, start, 0, largestTick, violations);
 
                 const auto length = PropertyReader::readInt64 (placement, ids::length);
 
                 if (length.isValid() && length.value <= 0)
                     addViolation (violations, placement, ids::length, "is " + juce::String (length.value) + "; a Placement is at least one tick long");
+                else if (start.has_value() && length.isValid() && endsPastTheLargestTick (*start, length.value))
+                    addViolation (violations, placement, ids::length, reasonForAnEndPastTheLargestTick (ids::start, *start, length.value));
             }
         }
     }
