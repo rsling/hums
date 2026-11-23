@@ -164,6 +164,21 @@ TEST_CASE ("A double is a finite decimal number", "[model][PropertyReader]")
     }
 }
 
+TEST_CASE ("A double's exponent has at most three digits", "[model][PropertyReader]")
+{
+    CHECK (juce::exactlyEqual (PropertyReader::readDouble (nodeWithText (ids::bpm, "1e+308"), ids::bpm).value, 1e308));
+    CHECK (juce::exactlyEqual (PropertyReader::readDouble (nodeWithText (ids::bpm, "1e-005"), ids::bpm).value, 0.00001));
+    CHECK (juce::exactlyEqual (PropertyReader::readDouble (nodeWithText (ids::bpm, "5e000"), ids::bpm).value, 5.0));
+
+    // The third is 2^32 + 1: JUCE's parser adds the digits up in an int, in
+    // which that exponent comes out as 1 and the text as 10.
+    for (const auto* text : { "1e0001", "1e-0005", "1e4294967297", "1e+4294967297", "1e-4294967297", "1E99999999999999999999" })
+    {
+        INFO ("text: '" << text << "'");
+        CHECK (PropertyReader::readDouble (nodeWithText (ids::gate, text), ids::gate).isMalformed());
+    }
+}
+
 TEST_CASE ("A string property is valid whatever it holds", "[model][PropertyReader]")
 {
     CHECK (PropertyReader::readString (nodeWithText (ids::name, ""), ids::name).isValid());

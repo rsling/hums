@@ -47,9 +47,19 @@ namespace
         return value;
     }
 
+    // No double has an exponent of more than three digits ("1e+308" is about
+    // the largest, "1e-323" about the smallest), and the canonical writer
+    // emits no more.
+    constexpr std::size_t maxExponentDigits = 3;
+
     // [-] digits [. digits] [e|E [+|-] digits]: what juce::String (double)
     // and juce::var::toString() write for a finite number, and nothing looser
     // ("inf", "nan", "+1", " 1", ".5", "1." are all refused).
+    //
+    // The exponent has at most three digits. A longer one is not merely
+    // unusual: JUCE's parser adds an exponent's digits up in an int, so
+    // "1e4294967297" would overflow it and read as 10 instead of being
+    // caught as not finite below.
     bool isDecimalNumber (const std::string& text)
     {
         std::size_t position = 0;
@@ -75,7 +85,12 @@ namespace
             if (position < text.size() && (text[position] == '+' || text[position] == '-'))
                 ++position;
 
+            const auto firstExponentDigit = position;
+
             if (! skipDigits (text, position))
+                return false;
+
+            if (position - firstExponentDigit > maxExponentDigits)
                 return false;
         }
 

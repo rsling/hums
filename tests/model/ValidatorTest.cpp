@@ -1658,6 +1658,9 @@ TEST_CASE ("Invariant 10: a bpm is there, finite and greater than 0", "[model][V
     requireRefused (tempoEvent, ids::bpm, "0", path);
     requireRefused (tempoEvent, ids::bpm, "-118", path);
     requireRefused (tempoEvent, ids::bpm, "1e999", path);
+    // 2^32 + 1, which the int JUCE's parser sums an exponent in takes for 1.
+    requireRefused (tempoEvent, ids::bpm, "1e4294967297", path);
+    requireRefused (tempoEvent, ids::bpm, "1e0001", path);
     requireRefused (tempoEvent, ids::bpm, "inf", path);
     requireRefused (tempoEvent, ids::bpm, "fast", path);
     requireRequired (tempoEvent, ids::bpm, path);
