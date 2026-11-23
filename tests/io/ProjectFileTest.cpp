@@ -1442,6 +1442,152 @@ TEST_CASE ("When the previous file cannot be kept as .bak, nothing is saved", "[
     CHECK (directory.fileNames() == juce::StringArray { "song.xml", "song.xml.bak" });
 }
 
+//------------------------------------------------------------------------------
+// File names. A name that begins with "~" is reserved for files Hums handles
+// itself (docs/SCHEMA.md -> Loading, saving, canonical form).
+
+namespace
+{
+
+// The file of that name in the directory. Not SaveDirectory::file: its
+// getChildFile takes a name that begins with "~" for a path of its own, which
+// is what made such a file one that could be saved only once (finding 2 of
+// the milestone 1 code review).
+juce::File fileWithExactName (const SaveDirectory& directory, const juce::String& name)
+{
+    const juce::File file (directory.directory.getFullPathName() + juce::File::getSeparatorString() + name);
+
+    REQUIRE (file.getFileName() == name);
+    REQUIRE (file.getParentDirectory() == directory.directory);
+
+    return file;
+}
+
+} // namespace
+
+TEST_CASE ("A file name is allowed unless it begins with a tilde", "[io][ProjectFile][name]")
+{
+    const SaveDirectory directory;
+
+    CHECK (io::ProjectFile::isNameAllowed (fileWithExactName (directory, "song.xml")));
+    CHECK (io::ProjectFile::isNameAllowed (fileWithExactName (directory, "song")));
+    CHECK (io::ProjectFile::isNameAllowed (fileWithExactName (directory, "so~ng.xml")));
+    CHECK (io::ProjectFile::isNameAllowed (fileWithExactName (directory, "song.xml~")));
+    CHECK (io::ProjectFile::isNameAllowed (fileWithExactName (directory, ".~song.xml")));
+
+    CHECK_FALSE (io::ProjectFile::isNameAllowed (fileWithExactName (directory, "~song.xml")));
+    CHECK_FALSE (io::ProjectFile::isNameAllowed (fileWithExactName (directory, "~song.xml.bak")));
+    CHECK_FALSE (io::ProjectFile::isNameAllowed (fileWithExactName (directory, "~~song")));
+    CHECK_FALSE (io::ProjectFile::isNameAllowed (fileWithExactName (directory, "~")));
+}
+
+TEST_CASE ("Only the file's own name counts, not a directory on the way to it", "[io][ProjectFile][name]")
+{
+    const SaveDirectory directory;
+    const auto subdirectory = fileWithExactName (directory, "~songs");
+    REQUIRE (subdirectory.createDirectory().wasOk());
+
+    const juce::File file (subdirectory.getFullPathName() + juce::File::getSeparatorString() + "song.xml");
+    REQUIRE (file.getParentDirectory() == subdirectory);
+
+    CHECK (io::ProjectFile::isNameAllowed (file));
+
+    const auto first = smallProjectNamed ("First");
+    const auto second = smallProjectNamed ("Second");
+
+    REQUIRE (io::ProjectFile::save (first, file).wasSaved());
+    REQUIRE (io::ProjectFile::save (second, file).wasSaved());
+
+    CHECK (textOf (file) == canonical (second));
+    CHECK (textOf (juce::File (file.getFullPathName() + ".bak")) == canonical (first));
+
+    OpenProject open;
+    CHECK (io::ProjectFile::load (file, open.document, open.undoManager).wasLoaded());
+}
+
+TEST_CASE ("A project is not saved to a name that begins with a tilde, and nothing is created", "[io][ProjectFile][save][name]")
+{
+    const SaveDirectory directory;
+    const auto file = fileWithExactName (directory, "~song.xml");
+
+    const auto result = io::ProjectFile::save (smallProjectNamed ("New"), file);
+
+    CHECK_FALSE (result.wasSaved());
+    CHECK (result.outcome == SaveOutcome::nameNotAllowed);
+    CHECK (result.message.contains ("~song.xml"));
+    CHECK (directory.fileNames().isEmpty());
+}
+
+TEST_CASE ("A file whose name begins with a tilde is not saved over, and stays as it was", "[io][ProjectFile][save][name]")
+{
+    const SaveDirectory directory;
+    const auto file = fileWithExactName (directory, "~song.xml");
+
+    const auto previous = juce::String (canonical (smallProjectNamed ("Previous")));
+    writeText (file, previous);
+    const auto modifiedBefore = file.getLastModificationTime();
+
+    const auto result = io::ProjectFile::save (smallProjectNamed ("New"), file);
+
+    CHECK_FALSE (result.wasSaved());
+    CHECK (result.outcome == SaveOutcome::nameNotAllowed);
+    CHECK (result.message.contains ("~song.xml"));
+
+    CHECK (textOf (file) == previous.toStdString());
+    CHECK (file.getLastModificationTime() == modifiedBefore);
+    // No backup and no temporary file, here or anywhere a "~" could lead.
+    CHECK (directory.fileNames() == juce::StringArray { "~song.xml" });
+    CHECK_FALSE (juce::File::getCurrentWorkingDirectory().getChildFile ("./~song.xml.bak").exists());
+}
+
+TEST_CASE ("A valid project in a file whose name begins with a tilde is not loaded", "[io][ProjectFile][load][name]")
+{
+    const SaveDirectory directory;
+    const auto text = juce::String (canonical (smallProjectNamed ("In the file")));
+
+    // The same text under a plain name loads, so it is the name that is
+    // refused.
+    {
+        const auto plain = fileWithExactName (directory, "song.xml");
+        writeText (plain, text);
+
+        OpenProject open;
+        REQUIRE (io::ProjectFile::load (plain, open.document, open.undoManager).wasLoaded());
+    }
+
+    const auto file = fileWithExactName (directory, "~song.xml");
+    writeText (file, text);
+    const auto modifiedBefore = file.getLastModificationTime();
+
+    OpenProject open;
+    CountingListener listener;
+    open.document.addListener (&listener);
+
+    const auto result = io::ProjectFile::load (file, open.document, open.undoManager);
+
+    CHECK_FALSE (result.wasLoaded());
+    CHECK (result.outcome == Outcome::nameNotAllowed);
+    CHECK (result.message.contains ("~song.xml"));
+    CHECK (result.violations.empty());
+
+    CHECK (open.isUntouched());
+    CHECK (listener.redirections == 0);
+    CHECK (listener.otherCallbacks == 0);
+    CHECK (textOf (file) == text.toStdString());
+    CHECK (file.getLastModificationTime() == modifiedBefore);
+}
+
+TEST_CASE ("A name that begins with a tilde is refused whether or not the file is there", "[io][ProjectFile][load][name]")
+{
+    const SaveDirectory directory;
+    OpenProject open;
+
+    const auto result = io::ProjectFile::load (fileWithExactName (directory, "~song.xml"), open.document, open.undoManager);
+
+    CHECK (result.outcome == Outcome::nameNotAllowed);
+    CHECK (open.isUntouched());
+}
+
 //==============================================================================
 // Guardrail 5: loading is a wall (docs/GUARDRAILS.md -> 5). Every file under
 // fixtures/ goes through the real load path. A valid one installs; every

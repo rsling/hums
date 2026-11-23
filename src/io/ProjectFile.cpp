@@ -438,6 +438,14 @@ namespace
     }
 
     //==========================================================================
+    // File names.
+
+    juce::String whyTheNameIsNotAllowed (const juce::File& file)
+    {
+        return "The name " + file.getFileName() + " begins with \"~\", and such names are reserved for files Hums handles itself.";
+    }
+
+    //==========================================================================
     // Saving.
 
     using SaveResult = ProjectFile::SaveResult;
@@ -493,11 +501,19 @@ namespace
 
 } // namespace
 
+bool ProjectFile::isNameAllowed (const juce::File& file)
+{
+    return ! file.getFileName().startsWithChar ('~');
+}
+
 ProjectFile::LoadResult ProjectFile::load (const juce::File& file,
                                            juce::ValueTree& document,
                                            juce::UndoManager& undoManager,
                                            const Migrations::Steps& steps)
 {
+    if (! isNameAllowed (file))
+        return refusal (Outcome::nameNotAllowed, "The project file was not loaded. " + whyTheNameIsNotAllowed (file));
+
     if (! file.existsAsFile())
         return refusal (Outcome::fileNotReadable, "There is no file " + file.getFullPathName() + ".");
 
@@ -585,6 +601,9 @@ ProjectFile::SaveResult ProjectFile::save (const juce::ValueTree& project, const
 {
     const auto path = file.getFullPathName();
 
+    if (! isNameAllowed (file))
+        return saveFailure (SaveResult::Outcome::nameNotAllowed, "The project was not saved. " + whyTheNameIsNotAllowed (file));
+
     if (file.isDirectory())
         return saveFailure (SaveResult::Outcome::targetNotWritable, "The project was not saved: " + path + " is a directory.");
 
@@ -602,7 +621,8 @@ ProjectFile::SaveResult ProjectFile::save (const juce::ValueTree& project, const
                             "The project was not saved: nothing could be written to the folder " + file.getParentDirectory().getFullPathName() + " ("
                                 + *failure + ").");
 
-    // 2. The previous file, kept.
+    // 2. The previous file, kept. getSiblingFile would take a name that
+    // begins with "~" for a path of its own; no such name comes this far.
     const auto backup = file.getSiblingFile (file.getFileName() + ".bak");
 
     if (file.existsAsFile() && ! keepAsBackup (file, backup))

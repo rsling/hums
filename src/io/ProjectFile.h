@@ -42,6 +42,20 @@ public:
     static juce::String toCanonicalXml (const juce::ValueTree& project);
 
     //==========================================================================
+    // File names.
+
+    // Whether a project file may have this file's name (docs/SCHEMA.md ->
+    // Loading, saving, canonical form). A name that begins with "~" is
+    // reserved for files Hums makes and handles itself, and is neither loaded
+    // nor saved to: the file is refused before it is looked at. Only the
+    // name counts, not the directories on the way to it.
+    //
+    // The reservation is also what keeps such a name away from juce::File,
+    // which takes a relative path that begins with "~" for a home directory
+    // (getChildFile, getSiblingFile).
+    static bool isNameAllowed (const juce::File& file);
+
+    //==========================================================================
     // Loading.
 
     struct LoadResult
@@ -49,6 +63,7 @@ public:
         enum class Outcome
         {
             loaded,
+            nameNotAllowed,    // the file's name begins with "~" (isNameAllowed)
             fileNotReadable,   // no such file, or it cannot be opened
             malformedXml,      // also where JUCE's parser carries on: an unknown entity, an attribute twice on one node
             notAProjectFile,   // XML, but its root is no Project, it holds text between its nodes, or a node has
@@ -77,6 +92,9 @@ public:
     // the XML into a detached candidate tree, check its schemaVersion, run
     // the migrations on the candidate, run the Validator, and only then
     // install the candidate as the document and clear the undo history.
+    //
+    // A file whose name is not allowed (isNameAllowed) is refused before it
+    // is opened.
     //
     // Any failure leaves `document`, `undoManager` and the file as they were.
     // Nothing is repaired, clamped or guessed [D17], and the file is never
@@ -111,6 +129,7 @@ public:
         enum class Outcome
         {
             saved,
+            nameNotAllowed,    // the target's name begins with "~" (isNameAllowed)
             targetNotWritable, // the target is a directory, or a file that is read-only
             writeFailed,       // the new text could not be written beside the target
             backupFailed,      // the previous file could not be kept as <name>.bak
@@ -140,6 +159,8 @@ public:
     // the new one. A failure at any step leaves it as it was and removes the
     // temporary file. A target that is read-only is refused, although a
     // rename could replace it. A directory that is not there is not created.
+    // A target whose name is not allowed (isNameAllowed) is refused before
+    // anything is written, whether or not such a file is there.
     //
     // `project` must be a Project node and a valid document; like the writer,
     // save does not check it.
