@@ -227,6 +227,15 @@ hums_add_identifiers_fixture(identifier_list                       "model/Valida
 hums_add_identifiers_fixture(identifier_array                      "render/SnapshotBuilder.cpp:3"  "identifier")
 hums_add_identifiers_fixture(literal_name_own_function             "model/CellModel.cpp:6"         "literal-name")
 hums_add_identifiers_fixture(literal_name_identifier_return_lambda "model/LaneModel.cpp:5"         "literal-name")
+# A static member defined outside its class has a qualified name
+# (NoteModel::pitch), and a call to a function template of ours can have
+# template arguments before its bracket: neither hides the name.
+hums_add_identifiers_fixture(identifier_construction_qualified     "model/ClipModel.cpp:5"         "identifier")
+hums_add_identifiers_fixture(identifier_assignment_qualified       "render/SnapshotBuilder.cpp:3"  "identifier")
+hums_add_identifiers_fixture(identifier_list_qualified             "model/Validator.cpp:3"         "identifier")
+hums_add_identifiers_fixture(identifier_array_qualified            "render/SnapshotBuilder.cpp:3"  "identifier")
+hums_add_identifiers_fixture(own_function_template_arguments       "model/NoteModel.cpp:8"         "identifier")
+hums_add_identifiers_fixture(own_constructor_qualified             "model/NoteModel.cpp:4"         "identifier")
 # XML tag and attribute names, in model/, io/ and render/.
 hums_add_identifiers_fixture(xml_tag_name                          "io/ProjectFile.cpp:6"          "identifier")
 hums_add_identifiers_fixture(xml_construction                      "io/ProjectFile.cpp:5"          "identifier")

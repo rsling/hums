@@ -11,7 +11,8 @@ is constructed or a ValueTree property or child is named:
     node.hasType ("Note")             node.getChildWithName ("Events")
     juce::ValueTree note { "Note" }   node["pitch"]
 
-and the other calls in IDENTIFIER_CALLS. The name is the first argument of
+and the other calls in IDENTIFIER_CALLS. The variable may be a member defined
+outside its class: const juce::Identifier NoteModel::pitch ("pitch"). The name is the first argument of
 every one of these calls, wherever it stands and on whichever line; what
 follows it is a value, and a value is not a name even when it equals one:
 setProperty (ids::kind, "cc", ...) is no hit. In a ValueTree constructed with
@@ -35,7 +36,8 @@ literal that stands for the name:
 The functions of ours are not a list kept by hand: the check reads every
 declaration under the source root and remembers which parameters of which
 function are a juce::Identifier, as it reads the names from Ids.h. A call is
-matched by the function's name alone, whichever class it belongs to.
+matched by the function's name alone, whichever class it belongs to, and with
+or without template arguments: readAs<int> (node, "pitch").
 
 Reported with file:line and a rule name in square brackets:
 
@@ -112,11 +114,19 @@ IDENTIFIER_CALLS = (
 # "Type variable = ...".
 IDENTIFIER_TYPES = ("Identifier", "ValueTree")
 
+# The variable of a declaration: "pitch", or, where a static member is defined
+# outside its class, "NoteModel::pitch".
+DECLARED_NAME = r"(?:\w+\s*::\s*)*\w+"
+
 STRING_LITERAL = re.compile(r'"((?:[^"\\\n]|\\.)*)"')
 
 CALL_OPENING = re.compile(r"\b(" + "|".join(IDENTIFIER_CALLS) + r")\s*\(")
-CONSTRUCTION_OPENING = re.compile(r"\b(" + "|".join(IDENTIFIER_TYPES) + r")\b\s*(?:\w+\s*)?[({]")
-ASSIGNMENT = re.compile(r"\b(" + "|".join(IDENTIFIER_TYPES) + r")\b\s*\w+\s*=\s*" + STRING_LITERAL.pattern)
+CONSTRUCTION_OPENING = re.compile(
+    r"\b(" + "|".join(IDENTIFIER_TYPES) + r")\b\s*(?:" + DECLARED_NAME + r"\s*)?[({]"
+)
+ASSIGNMENT = re.compile(
+    r"\b(" + "|".join(IDENTIFIER_TYPES) + r")\b\s*" + DECLARED_NAME + r"\s*=\s*" + STRING_LITERAL.pattern
+)
 SUBSCRIPT = re.compile(r"\[\s*" + STRING_LITERAL.pattern + r"\s*\]")
 
 # What stands before the type in a trailing return type: "[] () -> juce::ValueTree {"
@@ -177,9 +187,13 @@ RETURN_OF_LIST = re.compile(r"\breturn\s*\{")
 # 3. A list of Identifiers: "std::array<juce::Identifier, 2> names { ... }",
 #    "std::vector<juce::Identifier> names = { ... }", "juce::Identifier names[] = { ... }".
 IDENTIFIER_LIST = re.compile(
-    r"\bIdentifier\b\s*(?:,[^<>;(){}]*)?>\s*(?:const\s+)?\w*\s*(?:=\s*)?[({]"
-    r"|\bIdentifier\b\s+\w+\s*\[[^\]]*\]\s*(?:=\s*)?\{"
+    r"\bIdentifier\b\s*(?:,[^<>;(){}]*)?>\s*(?:const\s+)?(?:" + DECLARED_NAME + r"\s*)?(?:=\s*)?[({]"
+    r"|\bIdentifier\b\s+" + DECLARED_NAME + r"\s*\[[^\]]*\]\s*(?:=\s*)?\{"
 )
+
+#    What may stand between the name of a function of ours and its bracket in
+#    a call: template arguments, as in "readAs<int> (node, ids::pitch)".
+TEMPLATE_ARGUMENTS = r"<[^;(){}]*>"
 
 # 4. juce::XmlElement names a tag or an attribute in the first argument of
 #    these calls and of its constructors, mostly as text (a StringRef), so no
@@ -459,11 +473,13 @@ def hits_in_file(text, names, document_only_layer, name_functions):
         remember(subscript.start(1) - 1, subscript.group(1), "[...]")
 
     # 1. Calls to our own functions: only the arguments that are an Identifier.
-    #    The optional word is the variable in "PropertyName name (...)", for a
-    #    constructor that takes one.
+    #    The optional name is the variable in "PropertyName name (...)", for a
+    #    constructor that takes one; it is qualified where a static member is
+    #    defined outside its class.
     if name_functions:
         own_call_opening = re.compile(
-            r"\b(" + "|".join(sorted(name_functions)) + r")\b\s*(?:\w+\s*)?[({]"
+            r"\b(" + "|".join(sorted(name_functions)) + r")\b\s*"
+            r"(?:" + TEMPLATE_ARGUMENTS + r"\s*)?(?:" + DECLARED_NAME + r"\s*)?[({]"
         )
         for opening in own_call_opening.finditer(text):
             arguments = arguments_of(text, opening.end() - 1, angles_are_brackets=False)
