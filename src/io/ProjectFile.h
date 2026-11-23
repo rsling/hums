@@ -50,8 +50,9 @@ public:
         {
             loaded,
             fileNotReadable,   // no such file, or it cannot be opened
-            malformedXml,
-            notAProjectFile,   // XML, but its root is no Project, or it holds text between its nodes
+            malformedXml,      // also where JUCE's parser carries on: an unknown entity, an attribute twice on one node
+            notAProjectFile,   // XML, but its root is no Project, it holds text between its nodes, or a node has
+                               // an attribute and its "base64:" form, which JUCE reads as one property twice
             noSchemaVersion,   // schemaVersion is absent, or is no version number
             versionTooNew,     // written by a newer build
             migrationFailed,   // a migration step threw

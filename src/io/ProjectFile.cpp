@@ -353,6 +353,59 @@ namespace
         return nullptr;
     }
 
+    // The name of the property a ValueTree makes of an attribute. JUCE reads
+    // an attribute "base64:x" whose value is binary data in its own encoding
+    // as the property x (juce_NamedValueSet.cpp, setFromXmlAttributes).
+    juce::String propertyNameOf (const juce::String& attributeName, const juce::String& attributeValue)
+    {
+        const juce::String binaryPrefix ("base64:");
+
+        if (attributeName.startsWith (binaryPrefix))
+        {
+            juce::MemoryBlock binaryData;
+
+            if (binaryData.fromBase64Encoding (attributeValue))
+                return attributeName.substring (binaryPrefix.length());
+        }
+
+        return attributeName;
+    }
+
+    // XML allows an attribute once per element. JUCE's parser keeps a second
+    // one, and the ValueTree made of the element then has two properties of
+    // one name: every reader sees the first, and the second comes to light
+    // when a command removes the first. An attribute beside its "base64:"
+    // form ends the same way, although that is well-formed XML. Gives the
+    // refusal for the first element with either, or nothing.
+    std::optional<LoadResult> refusalOfAnAttributeGivenTwice (const juce::XmlElement& element)
+    {
+        for (auto later = 1; later < element.getNumAttributes(); ++later)
+        {
+            const auto& laterName = element.getAttributeName (later);
+
+            for (auto earlier = 0; earlier < later; ++earlier)
+            {
+                const auto& earlierName = element.getAttributeName (earlier);
+
+                if (earlierName == laterName)
+                    return refusal (Outcome::malformedXml,
+                                    "The project file is not well-formed XML: a " + element.getTagName() + " node has the attribute " + laterName
+                                        + " twice.");
+
+                if (propertyNameOf (earlierName, element.getAttributeValue (earlier)) == propertyNameOf (laterName, element.getAttributeValue (later)))
+                    return refusal (Outcome::notAProjectFile,
+                                    "The file is not a Hums project: a " + element.getTagName() + " node has the attributes " + earlierName + " and "
+                                        + laterName + ", which are one and the same property.");
+            }
+        }
+
+        for (const auto* child : element.getChildIterator())
+            if (auto found = refusalOfAnAttributeGivenTwice (*child))
+                return found;
+
+        return std::nullopt;
+    }
+
     // Runs the steps that lie between the candidate's version and the one
     // the table reaches. Gives the reason if a step threw, and nothing if
     // all went through.
@@ -471,6 +524,9 @@ ProjectFile::LoadResult ProjectFile::loadFromText (const juce::String& xmlText,
     // then the only sign. Such a file is refused like any other malformed one.
     if (root == nullptr || xmlDocument.getLastParseError().isNotEmpty())
         return refusal (Outcome::malformedXml, "The project file is not well-formed XML: " + xmlDocument.getLastParseError() + ".");
+
+    if (const auto attributeGivenTwice = refusalOfAnAttributeGivenTwice (*root))
+        return *attributeGivenTwice;
 
     if (const auto* holder = firstElementHoldingText (*root))
         return refusal (Outcome::notAProjectFile,

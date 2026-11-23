@@ -847,6 +847,58 @@ TEST_CASE ("XML with text between its nodes is refused, not loaded without the t
     CHECK (open.isUntouched());
 }
 
+// JUCE's parser keeps both, and the document would hold two properties of one
+// name: every reader sees the first, and a command that removes it (an offset
+// that becomes 0) brings the second to light.
+TEST_CASE ("A file with one attribute twice on a node is refused, and the message names both", "[io][ProjectFile][load]")
+{
+    OpenProject open;
+
+    const auto text = fixtureText ("all_node_types.xml").replace (R"(length="7680" offset="480"/>)", R"(length="7680" offset="480" offset="900"/>)");
+    REQUIRE (text.contains (R"(offset="900")"));
+
+    const auto result = open.loadText (text);
+
+    CHECK (result.outcome == Outcome::malformedXml);
+    CHECK (result.message.contains ("Placement"));
+    CHECK (result.message.contains ("offset"));
+    CHECK (result.violations.empty());
+    CHECK (open.isUntouched());
+}
+
+// Well-formed XML, but JUCE reads base64:offset as the property offset, so
+// the document would hold that property twice all the same.
+TEST_CASE ("A file with an attribute plain and as base64 on one node is refused", "[io][ProjectFile][load]")
+{
+    OpenProject open;
+
+    const auto binaryData = juce::MemoryBlock ("x", 1).toBase64Encoding();
+    const auto text = fixtureText ("all_node_types.xml")
+                          .replace (R"(length="7680" offset="480"/>)", R"(length="7680" offset="480" base64:offset=")" + binaryData + R"("/>)");
+    REQUIRE (text.contains ("base64:offset"));
+
+    const auto result = open.loadText (text);
+
+    CHECK (result.outcome == Outcome::notAProjectFile);
+    CHECK (result.message.contains ("Placement"));
+    CHECK (result.message.contains ("base64:offset"));
+    CHECK (open.isUntouched());
+}
+
+// Only where JUCE reads the two as one property: a value that is no binary
+// data in JUCE's encoding leaves "base64:offset" a name of its own, which is
+// kept like any unknown property.
+TEST_CASE ("An attribute named base64: whose value is no binary data is an unknown property like any other", "[io][ProjectFile][load]")
+{
+    OpenProject open;
+
+    const auto text = fixtureText ("all_node_types.xml")
+                          .replace (R"(length="7680" offset="480"/>)", R"(length="7680" offset="480" base64:offset="no binary data"/>)");
+    REQUIRE (text.contains ("base64:offset"));
+
+    CHECK (open.loadText (text).wasLoaded());
+}
+
 TEST_CASE ("XML whose root is not a Project is refused", "[io][ProjectFile][load]")
 {
     OpenProject open;
@@ -1424,6 +1476,8 @@ const std::vector<RefusedFixture> refusedFixtures {
     { "refused/malformed_not_xml.xml", Outcome::malformedXml },
     { "refused/malformed_unclosed_tag.xml", Outcome::malformedXml },
     { "refused/malformed_unknown_entity.xml", Outcome::malformedXml },
+    { "refused/malformed_attribute_twice.xml", Outcome::malformedXml },
+    { "refused/attribute_plain_and_base64.xml", Outcome::notAProjectFile },
     { "refused/not_a_project_root.xml", Outcome::notAProjectFile },
     { "refused/text_between_nodes.xml", Outcome::notAProjectFile },
     { "refused/schema_version_absent.xml", Outcome::noSchemaVersion, "Project", "schemaVersion" },
