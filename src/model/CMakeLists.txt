@@ -74,6 +74,8 @@ hums_add_layer(hums_model
         commands/AutomationLaneCommands.h
         commands/ClipPoolCommands.cpp
         commands/ClipPoolCommands.h
+        commands/CloneMark.cpp
+        commands/CloneMark.h
         commands/CommandResult.h
         commands/EditContext.cpp
         commands/EditContext.h

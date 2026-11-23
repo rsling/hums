@@ -4,6 +4,7 @@
 #include "model/Ids.h"
 #include "model/PropertyReader.h"
 #include "model/TracksModel.h"
+#include "model/commands/CloneMark.h"
 #include "model/commands/NodeLookup.h"
 
 #include <vector>
@@ -165,6 +166,10 @@ juce::ValueTree RefcountGate::open (juce::ValueTree project, const Admission& ad
 
     for (auto reference : references)
         reference.setProperty (ids::clipId, cloneId, &undoManager);
+
+    // By this the context knows the gesture's transaction from every later
+    // one.
+    CloneMark::leaveIn (undoManager, cloneId);
 
     editContext.rememberClone (PropertyReader::getRequiredString (original, ids::id), cloneId);
     editContext.rememberUse (undoManager);

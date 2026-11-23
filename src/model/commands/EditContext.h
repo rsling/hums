@@ -68,13 +68,21 @@ public:
 
     // True when the transaction this context has worked in is no longer the
     // current one of `undoManager`: a new one was begun, or it was undone.
-    // It is told by what the transaction held when the context was last
-    // used; that is always something once the context has cloned. A context
-    // whose gesture has left nothing to undo by then cannot be told from a
-    // fresh one, and holds no clone that could be wrong.
+    //
+    // Once the context has cloned this is certain, whatever a later gesture
+    // has done: the gate has left the mark of the clone in the gesture's
+    // transaction (CloneMark), and the context is of the transaction that
+    // holds it. `undoManager` is then the one the clone was made with.
+    //
+    // A context without a clone is told only by what its transaction held
+    // when it was last used. It is not known as stale when its gesture had
+    // left nothing to undo by then, nor when a later gesture has performed
+    // as much since; it holds no clone that could be wrong, and the gate
+    // checks its references against the clip anew at every command.
     bool belongsToAnEarlierGesture (const juce::UndoManager& undoManager) const;
 
-    // For the refcount gate, which is the only one to call these two.
+    // For the refcount gate, which is the only one to call these two. With
+    // the clone it remembers, the gate leaves a CloneMark in the transaction.
     void rememberClone (const juce::String& originalClipId, const juce::String& cloneClipId);
     void rememberUse (const juce::UndoManager& undoManager);
 
@@ -86,7 +94,7 @@ private:
     juce::String cloneId;
 
     // What the gesture's transaction held when the gate last let a command
-    // of this context through.
+    // of this context through. Looked at only while there is no clone.
     int actionsWhenLastUsed = 0;
 };
 

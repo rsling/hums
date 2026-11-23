@@ -1,5 +1,7 @@
 #include "model/commands/EditContext.h"
 
+#include "model/commands/CloneMark.h"
+
 #include <algorithm>
 
 namespace model::commands
@@ -66,8 +68,15 @@ juce::String EditContext::getOriginalId() const
 
 bool EditContext::belongsToAnEarlierGesture (const juce::UndoManager& undoManager) const
 {
-    // Within one transaction the number of its actions only grows. A new
-    // transaction, also the one that undo and redo begin, starts at none.
+    // A context that has cloned knows its transaction for certain: by the
+    // mark the gate left there with the clone.
+    if (hasClone())
+        return ! CloneMark::isInCurrentTransaction (undoManager, cloneId);
+
+    // One that has not can only count. Within one transaction the number of
+    // its actions only grows, and a new transaction, also the one that undo
+    // and redo begin, starts at none; a later gesture that has done as much
+    // by now is not told apart.
     return undoManager.getNumActionsInCurrentTransaction() < actionsWhenLastUsed;
 }
 

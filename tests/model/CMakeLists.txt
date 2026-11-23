@@ -10,6 +10,7 @@ hums_add_test_executable(model_tests
     ClipModelTest.cpp
     ClipPoolCommandsTest.cpp
     ClipPoolModelTest.cpp
+    CloneMarkTest.cpp
     ColourTextTest.cpp
     CopyNameTest.cpp
     CommandFixture.h
@@ -42,6 +43,7 @@ hums_add_test_executable(model_tests
     SiblingOrderTest.cpp
     SlotCommandsTest.cpp
     SlotModelTest.cpp
+    StaleEditContextTest.cpp
     StepClipCommandsTest.cpp
     TempoEventModelTest.cpp
     TimeSigEventModelTest.cpp

@@ -35,6 +35,8 @@ namespace model::commands
 // `admit` changes nothing. `open` makes the clone when one is due, with the
 // command's UndoManager, so that it belongs to the gesture's transaction and
 // one undo takes back the clone, the redirection and the change together.
+// With the clone it leaves a CloneMark in that transaction, by which a
+// context kept beyond its gesture is known for certain.
 class RefcountGate
 {
 public:
