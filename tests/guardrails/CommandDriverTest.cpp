@@ -23,6 +23,17 @@ std::string nameIn (const std::string& description)
     return description.substr (0, description.find (' '));
 }
 
+// Makes every placement under `node` one tick long. The document stays
+// valid: no placement reaches further than it did.
+void shortenEveryPlacement (juce::ValueTree node)
+{
+    if (node.hasType (model::ids::Placement))
+        node.setProperty (model::ids::length, static_cast<juce::int64> (1), nullptr);
+
+    for (auto child : node)
+        shortenEveryPlacement (child);
+}
+
 } // namespace
 
 TEST_CASE ("guardrail 3: the driver's table of commands has no name twice", "[guardrails][CommandDriver]")
@@ -90,6 +101,37 @@ TEST_CASE ("guardrail 3: over the first 100 seeds every command is applied in a 
     {
         INFO (command);
         CHECK (madeUnique.contains (command));
+    }
+}
+
+TEST_CASE ("guardrail 3: a start the driver takes for impossible is one that even a placement of one tick cannot have", "[guardrails][CommandDriver]")
+{
+    // A placement of one tick fits at the tick before the largest, and one
+    // of three ticks three before it: a start is impossible for a length,
+    // not in itself. The driver once handed out the last four ticks for any
+    // length, and the property test then called a correct move a failure
+    // (seed 83189).
+    for (std::uint64_t seed = 1; seed <= 20; ++seed)
+    {
+        auto project = guardrails::DocumentGenerator::generate (seed);
+
+        juce::UndoManager undoManager;
+        guardrails::RandomSource random (seed);
+        guardrails::CommandDriver driver (project, undoManager, random);
+
+        for (int command = 0; command < 250; ++command)
+        {
+            // Before every command, so that a placement the last one added
+            // or resized is short too. Nothing is undone in this test, so
+            // the undo history need not know of it.
+            shortenEveryPlacement (project);
+
+            undoManager.beginNewTransaction();
+            const auto attempt = driver.attemptOne();
+
+            INFO ("seed " << seed << ": " << attempt.description);
+            REQUIRE (attempt.expectedToApply == attempt.wasApplied);
+        }
     }
 }
 

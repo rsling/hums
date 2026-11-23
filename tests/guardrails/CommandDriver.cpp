@@ -1323,11 +1323,18 @@ namespace
         return random.between (std::max (startOf (sibling) - length + 1, std::int64_t { 0 }), endOf (sibling) - 1);
     }
 
-    // A start that no placement can have, whatever is free: a negative one,
-    // or one from which any length passes the largest tick.
-    std::int64_t startThatCannotBe (RandomSource& random, std::int64_t negative)
+    // A start that a placement of this length cannot have, whatever is
+    // free: a negative one, or one from which the length passes the largest
+    // tick. A placement may end on the largest tick, so the first such
+    // start lies length - 1 before it and the last is the largest tick
+    // itself. It is that first one or one of the three behind it: where a
+    // command that counts one tick wrong would apply.
+    std::int64_t startThatCannotBe (RandomSource& random, std::int64_t negative, std::int64_t length)
     {
-        return random.chance (50) ? negative : std::numeric_limits<std::int64_t>::max() - random.between (0, 3);
+        const auto largestTick = std::numeric_limits<std::int64_t>::max();
+        const auto firstTooLate = largestTick - (length - 1);
+
+        return random.chance (50) ? negative : firstTooLate + random.between (0, std::min (std::int64_t { 3 }, length - 1));
     }
 
     // The largest length there is would be none of these: a placement at
@@ -1450,7 +1457,7 @@ CommandChecks::Attempt CommandDriver::addPlacement()
             if (fault == 0 && ! taken.empty())
                 start = startInTheWayOf (random, random.oneOf (taken), length);
             else if (fault == 1)
-                start = startThatCannotBe (random, negativeTick());
+                start = startThatCannotBe (random, negativeTick(), length);
             else if (fault == 2)
                 length = noLength (random);
             else if (fault == 3)
@@ -1495,7 +1502,7 @@ CommandChecks::Attempt CommandDriver::movePlacement()
             if (! siblings.empty() && random.chance (50))
                 toStart = startInTheWayOf (random, random.oneOf (siblings), lengthOf (placement));
             else
-                toStart = startThatCannotBe (random, negativeTick());
+                toStart = startThatCannotBe (random, negativeTick(), lengthOf (placement));
         }
     }
 
@@ -1541,7 +1548,7 @@ CommandChecks::Attempt CommandDriver::movePlacementToTrack()
             else if (fault == 1 && ! onLanes.empty())
                 id = idOf (random.oneOf (onLanes));
             else if (fault == 2)
-                toStart = startThatCannotBe (random, negativeTick());
+                toStart = startThatCannotBe (random, negativeTick(), lengthOf (placement));
             else
                 toTrackId = unknownId();
         }
@@ -1936,7 +1943,7 @@ CommandChecks::Attempt CommandDriver::addLanePlacement()
             else if (fault == 2 && ! taken.empty())
                 start = startInTheWayOf (random, random.oneOf (taken), length);
             else if (fault == 3)
-                start = startThatCannotBe (random, negativeTick());
+                start = startThatCannotBe (random, negativeTick(), length);
             else if (fault == 4)
                 length = noLength (random);
             else if (fault == 5)
