@@ -833,6 +833,84 @@ TEST_CASE ("Malformed XML is refused", "[io][ProjectFile][load]")
     }
 }
 
+// JUCE's parser reads a closing tag without looking at its name or at its
+// end, and reads nothing after the root. io::XmlWellFormedness asks instead.
+TEST_CASE ("XML that JUCE's parser would read although it is not well-formed is refused", "[io][ProjectFile][load]")
+{
+    OpenProject open;
+    const auto valid = smallProject (R"(schemaVersion="1")");
+    REQUIRE (open.loadText (valid).wasLoaded());
+
+    const std::vector<juce::String> texts {
+        valid + "\nand some more text",                                                      // text after the root
+        valid + "\n" + valid,                                                                // a second root
+        valid + "\n<Extra/>",
+        valid.replace ("</Project>", "</Projekt>"),                                           // closed under another name
+        valid.replace ("<Routing><PadMap/></Routing>", "<Routing><PadMap/></Timeline>"),
+        valid.dropLastCharacters (1),                                                         // "</Project"
+        valid.dropLastCharacters (4),                                                         // "</Proj"
+        valid.dropLastCharacters (8),                                                         // "</"
+        valid.replace ("</Project>", "</Project/>"),
+        "some text first\n" + valid,
+        valid + "\n<!-- a comment that is not closed",
+    };
+
+    for (const auto& text : texts)
+    {
+        OpenProject untouched;
+        INFO (text.toStdString());
+        const auto result = untouched.loadText (text);
+
+        CHECK (result.outcome == Outcome::malformedXml);
+        CHECK (result.message.isNotEmpty());
+        CHECK (untouched.isUntouched());
+    }
+}
+
+TEST_CASE ("The refusal of a closing tag names the node and the name it is closed with", "[io][ProjectFile][load]")
+{
+    OpenProject open;
+
+    const auto result = open.loadText (smallProject (R"(schemaVersion="1")").replace ("<Routing><PadMap/></Routing>", "<Routing><PadMap/></Rooting>"));
+
+    CHECK (result.outcome == Outcome::malformedXml);
+    CHECK (result.message.contains ("Routing"));
+    CHECK (result.message.contains ("Rooting"));
+}
+
+TEST_CASE ("What XML allows around the root is no reason to refuse a file", "[io][ProjectFile][load]")
+{
+    OpenProject open;
+
+    const auto result = open.loadText ("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!-- before -->\n" + smallProject (R"(schemaVersion="1" name='a > b')")
+                                       + "\n<!-- after -->\n\n");
+
+    CHECK (result.wasLoaded());
+    CHECK (open.document[ids::name].toString() == "a > b");
+}
+
+// Well-formed XML, but Hums writes no DOCTYPE, and an entity declared in one
+// would be written out in full at the next save.
+TEST_CASE ("A file with a DOCTYPE is refused, whatever it declares", "[io][ProjectFile][load]")
+{
+    const std::vector<juce::String> texts {
+        "<!DOCTYPE Project>\n" + smallProject (R"(schemaVersion="1")"),
+        "<!DOCTYPE Project [ <!ENTITY song \"Berlin\"> ]>\n" + smallProject (R"(schemaVersion="1" name="&song;")"),
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!-- a comment -->\n<!DOCTYPE Project>\n" + smallProject (R"(schemaVersion="1")"),
+    };
+
+    for (const auto& text : texts)
+    {
+        OpenProject open;
+        INFO (text.toStdString());
+        const auto result = open.loadText (text);
+
+        CHECK (result.outcome == Outcome::notAProjectFile);
+        CHECK (result.message.contains ("DOCTYPE"));
+        CHECK (open.isUntouched());
+    }
+}
+
 TEST_CASE ("XML with text between its nodes is refused, not loaded without the text", "[io][ProjectFile][load]")
 {
     OpenProject open;
@@ -1589,6 +1667,95 @@ TEST_CASE ("A name that begins with a tilde is refused whether or not the file i
 }
 
 //==============================================================================
+// The bytes of a project file are UTF-8.
+
+namespace
+{
+
+// The small project as a file with exactly these bytes for the Project's name.
+juce::File fileWithNameBytes (const SaveDirectory& directory, const std::string& nameBytes)
+{
+    std::string bytes = smallProject (R"(schemaVersion="1" name="@")").toStdString();
+    bytes.replace (bytes.find ('@'), 1, nameBytes);
+
+    const auto file = directory.file ("song.xml");
+    REQUIRE (file.replaceWithData (bytes.data(), bytes.size()));
+
+    return file;
+}
+
+} // namespace
+
+TEST_CASE ("A file with a name in UTF-8 loads with that name", "[io][ProjectFile][load]")
+{
+    const SaveDirectory directory;
+    OpenProject open;
+
+    // "Bär", the ä as the two bytes of UTF-8.
+    const auto result = io::ProjectFile::load (fileWithNameBytes (directory, "B\xC3\xA4r"), open.document, open.undoManager);
+
+    CHECK (result.wasLoaded());
+    CHECK (open.document[ids::name].toString() == juce::String::fromUTF8 ("B\xC3\xA4r"));
+}
+
+// JUCE would read the byte as Latin-1, and the next save would write two
+// bytes where the file had one.
+TEST_CASE ("A file with bytes that are no UTF-8 is refused, not read as Latin-1", "[io][ProjectFile][load]")
+{
+    const SaveDirectory directory;
+    OpenProject open;
+
+    // "Bär", the ä as the one byte of Latin-1.
+    const auto result = io::ProjectFile::load (fileWithNameBytes (directory, "B\xE4r"), open.document, open.undoManager);
+
+    CHECK (result.outcome == Outcome::malformedXml);
+    CHECK (result.message.contains ("UTF-8"));
+    CHECK (open.isUntouched());
+}
+
+// A juce::String ends at a zero byte: what follows one would not be seen.
+TEST_CASE ("A file with a zero byte is refused, wherever the byte stands", "[io][ProjectFile][load]")
+{
+    const SaveDirectory directory;
+    const std::string zeroByte (1, '\0');
+
+    SECTION ("inside the document")
+    {
+        OpenProject open;
+        const auto result = io::ProjectFile::load (fileWithNameBytes (directory, "B" + zeroByte + "r"), open.document, open.undoManager);
+
+        CHECK (result.outcome == Outcome::malformedXml);
+        CHECK (open.isUntouched());
+    }
+
+    SECTION ("after the root node, with more text behind it")
+    {
+        OpenProject open;
+        const auto file = fileWithNameBytes (directory, "Berlin");
+        REQUIRE (file.appendData (zeroByte.data(), 1));
+        REQUIRE (file.appendText ("and some more text"));
+
+        const auto result = io::ProjectFile::load (file, open.document, open.undoManager);
+
+        CHECK (result.outcome == Outcome::malformedXml);
+        CHECK (open.isUntouched());
+    }
+}
+
+TEST_CASE ("A file in UTF-16 is refused", "[io][ProjectFile][load]")
+{
+    const SaveDirectory directory;
+    OpenProject open;
+    const auto file = directory.file ("song.xml");
+    REQUIRE (file.replaceWithText (smallProject (R"(schemaVersion="1")"), true, true, "\n"));
+
+    const auto result = io::ProjectFile::load (file, open.document, open.undoManager);
+
+    CHECK (result.outcome == Outcome::malformedXml);
+    CHECK (open.isUntouched());
+}
+
+//==============================================================================
 // Guardrail 5: loading is a wall (docs/GUARDRAILS.md -> 5). Every file under
 // fixtures/ goes through the real load path. A valid one installs; every
 // other one is refused, and the open project and the file stay as they were.
@@ -1623,6 +1790,12 @@ const std::vector<RefusedFixture> refusedFixtures {
     { "refused/malformed_unclosed_tag.xml", Outcome::malformedXml },
     { "refused/malformed_unknown_entity.xml", Outcome::malformedXml },
     { "refused/malformed_attribute_twice.xml", Outcome::malformedXml },
+    { "refused/malformed_text_after_root.xml", Outcome::malformedXml },
+    { "refused/malformed_second_root.xml", Outcome::malformedXml },
+    { "refused/malformed_closing_tag_of_another_name.xml", Outcome::malformedXml },
+    { "refused/malformed_last_closing_tag_cut_short.xml", Outcome::malformedXml },
+    { "refused/malformed_not_utf8.xml", Outcome::malformedXml },
+    { "refused/doctype.xml", Outcome::notAProjectFile },
     { "refused/attribute_plain_and_base64.xml", Outcome::notAProjectFile },
     { "refused/not_a_project_root.xml", Outcome::notAProjectFile },
     { "refused/text_between_nodes.xml", Outcome::notAProjectFile },

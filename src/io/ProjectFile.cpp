@@ -1,5 +1,6 @@
 #include "io/ProjectFile.h"
 
+#include "io/XmlWellFormedness.h"
 #include "model/DeclaredIdentifiers.h"
 #include "model/Ids.h"
 #include "model/PropertyReader.h"
@@ -437,6 +438,12 @@ namespace
         return std::nullopt;
     }
 
+    // Whether the bytes of a file hold a zero byte, which no text has.
+    bool holdsAZeroByte (const juce::MemoryBlock& bytes)
+    {
+        return std::find (bytes.begin(), bytes.end(), '\0') != bytes.end();
+    }
+
     //==========================================================================
     // File names.
 
@@ -523,7 +530,22 @@ ProjectFile::LoadResult ProjectFile::load (const juce::File& file,
         return refusal (Outcome::fileNotReadable,
                         "The file " + file.getFullPathName() + " cannot be read: " + stream.getStatus().getErrorMessage());
 
-    return loadFromText (stream.readEntireStreamAsString(), document, undoManager, steps);
+    juce::MemoryBlock bytes;
+    stream.readIntoMemoryBlock (bytes);
+
+    // A project file is UTF-8 (docs/SCHEMA.md -> Canonical form). JUCE makes
+    // a string of any bytes: it reads bytes that are no UTF-8 as Latin-1, and
+    // the next save would then write other bytes than the file had; and its
+    // strings end at a zero byte, so what follows one would never be seen.
+    if (holdsAZeroByte (bytes))
+        return refusal (Outcome::malformedXml, "The project file is not well-formed XML: it holds a zero byte, so it is no UTF-8 text.");
+
+    if (! juce::CharPointer_UTF8::isValidString (static_cast<const char*> (bytes.getData()), static_cast<int> (bytes.getSize())))
+        return refusal (Outcome::malformedXml, "The project file is not well-formed XML: it holds bytes that are no UTF-8 text.");
+
+    // As JUCE's streams make a string of a file: a UTF-8 byte order mark is
+    // left out.
+    return loadFromText (juce::String::createStringFromData (bytes.getData(), static_cast<int> (bytes.getSize())), document, undoManager, steps);
 }
 
 ProjectFile::LoadResult ProjectFile::loadFromText (const juce::String& xmlText,
@@ -531,7 +553,19 @@ ProjectFile::LoadResult ProjectFile::loadFromText (const juce::String& xmlText,
                                                    juce::UndoManager& undoManager,
                                                    const Migrations::Steps& steps)
 {
-    // 1. Parse, into a tree nothing else refers to.
+    // 1. Parse, into a tree nothing else refers to. First what JUCE's parser
+    // does not ask: whether every closing tag is complete and closes its own
+    // node, and whether anything stands before or after the root. A DOCTYPE
+    // is refused whatever it declares: Hums writes none, and an entity it
+    // declared would be written out in full at the next save.
+    const auto wellFormedness = XmlWellFormedness::check (xmlText);
+
+    if (wellFormedness.kind == XmlWellFormedness::Result::Kind::notWellFormed)
+        return refusal (Outcome::malformedXml, "The project file is not well-formed XML: " + wellFormedness.reason + ".");
+
+    if (wellFormedness.kind == XmlWellFormedness::Result::Kind::hasDoctype)
+        return refusal (Outcome::notAProjectFile, "The file is not a Hums project: " + wellFormedness.reason + ", and a project file has none.");
+
     juce::XmlDocument xmlDocument (xmlText);
     const auto root = xmlDocument.getDocumentElement();
 

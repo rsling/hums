@@ -2,7 +2,8 @@
 # stands on, never the engine or the app.
 hums_add_test_executable(io_tests
     MigrationsTest.cpp
-    ProjectFileTest.cpp)
+    ProjectFileTest.cpp
+    XmlWellFormednessTest.cpp)
 target_link_libraries(io_tests PRIVATE
     hums_io
     juce::juce_recommended_warning_flags)
