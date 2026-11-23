@@ -8,9 +8,11 @@
 #include <algorithm>
 #include <cstddef>
 #include <exception>
+#include <filesystem>
 #include <limits>
 #include <memory>
 #include <optional>
+#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -492,6 +494,43 @@ namespace
         return std::nullopt;
     }
 
+    // The file a save to this path writes: the path itself, or, when the
+    // path is a symbolic link, the file the link leads to, through however
+    // many links. A rename over the link would put a file in its place and
+    // leave the file it led to as it was. Nothing when the link leads to
+    // nothing, or round in a circle.
+    std::optional<juce::File> fileBehindLinks (const juce::File& file)
+    {
+        const std::filesystem::path path (file.getFullPathName().toStdString());
+        std::error_code error;
+
+        if (! std::filesystem::is_symlink (path, error))
+            return file;
+
+        const auto target = std::filesystem::canonical (path, error);
+
+        if (error)
+            return std::nullopt;
+
+        return juce::File (juce::String (juce::CharPointer_UTF8 (target.c_str())));
+    }
+
+    // Gives the new file the permission bits of the previous one. A new file
+    // has those of any new file, which would open a file its owner had closed
+    // to others.
+    bool takePermissionsOf (const juce::File& previous, const juce::File& newFile)
+    {
+        std::error_code error;
+        const auto status = std::filesystem::status (std::filesystem::path (previous.getFullPathName().toStdString()), error);
+
+        if (error)
+            return false;
+
+        std::filesystem::permissions (std::filesystem::path (newFile.getFullPathName().toStdString()), status.permissions(), error);
+
+        return ! error;
+    }
+
     // Makes a copy of the file the backup, in place of an older backup. The
     // copy is made under a temporary name and renamed, so that the older
     // backup is there until the new one is complete.
@@ -631,10 +670,23 @@ ProjectFile::LoadResult ProjectFile::loadFromText (const juce::String& xmlText,
     return {};
 }
 
-ProjectFile::SaveResult ProjectFile::save (const juce::ValueTree& project, const juce::File& file)
+ProjectFile::SaveResult ProjectFile::save (const juce::ValueTree& project, const juce::File& named)
 {
+    if (! isNameAllowed (named))
+        return saveFailure (SaveResult::Outcome::nameNotAllowed, "The project was not saved. " + whyTheNameIsNotAllowed (named));
+
+    // From here on the target is the file itself, also when a symbolic link
+    // was named: the temporary file and the backup stand beside it.
+    const auto behindLinks = fileBehindLinks (named);
+
+    if (! behindLinks.has_value())
+        return saveFailure (SaveResult::Outcome::targetNotWritable,
+                            "The project was not saved: " + named.getFullPathName() + " is a symbolic link that leads to no file.");
+
+    const auto file = *behindLinks;
     const auto path = file.getFullPathName();
 
+    // The name rule holds for the file that is written as for the name given.
     if (! isNameAllowed (file))
         return saveFailure (SaveResult::Outcome::nameNotAllowed, "The project was not saved. " + whyTheNameIsNotAllowed (file));
 
@@ -655,7 +707,12 @@ ProjectFile::SaveResult ProjectFile::save (const juce::ValueTree& project, const
                             "The project was not saved: nothing could be written to the folder " + file.getParentDirectory().getFullPathName() + " ("
                                 + *failure + ").");
 
-    // 2. The previous file, kept. getSiblingFile would take a name that
+    // 2. The permission bits of the previous file, on the new one.
+    if (file.existsAsFile() && ! takePermissionsOf (file, temporary.getFile()))
+        return saveFailure (SaveResult::Outcome::writeFailed,
+                            "The project was not saved: the new file could not be given the permissions of the file " + path + ".");
+
+    // 3. The previous file, kept. getSiblingFile would take a name that
     // begins with "~" for a path of its own; no such name comes this far.
     const auto backup = file.getSiblingFile (file.getFileName() + ".bak");
 
@@ -663,7 +720,7 @@ ProjectFile::SaveResult ProjectFile::save (const juce::ValueTree& project, const
         return saveFailure (SaveResult::Outcome::backupFailed,
                             "The project was not saved: the previous file could not be kept as " + backup.getFullPathName() + ".");
 
-    // 3. The rename, which is the save.
+    // 4. The rename, which is the save.
     if (! temporary.getFile().replaceFileIn (file))
         return saveFailure (SaveResult::Outcome::replaceFailed, "The project was not saved: the file " + path + " could not be replaced.");
 

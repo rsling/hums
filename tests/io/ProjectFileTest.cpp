@@ -26,6 +26,7 @@
 #include "model/TrackModel.h"
 #include "model/Validator.h"
 
+#include <filesystem>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -1616,6 +1617,234 @@ TEST_CASE ("A file whose name begins with a tilde is not saved over, and stays a
     // No backup and no temporary file, here or anywhere a "~" could lead.
     CHECK (directory.fileNames() == juce::StringArray { "~song.xml" });
     CHECK_FALSE (juce::File::getCurrentWorkingDirectory().getChildFile ("./~song.xml.bak").exists());
+}
+
+//------------------------------------------------------------------------------
+// Saving: what is kept of the previous file, and symbolic links.
+
+namespace
+{
+
+std::filesystem::path pathOf (const juce::File& file)
+{
+    return std::filesystem::path (file.getFullPathName().toStdString());
+}
+
+// A symbolic link that holds exactly this text as where it leads, which may
+// be a path relative to the link's own directory.
+void makeLink (const juce::File& link, const std::string& leadsTo)
+{
+    std::error_code error;
+    std::filesystem::create_symlink (std::filesystem::path (leadsTo), pathOf (link), error);
+    REQUIRE_FALSE (error);
+}
+
+bool isLink (const juce::File& file)
+{
+    return std::filesystem::is_symlink (pathOf (file));
+}
+
+std::filesystem::perms permissionsOf (const juce::File& file)
+{
+    return std::filesystem::status (pathOf (file)).permissions();
+}
+
+// How many entries a directory has, a link that leads nowhere included.
+int numberOfEntriesIn (const juce::File& directory)
+{
+    int number = 0;
+
+    for (const auto& entry : std::filesystem::directory_iterator (pathOf (directory)))
+    {
+        juce::ignoreUnused (entry);
+        ++number;
+    }
+
+    return number;
+}
+
+} // namespace
+
+TEST_CASE ("A save gives the new file the permission bits of the file it saves over", "[io][ProjectFile][save]")
+{
+    using std::filesystem::perms;
+
+    const SaveDirectory directory;
+    const auto project = smallProjectNamed ("New");
+
+    // Closed to everyone but the owner; a new file is not.
+    const auto closed = directory.file ("closed.xml");
+    writeText (closed, "the previous file");
+    std::filesystem::permissions (pathOf (closed), perms::owner_read | perms::owner_write);
+
+    REQUIRE (io::ProjectFile::save (project, closed).wasSaved());
+    REQUIRE (textOf (closed) == canonical (project));
+    CHECK (permissionsOf (closed) == (perms::owner_read | perms::owner_write));
+
+    // Open further than a new file is.
+    const auto open = directory.file ("open.xml");
+    writeText (open, "the previous file");
+    const auto openToTheGroup = perms::owner_read | perms::owner_write | perms::group_read | perms::group_write | perms::owner_exec;
+    std::filesystem::permissions (pathOf (open), openToTheGroup);
+
+    REQUIRE (io::ProjectFile::save (project, open).wasSaved());
+    REQUIRE (textOf (open) == canonical (project));
+    CHECK (permissionsOf (open) == openToTheGroup);
+}
+
+TEST_CASE ("A save to a symbolic link saves the file the link leads to, and the link stays", "[io][ProjectFile][save][link]")
+{
+    const SaveDirectory directory;
+    const auto elsewhere = directory.file ("elsewhere");
+    REQUIRE (elsewhere.createDirectory().wasOk());
+
+    const auto target = elsewhere.getChildFile ("song.xml");
+    const juce::String previous = "the previous file";
+    writeText (target, previous);
+
+    const auto link = directory.file ("link.xml");
+    makeLink (link, target.getFullPathName().toStdString());
+
+    const auto project = smallProjectNamed ("New");
+    const auto result = io::ProjectFile::save (project, link);
+
+    CHECK (result.wasSaved());
+    CHECK (result.message.isEmpty());
+
+    CHECK (isLink (link));
+    CHECK_FALSE (isLink (target));
+    CHECK (textOf (target) == canonical (project));
+
+    // The backup stands beside the file, not beside the link, and no
+    // temporary file is left in either place.
+    CHECK (directory.fileNames() == juce::StringArray { "elsewhere", "link.xml" });
+    CHECK (numberOfEntriesIn (elsewhere) == 2);
+    CHECK (textOf (elsewhere.getChildFile ("song.xml.bak")) == previous.toStdString());
+}
+
+TEST_CASE ("A save follows a link to a link, and a link that names its file relative to itself", "[io][ProjectFile][save][link]")
+{
+    const SaveDirectory directory;
+    const auto elsewhere = directory.file ("elsewhere");
+    REQUIRE (elsewhere.createDirectory().wasOk());
+
+    const auto target = elsewhere.getChildFile ("song.xml");
+    writeText (target, "the previous file");
+
+    const auto inner = directory.file ("inner.xml");
+    const auto outer = directory.file ("outer.xml");
+    makeLink (inner, "elsewhere/song.xml");
+    makeLink (outer, "inner.xml");
+
+    const auto project = smallProjectNamed ("New");
+
+    CHECK (io::ProjectFile::save (project, outer).wasSaved());
+
+    CHECK (isLink (outer));
+    CHECK (isLink (inner));
+    CHECK (textOf (target) == canonical (project));
+    CHECK (directory.fileNames() == juce::StringArray { "elsewhere", "inner.xml", "outer.xml" });
+}
+
+TEST_CASE ("A save to a link gives the new file the permission bits of the file the link leads to", "[io][ProjectFile][save][link]")
+{
+    using std::filesystem::perms;
+
+    const SaveDirectory directory;
+    const auto target = directory.file ("song.xml");
+    writeText (target, "the previous file");
+    std::filesystem::permissions (pathOf (target), perms::owner_read | perms::owner_write);
+
+    const auto link = directory.file ("link.xml");
+    makeLink (link, "song.xml");
+
+    REQUIRE (io::ProjectFile::save (smallProjectNamed ("New"), link).wasSaved());
+
+    CHECK (permissionsOf (target) == (perms::owner_read | perms::owner_write));
+}
+
+TEST_CASE ("A link that leads to no file is not saved to, and nothing is created", "[io][ProjectFile][save][link]")
+{
+    const SaveDirectory directory;
+    const auto link = directory.file ("link.xml");
+    makeLink (link, "gone.xml");
+
+    const auto result = io::ProjectFile::save (smallProjectNamed ("New"), link);
+
+    CHECK_FALSE (result.wasSaved());
+    CHECK (result.outcome == SaveOutcome::targetNotWritable);
+    CHECK (result.message.contains (link.getFullPathName()));
+    CHECK (result.message.contains ("symbolic link"));
+
+    CHECK (isLink (link));
+    CHECK_FALSE (directory.file ("gone.xml").exists());
+    CHECK (numberOfEntriesIn (directory.directory) == 1);
+}
+
+TEST_CASE ("Links that lead round in a circle are not saved to", "[io][ProjectFile][save][link]")
+{
+    const SaveDirectory directory;
+    const auto one = directory.file ("one.xml");
+    const auto other = directory.file ("other.xml");
+    makeLink (one, "other.xml");
+    makeLink (other, "one.xml");
+
+    const auto result = io::ProjectFile::save (smallProjectNamed ("New"), one);
+
+    CHECK_FALSE (result.wasSaved());
+    CHECK (result.outcome == SaveOutcome::targetNotWritable);
+    CHECK (result.message.contains (one.getFullPathName()));
+
+    CHECK (isLink (one));
+    CHECK (isLink (other));
+    CHECK (numberOfEntriesIn (directory.directory) == 2);
+}
+
+TEST_CASE ("A link to a file whose name begins with a tilde is not saved to, and the file stays as it was", "[io][ProjectFile][save][link][name]")
+{
+    const SaveDirectory directory;
+    const auto target = fileWithExactName (directory, "~song.xml");
+    const juce::String previous = "the previous file";
+    writeText (target, previous);
+    const auto modifiedBefore = target.getLastModificationTime();
+
+    const auto link = directory.file ("link.xml");
+    makeLink (link, "~song.xml");
+
+    const auto result = io::ProjectFile::save (smallProjectNamed ("New"), link);
+
+    CHECK_FALSE (result.wasSaved());
+    CHECK (result.outcome == SaveOutcome::nameNotAllowed);
+    CHECK (result.message.contains ("~song.xml"));
+
+    CHECK (isLink (link));
+    CHECK (textOf (target) == previous.toStdString());
+    CHECK (target.getLastModificationTime() == modifiedBefore);
+    CHECK (directory.fileNames() == juce::StringArray { "link.xml", "~song.xml" });
+}
+
+TEST_CASE ("A link to a read-only file is not saved to, and the file stays as it was", "[io][ProjectFile][save][link]")
+{
+    const SaveDirectory directory;
+    const auto target = directory.file ("song.xml");
+    const juce::String previous = "the previous file";
+    writeText (target, previous);
+    REQUIRE (target.setReadOnly (true));
+    const auto modifiedBefore = target.getLastModificationTime();
+
+    const auto link = directory.file ("link.xml");
+    makeLink (link, "song.xml");
+
+    const auto result = io::ProjectFile::save (smallProjectNamed ("New"), link);
+
+    CHECK_FALSE (result.wasSaved());
+    CHECK (result.outcome == SaveOutcome::targetNotWritable);
+    CHECK (result.message.contains ("read-only"));
+
+    CHECK (isLink (link));
+    CHECK (textOf (target) == previous.toStdString());
+    CHECK (target.getLastModificationTime() == modifiedBefore);
+    CHECK (directory.fileNames() == juce::StringArray { "link.xml", "song.xml" });
 }
 
 TEST_CASE ("A valid project in a file whose name begins with a tilde is not loaded", "[io][ProjectFile][load][name]")

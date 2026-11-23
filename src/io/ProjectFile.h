@@ -132,8 +132,8 @@ public:
         {
             saved,
             nameNotAllowed,    // the target's name begins with "~" (isNameAllowed)
-            targetNotWritable, // the target is a directory, or a file that is read-only
-            writeFailed,       // the new text could not be written beside the target
+            targetNotWritable, // the target is a directory, a file that is read-only, or a symbolic link that leads to no file
+            writeFailed,       // the new text could not be written beside the target, or not be given the previous file's permissions
             backupFailed,      // the previous file could not be kept as <name>.bak
             replaceFailed      // the new file could not be moved over the target
         };
@@ -152,17 +152,27 @@ public:
     //
     //   1. the text is written to a temporary file in the target's directory,
     //      forced to disk and read back
-    //   2. if the target exists, a copy of it becomes <file name>.bak beside
+    //   2. if the target exists, the temporary file is given its permission
+    //      bits
+    //   3. if the target exists, a copy of it becomes <file name>.bak beside
     //      it ("song.xml.bak" for "song.xml"), in place of an older one
-    //   3. the temporary file is renamed over the target
+    //   4. the temporary file is renamed over the target
     //
     // The target is never opened for writing and never removed: until the
-    // rename of step 3 it is the previous file, byte for byte, and after it
+    // rename of step 4 it is the previous file, byte for byte, and after it
     // the new one. A failure at any step leaves it as it was and removes the
     // temporary file. A target that is read-only is refused, although a
     // rename could replace it. A directory that is not there is not created.
     // A target whose name is not allowed (isNameAllowed) is refused before
     // anything is written, whether or not such a file is there.
+    //
+    // When `file` is a symbolic link, the target is the file the link leads
+    // to, through however many links: that file is replaced, the temporary
+    // file and the backup stand beside it, and the link stays. Its name must
+    // be allowed too. A link that leads to no file, or round in a circle, is
+    // refused. Nothing but the permission bits is carried over from the
+    // previous file: its extended attributes (Finder tags and comments) and
+    // its owner are not sure to be kept.
     //
     // `project` must be a Project node and a valid document; like the writer,
     // save does not check it.
