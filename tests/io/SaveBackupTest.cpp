@@ -50,8 +50,11 @@ struct BackupTestDirectory
         return names;
     }
 
+    // Named with a UUID. "The first name that is free" is the same name for
+    // two tests that ask at the same moment (ctest -j), and each then took
+    // the other's directory for its own.
     const juce::File directory { juce::File::getSpecialLocation (juce::File::tempDirectory)
-                                     .getNonexistentChildFile ("hums_save_backup_test", "") };
+                                     .getChildFile ("hums_save_backup_test_" + juce::Uuid().toString()) };
 };
 
 // The valid fixture under another project name.

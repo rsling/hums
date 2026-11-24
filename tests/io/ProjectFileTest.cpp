@@ -1292,8 +1292,11 @@ struct SaveDirectory
         return names;
     }
 
+    // Named with a UUID. "The first name that is free" is the same name for
+    // two tests that ask at the same moment (ctest -j), and each then took
+    // the other's directory for its own.
     const juce::File directory { juce::File::getSpecialLocation (juce::File::tempDirectory)
-                                     .getNonexistentChildFile ("hums_save_test", "") };
+                                     .getChildFile ("hums_save_test_" + juce::Uuid().toString()) };
 };
 
 void writeText (const juce::File& file, const juce::String& text)
