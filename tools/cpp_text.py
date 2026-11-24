@@ -25,11 +25,80 @@ def _is_digit_separator(text, index):
     return word[:1].isdigit()
 
 
+# What stands before the opening quote of a raw string literal.
+RAW_STRING_PREFIXES = {"R", "LR", "uR", "UR", "u8R"}
+
+# A raw string's delimiter is at most this long (the C++ standard).
+LONGEST_RAW_STRING_DELIMITER = 16
+
+
+def _raw_string_end(text, index):
+    """Where the raw string literal ends whose opening quote is at index, or
+    None when that quote opens an ordinary string.
+
+    A raw string is R"delimiter(text)delimiter", the delimiter often empty.
+    Its text ends at the closing bracket with the delimiter and a quote
+    behind it and nowhere else: a quote, a backslash, a line break and a /*
+    in it are text. Read as an ordinary string, R"(" /*)" would be the
+    string "(" and the start of a comment.
+    """
+    start = index
+    while start > 0 and (text[start - 1].isalnum() or text[start - 1] == "_"):
+        start -= 1
+    if text[start:index] not in RAW_STRING_PREFIXES:
+        return None
+
+    bracket = text.find("(", index + 1)
+    if bracket == -1 or bracket - index - 1 > LONGEST_RAW_STRING_DELIMITER:
+        return None
+    delimiter = text[index + 1 : bracket]
+    if any(character in ' \t\n\v\f)\\"' for character in delimiter):
+        return None
+
+    closing = text.find(")" + delimiter + '"', bracket + 1)
+    if closing == -1:
+        return len(text)
+    return closing + len(delimiter) + 2
+
+
+def join_spliced_lines(text):
+    """Joins every line that ends in a backslash with the line after it, as
+    the compiler does before it reads anything else, and keeps every line
+    number: the lines that went into one are followed by as many empty ones.
+
+    After this, a directive that was written over several lines stands on the
+    line it began on. Blanks between the backslash and the line break are
+    allowed, because the compiler allows them.
+    """
+    result = []
+    joined = None
+    empty_lines_owed = 0
+    for line in text.split("\n"):
+        without_blanks = line.rstrip(" \t")
+        is_spliced = without_blanks.endswith("\\")
+        part = without_blanks[:-1] if is_spliced else line
+        joined = part if joined is None else joined + part
+        if is_spliced:
+            empty_lines_owed += 1
+            continue
+        result.append(joined)
+        result.extend([""] * empty_lines_owed)
+        joined = None
+        empty_lines_owed = 0
+
+    if joined is not None:
+        # The last line of the text ended in a backslash.
+        result.append(joined)
+        result.extend([""] * (empty_lines_owed - 1))
+    return "\n".join(result)
+
+
 def _comments_and_literals(text):
     """Yields (kind, start, end) for every comment and every string or
     character literal, in the order they stand; kind is "comment" or
     "literal". A // inside a string literal is not a comment, and a quote
-    inside a comment opens no literal.
+    inside a comment opens no literal. A raw string literal is one literal
+    from its opening quote to its closing one, over however many lines.
     """
     index = 0
     length = len(text)
@@ -45,6 +114,10 @@ def _comments_and_literals(text):
             end = text.find("*/", index + 2)
             end = length if end == -1 else end + 2
             yield "comment", index, end
+            index = end
+        elif character == '"' and _raw_string_end(text, index) is not None:
+            end = _raw_string_end(text, index)
+            yield "literal", index, end
             index = end
         elif character == '"' or (character == "'" and not _is_digit_separator(text, index)):
             end = index + 1

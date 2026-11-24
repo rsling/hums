@@ -27,6 +27,10 @@ root and reports, with file:line and a rule name in square brackets:
                      are not source (NOT_SOURCE_NAMES). The compiler includes
                      a file of any name, so a file the check does not read
                      could include anything unseen
+  [symlink]          a symbolic link under the source root, to a file or to a
+                     directory. The check goes by the path of a file, and a
+                     link gives a file a second path: a model/ header linked
+                     into engine/ would be an engine/ header
   [unresolved]       a quoted include that names no file under the source
                      root with exactly that spelling; such an include cannot
                      be assigned to a layer, so it is refused
@@ -39,6 +43,11 @@ include is taken for a project header when it names a file under the source
 root in any spelling of upper and lower case, because that is what compiles
 here. Every include line counts, also one inside #if 0: the check does not
 evaluate the preprocessor.
+
+An include line is found where the compiler finds one: after a byte order
+mark at the start of the file, written as %:include, with its line broken by
+a backslash (it is reported on the line it begins on), and after a raw string
+literal, whose text is not read as code.
 
 Exit codes: 0 = no violation, 1 = violations, 2 = the check could not run.
 Every violation is a line starting "check_layers: VIOLATION"; the last line
@@ -55,7 +64,7 @@ import posixpath
 import re
 import sys
 
-from cpp_text import blank_out_comments
+from cpp_text import blank_out_comments, join_spliced_lines
 
 NAME = "check_layers"
 REPOSITORY_ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -143,7 +152,8 @@ STD_HEADERS = set(
     """.split()
 )
 
-INCLUDE_DIRECTIVE = re.compile(r"^\s*#\s*(?:include|import|include_next)\b\s*(.*)$")
+# %: is the digraph for #; the compiler reads the two alike.
+INCLUDE_DIRECTIVE = re.compile(r"^\s*(?:#|%:)\s*(?:include|import|include_next)\b\s*(.*)$")
 QUOTED_TARGET = re.compile(r'^"([^"]*)"')
 ANGLE_TARGET = re.compile(r"^<([^>]*)>")
 
@@ -195,13 +205,18 @@ def layer_of(relative_path):
 
 
 def read_includes(path):
+    # utf-8-sig: a byte order mark at the start of the file is left out, as
+    # the compiler leaves it out. With it, line 1 would not begin with its #.
     try:
-        text = path.read_text(encoding="utf-8", errors="replace")
+        text = path.read_text(encoding="utf-8-sig", errors="replace")
     except OSError as error:
         raise CheckError(f"cannot read {path}: {error}")
 
+    # Lines are joined before comments are looked for, as the compiler does it.
+    lines = blank_out_comments(join_spliced_lines(text)).split("\n")
+
     includes = []
-    for line_number, line in enumerate(blank_out_comments(text).splitlines(), start=1):
+    for line_number, line in enumerate(lines, start=1):
         directive = INCLUDE_DIRECTIVE.match(line)
         if not directive:
             continue
@@ -218,13 +233,24 @@ def read_includes(path):
 
 
 def collect_files(source_root):
-    """Every file under the source root, as a POSIX path relative to it."""
+    """Returns (files, links): every file under the source root and every
+    symbolic link under it, each as a POSIX path relative to the root.
+
+    A link to a file is in both sets, so that an include which names it still
+    resolves and the link is the one thing reported. A link to a directory is
+    in links only; the walk does not go into it.
+    """
     files = set()
-    for directory, _, names in os.walk(source_root):
-        for name in names:
+    links = set()
+    for directory, directory_names, names in os.walk(source_root):
+        for name in directory_names + names:
             absolute = pathlib.Path(directory) / name
-            files.add(absolute.relative_to(source_root).as_posix())
-    return files
+            relative = absolute.relative_to(source_root).as_posix()
+            if absolute.is_symlink():
+                links.add(relative)
+            if name in names:
+                files.add(relative)
+    return files, links
 
 
 def resolve_quoted(including_file, target, all_files):
@@ -370,13 +396,27 @@ def find_violations(source_root):
     if not source_root.is_dir():
         raise CheckError(f"{source_root} is not a directory")
 
-    all_files = collect_files(source_root)
+    all_files, links = collect_files(source_root)
     # An angle include finds a file as the macOS file system does: in any case.
     all_files_in_lower_case = {name.lower() for name in all_files}
     violations = []
     project_includes = {}
 
-    for file in sorted(all_files):
+    for file in sorted(all_files | links):
+        if file in links:
+            # Not read: what it leads to is checked where it really is, if
+            # that is under the source root at all.
+            violations.append(
+                Violation(
+                    file,
+                    1,
+                    "symlink",
+                    "a symbolic link; the check goes by the path of a file, and a "
+                    "link gives a file or a directory a second path",
+                )
+            )
+            continue
+
         suffix = posixpath.splitext(file)[1]
         if suffix not in SOURCE_SUFFIXES:
             if posixpath.basename(file) not in NOT_SOURCE_NAMES:

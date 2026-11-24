@@ -166,6 +166,19 @@ hums_add_layers_fixture(computed_include                    "model/ClipModel.h:6
 # list, which could include anything, and an Objective-C++ file spelled .MM.
 hums_add_layers_fixture(unknown_suffix                      "engine/Detail.hxx:1"               "unknown-suffix")
 hums_add_layers_fixture(unknown_suffix_in_other_case        "app/MenuBar.MM:1"                  "unknown-suffix")
+# An include the compiler takes and a reader of plain lines would not: after a
+# byte order mark, after a raw string with a quote and a /* in it, with its
+# line broken by a backslash (reported on the line it begins on), and written
+# with the digraph %: for #.
+hums_add_layers_fixture(include_after_byte_order_mark       "engine/Transport.h:1"              "layer")
+hums_add_layers_fixture(include_after_raw_string            "engine/Transport.h:7"              "layer")
+hums_add_layers_fixture(include_with_backslash_splice       "engine/Transport.h:5"              "layer")
+hums_add_layers_fixture(include_with_digraph                "engine/Transport.h:5"              "layer")
+# A symbolic link gives a file a second path, in another layer: a model/
+# header linked into engine/, and model/ linked into platform/mac/, where an
+# angle include through the link would pass for an OS header.
+hums_add_layers_fixture(symbolic_link_to_file               "engine/Ids.h:1"                    "symlink")
+hums_add_layers_fixture(symbolic_link_to_directory          "platform/mac/hidden:1"             "symlink")
 
 # Guardrail 1: schema names are spelled as strings only in src/model/Ids.h.
 # The first group of fixtures is scanned against the real Ids.h, one fixture
