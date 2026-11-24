@@ -23,7 +23,7 @@ Hums opens one project in one window. The main user interaction happens in the t
 
 ## Timeline
 
-Expects a first sort of usable GUI app (drum sequencer view only) maybe in Q1 of 2027. If we get this far, then maybe we'll see a fully working app in Q3 of 2027. No promises are made, though. It's macOS only, but there is no platform lock-in. Especially a Linux version sounds like an attractive option for further development.
+Expect a first sort of usable GUI app (drum sequencer view only) maybe in Q1 of 2027. If we get this far, then maybe we'll see a fully working app in Q3 of 2027. No promises are made, though. It's macOS only, but there is no platform lock-in. Especially a Linux version sounds like an attractive option for further development.
 
 ## My role
 
