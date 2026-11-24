@@ -1,8 +1,9 @@
 #pragma once
 
-#include "model/EventModel.h"
 #include "model/commands/CommandResult.h"
 #include "model/commands/EditContext.h"
+#include "model/commands/EventValues.h"
+#include "model/commands/NoteValues.h"
 
 #include <juce_data_structures/juce_data_structures.h>
 
@@ -36,40 +37,6 @@ namespace model::commands
 // Like every command: `project` is the Project node of a valid document; a
 // command checks everything before it touches the tree, applies completely
 // or refuses and changes nothing, and never begins a transaction.
-
-// What a note is made of (docs/SCHEMA.md -> Note). As made here, it is the
-// note the schema describes when only its place and pitch are stored.
-struct NoteValues
-{
-    // The start, relative to the clip start; 0 or later. It may lie at or
-    // past the loop length: such a note is kept and never played.
-    std::int64_t tick = 0;
-    // At least one tick, and the note must not end past the largest tick.
-    std::int64_t length = 0;
-    // 0 to 127.
-    int pitch = 60;
-    // 1 to 127.
-    int velocity = 100;
-    // 0 to 127.
-    int offVelocity = 64;
-    bool enabled = true;
-};
-
-// What an event that is no note is made of (docs/SCHEMA.md -> Event).
-struct EventValues
-{
-    // 0 or later.
-    std::int64_t tick = 0;
-    EventModel::Kind kind = EventModel::Kind::cc;
-    // What a and b mean depends on the kind (EventModel::Kind), and so do
-    // their ranges. One that the kind does not use is 0.
-    int a = 0;
-    int b = 0;
-    // The payload of a sysex event as hexadecimal digits, two to a byte,
-    // without F0 and F7, at most 64 KB; empty for every other kind.
-    juce::String data;
-    bool enabled = true;
-};
 
 // Puts a note behind the clip's other content, so that it comes last among
 // the notes at its tick. Refused when the values are not a note's, when the

@@ -72,6 +72,7 @@ hums_add_layer(hums_model
         Validator.h
         commands/AutomationLaneCommands.cpp
         commands/AutomationLaneCommands.h
+        commands/CellValues.h
         commands/ClipPoolCommands.cpp
         commands/ClipPoolCommands.h
         commands/CloneMark.cpp
@@ -81,8 +82,10 @@ hums_add_layer(hums_model
         commands/EditContext.h
         commands/EventClipCommands.cpp
         commands/EventClipCommands.h
+        commands/EventValues.h
         commands/NodeLookup.cpp
         commands/NodeLookup.h
+        commands/NoteValues.h
         commands/PadMapCommands.cpp
         commands/PadMapCommands.h
         commands/PlacementCommands.cpp
