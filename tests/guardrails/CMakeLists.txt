@@ -110,12 +110,29 @@ function(hums_add_script_guardrail_fixture name script violation_regex)
         PASS_REGULAR_EXPRESSION "${violation_regex}")
 endfunction()
 
-# JUCE pin: libs/JUCE is at the tag libs/JUCE_VERSION names. The fixture is a
-# version file naming another tag.
+# JUCE pin: libs/JUCE is at the tag libs/JUCE_VERSION names, and the
+# repository records for libs/JUCE the commit checked out there. One fixture
+# for each of the two rules; each test fails when the other rule is reported
+# too, so a fixture cannot pass for another reason than its own.
 hums_add_script_guardrail(guardrail_juce_pin check_juce_pin.py)
-hums_add_script_guardrail_fixture(guardrail_juce_pin_fixture_fails check_juce_pin.py
+# The first rule: a version file naming another tag.
+hums_add_script_guardrail_fixture(guardrail_juce_pin_fixture_pinned_tag_fails check_juce_pin.py
     "check_juce_pin: VIOLATION: .*pins JUCE '9\\.0\\.5'"
     --version-file "${PROJECT_SOURCE_DIR}/tools/fixtures/check_juce_pin/JUCE_VERSION")
+set_tests_properties(guardrail_juce_pin_fixture_pinned_tag_fails PROPERTIES
+    FAIL_REGULAR_EXPRESSION "check_juce_pin: VIOLATION: the repository records")
+# The second rule: an index that records another commit for libs/JUCE, as a
+# staged move of the submodule that was never checked out leaves it. The
+# script asks Hums' own index with the caller's git environment, so
+# GIT_INDEX_FILE hands it the fixture's index in place of the repository's.
+# That index is a binary file with the one entry; it was made with
+#   GIT_INDEX_FILE=tools/fixtures/check_juce_pin/recorded_commit.index \
+#       git update-index --add --cacheinfo 160000,1111111111111111111111111111111111111111,libs/JUCE
+hums_add_script_guardrail_fixture(guardrail_juce_pin_fixture_recorded_commit_fails check_juce_pin.py
+    "check_juce_pin: VIOLATION: the repository records commit 111111111111 for libs/JUCE")
+set_tests_properties(guardrail_juce_pin_fixture_recorded_commit_fails PROPERTIES
+    ENVIRONMENT "GIT_INDEX_FILE=${PROJECT_SOURCE_DIR}/tools/fixtures/check_juce_pin/recorded_commit.index"
+    FAIL_REGULAR_EXPRESSION "check_juce_pin: VIOLATION: [^\n]*pins JUCE")
 # The check does not go by the caller's git environment: with GIT_DIR naming
 # Hums' own repository, as git sets it for a hook in a linked worktree, the
 # questions meant for libs/JUCE were answered for Hums and the check reported
