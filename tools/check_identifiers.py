@@ -32,6 +32,10 @@ literal that stands for the name:
     juce::ValueTree g() { return { "Note", {} }; }  Identifier or as a ValueTree
     std::array<juce::Identifier, 2> { ... }       a list of Identifiers
     xml.getIntAttribute ("pitch")                 an XML tag or attribute name
+    PropertyRule rule { "Note", "pitch", 0 }      a member of a struct of ours
+    rows.push_back ({ slot, "scene", 0 })         that is a juce::Identifier
+    RowKey::RowKey() : rowProperty ("scene")
+    key.rowProperty = "scene"
 
 The functions of ours are not a list kept by hand: the check reads every
 declaration under the source root and remembers which parameters of which
@@ -39,13 +43,20 @@ function are a juce::Identifier, as it reads the names from Ids.h. A call is
 matched by the function's name alone, whichever class it belongs to, and with
 or without template arguments: readAs<int> (node, "pitch").
 
+The structs of ours are read the same way: the check reads every struct and
+class under the source root and remembers which of its members are a
+juce::Identifier (or a list of them), by name and, for a struct that is
+filled from a list in braces, by position. A list in braces is checked at
+exactly those positions, so a value beside the name is still not a name. A
+member is matched by its name alone, whichever struct it belongs to.
+
 Reported with file:line and a rule name in square brackets:
 
   [identifier]  a schema name spelled as a string outside Ids.h
   [literal-name] in model/, io/ and render/ only: any string literal, schema
                 name or not, as the name in one of those places: the first
                 argument of a call, the names of a construction, the
-                initialiser of an Identifier, a subscript, and the four
+                initialiser of an Identifier, a subscript, and the
                 further places above.
                 In these layers every ValueTree is the document, so a name
                 that is not a constant from Ids.h is an invented one [D15].
@@ -194,6 +205,34 @@ IDENTIFIER_LIST = re.compile(
 #    What may stand between the name of a function of ours and its bracket in
 #    a call: template arguments, as in "readAs<int> (node, ids::pitch)".
 TEMPLATE_ARGUMENTS = r"<[^;(){}]*>"
+
+# 5. A member of a struct or class of ours that is a juce::Identifier, or a
+#    list of them. "struct PropertyRule {" and "class RowKey final : public Base {"
+#    open a body; "enum class ValueKind {" does not, and is told apart by the
+#    word before it.
+CLASS_OPENING = re.compile(r"\b(?:struct|class)\s+(\w+)\s*(?:final\s*)?(:(?!:)[^;{]*)?\{")
+ENUM_BEFORE = re.compile(r"\benum\s+$")
+CLASS_KEYWORD_BEFORE = re.compile(r"\b(?:struct|class)\s+$")
+ACCESS_SPECIFIER = re.compile(r"\s*(?:public|private|protected)\s*:(?!:)")
+OPERATOR = re.compile(r"\boperator\b")
+
+#    What stands directly in a class body without being a data member that a
+#    list in braces fills.
+NOT_A_DATA_MEMBER = re.compile(r"(?:using|typedef|friend|static|struct|class|enum|union|template)\b")
+
+#    "juce::Identifier rowProperty", "int row", "std::vector<int> rows[4]":
+#    the type and the name of a data member, its initialiser cut off.
+DATA_MEMBER = re.compile(r"(.*[\s&*>])(\w+)\s*(?:\[[^\]]*\]\s*)?", re.DOTALL)
+IDENTIFIER_MEMBER_TYPE = re.compile(
+    r"(?:(?:const|mutable)\s+)*(?:juce\s*::\s*)?Identifier"
+    r"|.*\bIdentifier\b\s*(?:,[^<>]*)?>",
+    re.DOTALL,
+)
+
+#    The calls that give a container one more element: "rows.push_back ({ ... })"
+#    takes the element as a list in braces, "rows.emplace_back (...)" takes
+#    what would stand in the braces.
+ELEMENT_CALLS = ("push_back", "emplace_back")
 
 # 4. juce::XmlElement names a tag or an attribute in the first argument of
 #    these calls and of its constructors, mostly as text (a StringRef), so no
@@ -398,7 +437,133 @@ def name_taking_functions(texts):
     return found
 
 
-def hits_in_file(text, names, document_only_layer, name_functions):
+def declarations_in_class(text, body_position):
+    """(text, whether it is a function) of everything that stands directly in
+    the class body whose brace is at body_position, in order.
+
+    A declaration ends at its semicolon; a function that is defined in the
+    class ends at the brace that closes its body. What has round brackets
+    before any "=" is a function, and so is every operator.
+    """
+    end_of_body = end_of_brackets(text, body_position) - 1
+    declarations = []
+    start = position = body_position + 1
+    has_parameters = False
+    has_initialiser = False
+
+    def is_function():
+        return has_parameters or OPERATOR.search(text, start, position) is not None
+
+    while position < end_of_body:
+        character = text[position]
+        if character == '"':
+            literal = STRING_LITERAL.match(text, position)
+            position = literal.end() if literal else position + 1
+        elif character == "(":
+            has_parameters = has_parameters or not has_initialiser
+            position = end_of_brackets(text, position)
+        elif character == "{":
+            function = is_function()
+            position = end_of_brackets(text, position)
+            # After a constructor's "member { ... }" comes the next member or
+            # the body; only the body ends the function.
+            following = text[position:end_of_body].lstrip()[:1]
+            if function and following not in ("{", ","):
+                declarations.append((text[start:position], True))
+                start = position
+                has_parameters = has_initialiser = False
+        elif character == ";":
+            declarations.append((text[start:position], is_function()))
+            position += 1
+            start = position
+            has_parameters = has_initialiser = False
+        else:
+            has_initialiser = has_initialiser or character == "="
+            position += 1
+    return declarations
+
+
+def identifier_members_of_class(class_name, has_base, text, body_position):
+    """(the names of the members that are an Identifier, their positions among
+    the data members), read from the class body whose brace is at body_position.
+
+    The positions are those a list in braces fills, { first, second, ... }.
+    They are None for a class that is not filled so: one with a constructor
+    of its own, whose arguments name_taking_functions() knows, and one with a
+    base class, whose members come first and are not read here.
+    """
+    member_names = set()
+    positions = set()
+    filled_from_a_list = not has_base
+    constructor = re.compile(r"(?:(?:explicit|constexpr|inline)\s+)*" + re.escape(class_name) + r"\s*\(")
+    index = 0
+
+    for declaration, is_function in declarations_in_class(text, body_position):
+        while ACCESS_SPECIFIER.match(declaration):
+            declaration = declaration[ACCESS_SPECIFIER.match(declaration).end():]
+        declaration = declaration.strip()
+        if is_function:
+            if constructor.match(declaration):
+                filled_from_a_list = False
+            continue
+        if not declaration or NOT_A_DATA_MEMBER.match(declaration):
+            continue
+        member = DATA_MEMBER.fullmatch(re.split(r"[={]", declaration, maxsplit=1)[0])
+        if not member:
+            continue
+        if IDENTIFIER_MEMBER_TYPE.fullmatch(member.group(1).strip()):
+            member_names.add(member.group(2))
+            positions.add(index)
+        index += 1
+
+    return member_names, (positions if filled_from_a_list else None)
+
+
+class StructsWithNames:
+    """What the sources say about our own structs and classes with a member
+    that is a juce::Identifier or a list of them.
+
+    Only names are kept, as for the functions: two structs of one name are
+    told apart by nothing here, nor are two members of one name in different
+    structs.
+    """
+
+    def __init__(self, texts):
+        # The names of the members that are an Identifier, of every struct and class.
+        self.member_names = set()
+        # {struct name: the positions of its Identifier members}, for the
+        # structs that a list in braces fills.
+        self.positions = {}
+        # {variable name: the structs it is a list of}: "std::vector<NodeInARow> found".
+        self.lists = {}
+
+        for text in texts:
+            for opening in CLASS_OPENING.finditer(text):
+                if ENUM_BEFORE.search(text, max(0, opening.start() - 20), opening.start()):
+                    continue
+                member_names, positions = identifier_members_of_class(
+                    opening.group(1), opening.group(2) is not None, text, opening.end() - 1
+                )
+                self.member_names |= member_names
+                if positions:
+                    self.positions.setdefault(opening.group(1), set()).update(positions)
+
+        if self.positions:
+            list_variable = re.compile(self.list_of_structs() + r"(\w+)\s*[;={(,)]")
+            for text in texts:
+                for declaration in list_variable.finditer(text):
+                    self.lists.setdefault(declaration.group(2), set()).add(declaration.group(1))
+
+    def struct_names(self):
+        return r"\b(" + "|".join(sorted(self.positions)) + r")\b"
+
+    def list_of_structs(self):
+        """The type of a list of one of the structs, up to where a name follows:
+        "std::vector<PropertyRule> ", "const std::array<PropertyRule, 2>& "."""
+        return self.struct_names() + r"\s*(?:,[^<>;(){}]*)?>\s*(?:const\s+)?&?\s*"
+
+
+def hits_in_file(text, names, document_only_layer, name_functions, structs):
     """(position, rule, string, where it was found) for every hit, in order.
 
     A schema name in the place of the name is an [identifier] hit in every
@@ -523,6 +688,99 @@ def hits_in_file(text, names, document_only_layer, name_functions):
         bracket_position = opening.end() - 1
         remember_names(bracket_position, end_of_brackets(text, bracket_position), "a list of Identifiers")
 
+    # 5. The members of our own structs that are an Identifier.
+    def remember_struct_names(bracket_position, struct, where):
+        """The names in the brackets that fill one struct: { first, second, ... }."""
+        arguments = arguments_of(text, bracket_position, angles_are_brackets=False)
+        for index in sorted(structs.positions[struct]):
+            if index < len(arguments):
+                remember_names(*arguments[index], where)
+
+    def remember_struct_list_names(brace_position, struct, where):
+        """The same for every element of { { ... }, { ... } } that is a list in braces."""
+        for element_position in bracketed_elements(text, brace_position, end_of_brackets(text, brace_position)):
+            if text[element_position] == "{":
+                remember_struct_names(element_position, struct, where)
+
+    def bodies_of_functions_returning(return_type):
+        """The position of the body's brace of every function defined with that return type."""
+        positions = []
+        for opening in re.compile(return_type + r"(?:\w+\s*::\s*)*\w+\s*\(").finditer(text):
+            body = BETWEEN_PARAMETERS_AND_BODY.match(text, end_of_brackets(text, opening.end() - 1))
+            if body:
+                positions.append((opening.group(1), body.end() - 1))
+        return positions
+
+    if structs.member_names:
+        member = r"\b(" + "|".join(sorted(structs.member_names)) + r")\b"
+
+        # In a constructor: "RowKey::RowKey() : rowProperty ("scene"), other { "index" }".
+        for opening in re.compile(r"(?<!:)[:,]\s*" + member + r"\s*[({]").finditer(text):
+            bracket_position = opening.end() - 1
+            remember_names(
+                bracket_position, end_of_brackets(text, bracket_position), f"the member {opening.group(1)}"
+            )
+
+        # Assigned: "key.rowProperty = "scene";", "rowProperty = "scene";" as a
+        # statement of its own, and "{ .rowProperty = "scene" }" in a list in braces.
+        assigned = re.compile(r"(?:\.|->|[;{}]\s*)" + member + r"\s*=(?!=)\s*" + STRING_LITERAL.pattern)
+        for assignment in assigned.finditer(text):
+            remember(assignment.start(2) - 1, assignment.group(2), f"the member {assignment.group(1)}")
+
+    if structs.positions:
+        # One struct: "PropertyRule rule { ... }", "PropertyRule { ... }",
+        # "PropertyRule rule = { ... }". Not the struct's own definition, and
+        # not a function that returns one, whose brackets hold parameters.
+        one_struct = re.compile(
+            structs.struct_names() + r"\s*(?:" + DECLARED_NAME + r"\s*)?(?:=\s*)?[({]"
+        )
+        for opening in one_struct.finditer(text):
+            bracket_position = opening.end() - 1
+            if CLASS_KEYWORD_BEFORE.search(text, max(0, opening.start() - 20), opening.start()):
+                continue
+            if text[bracket_position] == "(" and BETWEEN_PARAMETERS_AND_BODY.match(
+                text, end_of_brackets(text, bracket_position)
+            ):
+                continue
+            remember_struct_names(bracket_position, opening.group(1), f"a {opening.group(1)}")
+
+        # A list of them: "std::vector<PropertyRule> rules { { ... }, { ... } }",
+        # "PropertyRule rules[] = { ... }".
+        list_of_structs = re.compile(
+            structs.list_of_structs() + r"(?:" + DECLARED_NAME + r"\s*)?(?:=\s*)?\{"
+            r"|" + structs.struct_names() + r"\s+" + DECLARED_NAME + r"\s*\[[^\]]*\]\s*(?:=\s*)?\{"
+        )
+        for opening in list_of_structs.finditer(text):
+            struct = opening.group(1) or opening.group(2)
+            remember_struct_list_names(opening.end() - 1, struct, f"a list of {struct}")
+
+        # What a function returns as one, or as a list of them.
+        for struct, body_position in bodies_of_functions_returning(structs.struct_names() + r"\s*&?\s*"):
+            for statement in RETURN_OF_LIST.finditer(text, body_position, end_of_brackets(text, body_position)):
+                remember_struct_names(statement.end() - 1, struct, f"the return of a {struct}")
+        for struct, body_position in bodies_of_functions_returning(structs.list_of_structs()):
+            for statement in RETURN_OF_LIST.finditer(text, body_position, end_of_brackets(text, body_position)):
+                remember_struct_list_names(statement.end() - 1, struct, f"the return of a list of {struct}")
+
+    if structs.lists:
+        # One more element for a list of them, named by the variable that is
+        # the list: "found.push_back ({ ... })", "found.emplace_back (...)".
+        element_call = re.compile(
+            r"\b(" + "|".join(sorted(structs.lists)) + r")\s*(?:\.|->)\s*"
+            r"(" + "|".join(ELEMENT_CALLS) + r")\s*\("
+        )
+        for opening in element_call.finditer(text):
+            bracket_position = opening.end() - 1
+            for struct in sorted(structs.lists[opening.group(1)]):
+                where = f"{opening.group(2)} (...) of a {struct}"
+                if opening.group(2) == "emplace_back":
+                    remember_struct_names(bracket_position, struct, where)
+                    continue
+                start, end = arguments_of(text, bracket_position, angles_are_brackets=False)[0]
+                element =start + len(text[start:end]) - len(text[start:end].lstrip())
+                if element < end and text[element] == "{":
+                    remember_struct_names(element, struct, where)
+
     # 4. XML tag and attribute names. In model/, io/ and render/ every XML
     #    element is the project file; in app/ it can be something else.
     if document_only_layer:
@@ -565,11 +823,14 @@ def find_violations(source_root, ids_file):
             continue
         texts[path] = read_source(path)
     name_functions = name_taking_functions(texts.values())
+    structs = StructsWithNames(list(texts.values()))
 
     for path, text in texts.items():
         layer_path = path.relative_to(source_root).as_posix()
         document_only_layer = layer_path.startswith(DOCUMENT_ONLY_LAYERS)
-        for position, rule, string, where in hits_in_file(text, names, document_only_layer, name_functions):
+        for position, rule, string, where in hits_in_file(
+            text, names, document_only_layer, name_functions, structs
+        ):
             if rule == "identifier":
                 message = (
                     f'"{string}" is spelled as a string in {where}; '

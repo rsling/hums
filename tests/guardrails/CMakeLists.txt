@@ -236,6 +236,23 @@ hums_add_identifiers_fixture(identifier_list_qualified             "model/Valida
 hums_add_identifiers_fixture(identifier_array_qualified            "render/SnapshotBuilder.cpp:3"  "identifier")
 hums_add_identifiers_fixture(own_function_template_arguments       "model/NoteModel.cpp:8"         "identifier")
 hums_add_identifiers_fixture(own_constructor_qualified             "model/NoteModel.cpp:4"         "identifier")
+# A member of a struct or class of ours that is a juce::Identifier (the check
+# reads the struct inside the fixture): the struct filled from a list in
+# braces, alone, in a list, as one more element of a list and as what a
+# function returns; the member initialised by a constructor, assigned, and
+# named in the list. A value beside the name is no hit here either.
+hums_add_identifiers_fixture(struct_member                         "io/ProjectFile.cpp:12"             "identifier")
+hums_add_identifiers_fixture(struct_member_list                    "io/ProjectFile.cpp:15"             "identifier")
+hums_add_identifiers_fixture(struct_member_array                   "model/Validator.cpp:12"            "identifier")
+hums_add_identifiers_fixture(struct_member_push_back               "model/commands/SlotCommands.cpp:7"  "identifier")
+hums_add_identifiers_fixture(struct_member_emplace_back            "model/commands/SlotCommands.cpp:14" "identifier")
+hums_add_identifiers_fixture(struct_member_return                  "model/commands/SlotCommands.cpp:13" "identifier")
+hums_add_identifiers_fixture(struct_member_list_return             "model/commands/SlotCommands.cpp:13" "identifier")
+hums_add_identifiers_fixture(struct_member_initialiser             "model/RowKey.cpp:5"                "identifier")
+hums_add_identifiers_fixture(struct_member_initialiser_braces      "model/RowKey.cpp:7"                "identifier")
+hums_add_identifiers_fixture(struct_member_assignment              "model/RowKey.cpp:13"               "identifier")
+hums_add_identifiers_fixture(struct_member_designated              "model/RowKey.cpp:10"               "identifier")
+hums_add_identifiers_fixture(literal_name_struct_member            "io/ProjectFile.cpp:13"             "literal-name")
 # XML tag and attribute names, in model/, io/ and render/.
 hums_add_identifiers_fixture(xml_tag_name                          "io/ProjectFile.cpp:6"          "identifier")
 hums_add_identifiers_fixture(xml_construction                      "io/ProjectFile.cpp:5"          "identifier")
