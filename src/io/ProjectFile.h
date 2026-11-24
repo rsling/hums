@@ -5,6 +5,7 @@
 
 #include <juce_data_structures/juce_data_structures.h>
 
+#include <functional>
 #include <vector>
 
 namespace io
@@ -134,17 +135,20 @@ public:
             nameNotAllowed,    // the target's name begins with "~" (isNameAllowed)
             targetNotWritable, // the target is a directory, a file that is read-only, or a symbolic link that leads to no file
             writeFailed,       // the new text could not be written beside the target, or not be given the previous file's permissions
-            backupFailed,      // the previous file could not be kept as <name>.bak
-            replaceFailed      // the new file could not be moved over the target
+            backupFailed,      // the previous file could not be kept: no copy of it could be made, or a directory or a read-only file stands where the backup goes
+            replaceFailed,     // the new file could not be moved over the target
+            savedWithoutBackup // the project is saved, but the copy of the previous file could not be moved to <name>.bak
         };
 
         Outcome outcome = Outcome::saved;
 
         // What went wrong, in words for the user. Empty when the file was
-        // saved.
+        // saved and the previous one kept.
         juce::String message;
 
-        bool wasSaved() const { return outcome == Outcome::saved; }
+        // Whether the target holds the project now. True also when only the
+        // backup went wrong (savedWithoutBackup), which `message` then says.
+        bool wasSaved() const { return outcome == Outcome::saved || outcome == Outcome::savedWithoutBackup; }
     };
 
     // Saves the document as canonical XML (docs/SCHEMA.md -> Loading, saving,
@@ -154,17 +158,23 @@ public:
     //      forced to disk and read back
     //   2. if the target exists, the temporary file is given its permission
     //      bits
-    //   3. if the target exists, a copy of it becomes <file name>.bak beside
-    //      it ("song.xml.bak" for "song.xml"), in place of an older one
+    //   3. if the target exists, a copy of it is made beside it, under a
+    //      temporary name too
     //   4. the temporary file is renamed over the target
+    //   5. the copy is renamed to <file name>.bak ("song.xml.bak" for
+    //      "song.xml"), in place of an older one
     //
     // The target is never opened for writing and never removed: until the
     // rename of step 4 it is the previous file, byte for byte, and after it
-    // the new one. A failure at any step leaves it as it was and removes the
-    // temporary file. A target that is read-only is refused, although a
-    // rename could replace it. A directory that is not there is not created.
-    // A target whose name is not allowed (isNameAllowed) is refused before
-    // anything is written, whether or not such a file is there.
+    // the new one. A failure at any step up to 4 leaves the target and the
+    // backup of the save before as they were and removes the temporary files.
+    // A failure at step 5 leaves the project saved and the older backup in
+    // place (savedWithoutBackup). A target that is read-only is refused,
+    // although a rename could replace it, and so is a save over a file whose
+    // backup is read-only or a directory, before anything is written. A
+    // directory that is not there is not created. A target whose name is not
+    // allowed (isNameAllowed) is refused before anything is written, whether
+    // or not such a file is there.
     //
     // When `file` is a symbolic link, the target is the file the link leads
     // to, through however many links: that file is replaced, the temporary
@@ -176,7 +186,17 @@ public:
     //
     // `project` must be a Project node and a valid document; like the writer,
     // save does not check it.
-    static SaveResult save (const juce::ValueTree& project, const juce::File& file);
+    //
+    // `moveOver` is a parameter so that a test can hand in a move that fails:
+    // no file on disk makes the rename of step 4 fail and that of step 5 not,
+    // or the other way round. Everything else saves with moveFileOver.
+    using MoveOver = std::function<bool (const juce::File& newFile, const juce::File& target)>;
+
+    static SaveResult save (const juce::ValueTree& project, const juce::File& file, const MoveOver& moveOver = moveFileOver);
+
+    // Renames `newFile` to `target`, in place of the file that may be there.
+    // Says whether it did.
+    static bool moveFileOver (const juce::File& newFile, const juce::File& target);
 };
 
 } // namespace io

@@ -531,18 +531,21 @@ namespace
         return ! error;
     }
 
-    // Makes a copy of the file the backup, in place of an older backup. The
-    // copy is made under a temporary name and renamed, so that the older
-    // backup is there until the new one is complete.
-    bool keepAsBackup (const juce::File& file, const juce::File& backup)
+    // Why the previous file could not become the backup at this path, if
+    // something stands there that a save does not replace. Asked before
+    // anything is written.
+    std::optional<juce::String> whyTheBackupCannotBeReplaced (const juce::File& backup)
     {
         // rename() puts a file over a file, not over a directory.
         if (backup.isDirectory())
-            return false;
+            return backup.getFullPathName() + " is a directory";
 
-        const juce::TemporaryFile temporary (backup, juce::TemporaryFile::useHiddenFile);
+        // rename() asks only the directory for permission, and would replace
+        // a backup its owner has marked read-only.
+        if (backup.existsAsFile() && ! backup.hasWriteAccess())
+            return "the backup " + backup.getFullPathName() + " is read-only";
 
-        return file.copyFileTo (temporary.getFile()) && temporary.getFile().replaceFileIn (backup);
+        return std::nullopt;
     }
 
 } // namespace
@@ -670,7 +673,12 @@ ProjectFile::LoadResult ProjectFile::loadFromText (const juce::String& xmlText,
     return {};
 }
 
-ProjectFile::SaveResult ProjectFile::save (const juce::ValueTree& project, const juce::File& named)
+bool ProjectFile::moveFileOver (const juce::File& newFile, const juce::File& target)
+{
+    return newFile.replaceFileIn (target);
+}
+
+ProjectFile::SaveResult ProjectFile::save (const juce::ValueTree& project, const juce::File& named, const MoveOver& moveOver)
 {
     if (! isNameAllowed (named))
         return saveFailure (SaveResult::Outcome::nameNotAllowed, "The project was not saved. " + whyTheNameIsNotAllowed (named));
@@ -698,6 +706,16 @@ ProjectFile::SaveResult ProjectFile::save (const juce::ValueTree& project, const
     if (file.existsAsFile() && ! file.hasWriteAccess())
         return saveFailure (SaveResult::Outcome::targetNotWritable, "The project was not saved: the file " + path + " is read-only.");
 
+    // Where the previous file is kept. getSiblingFile would take a name that
+    // begins with "~" for a path of its own; no such name comes this far.
+    const auto backup = file.getSiblingFile (file.getFileName() + ".bak");
+    const bool thereIsAPreviousFile = file.existsAsFile();
+
+    if (thereIsAPreviousFile)
+        if (const auto why = whyTheBackupCannotBeReplaced (backup))
+            return saveFailure (SaveResult::Outcome::backupFailed,
+                                "The project was not saved: the previous file could not be kept as " + backup.getFullPathName() + " (" + *why + ").");
+
     // 1. The new text, beside the target. The temporary file is removed when
     // this function returns, unless it has become the target by then.
     const juce::TemporaryFile temporary (file, juce::TemporaryFile::useHiddenFile);
@@ -708,21 +726,30 @@ ProjectFile::SaveResult ProjectFile::save (const juce::ValueTree& project, const
                                 + *failure + ").");
 
     // 2. The permission bits of the previous file, on the new one.
-    if (file.existsAsFile() && ! takePermissionsOf (file, temporary.getFile()))
+    if (thereIsAPreviousFile && ! takePermissionsOf (file, temporary.getFile()))
         return saveFailure (SaveResult::Outcome::writeFailed,
                             "The project was not saved: the new file could not be given the permissions of the file " + path + ".");
 
-    // 3. The previous file, kept. getSiblingFile would take a name that
-    // begins with "~" for a path of its own; no such name comes this far.
-    const auto backup = file.getSiblingFile (file.getFileName() + ".bak");
+    // 3. A copy of the previous file, beside the backup and not yet in its
+    // place: the backup of the save before stays until this save has
+    // happened. This temporary file too is removed when the function returns,
+    // unless it has become the backup by then.
+    const juce::TemporaryFile temporaryBackup (backup, juce::TemporaryFile::useHiddenFile);
 
-    if (file.existsAsFile() && ! keepAsBackup (file, backup))
+    if (thereIsAPreviousFile && ! file.copyFileTo (temporaryBackup.getFile()))
         return saveFailure (SaveResult::Outcome::backupFailed,
                             "The project was not saved: the previous file could not be kept as " + backup.getFullPathName() + ".");
 
     // 4. The rename, which is the save.
-    if (! temporary.getFile().replaceFileIn (file))
+    if (! moveOver (temporary.getFile(), file))
         return saveFailure (SaveResult::Outcome::replaceFailed, "The project was not saved: the file " + path + " could not be replaced.");
+
+    // 5. The copy of the previous file becomes the backup. The project is
+    // saved by now, and a failure here cannot take that back.
+    if (thereIsAPreviousFile && ! moveOver (temporaryBackup.getFile(), backup))
+        return saveFailure (SaveResult::Outcome::savedWithoutBackup,
+                            "The project was saved, but the file it replaced could not be kept as " + backup.getFullPathName()
+                                + ". What is there now is not the previous version of the project.");
 
     return {};
 }

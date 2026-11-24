@@ -4,6 +4,7 @@ hums_add_test_executable(io_tests
     ClipContentChildTest.cpp
     MigrationsTest.cpp
     ProjectFileTest.cpp
+    SaveBackupTest.cpp
     XmlWellFormednessTest.cpp)
 target_link_libraries(io_tests PRIVATE
     hums_io
