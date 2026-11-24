@@ -110,17 +110,16 @@ function(hums_add_script_guardrail_fixture name script violation_regex)
         PASS_REGULAR_EXPRESSION "${violation_regex}")
 endfunction()
 
-# JUCE pin: libs/JUCE is at the tag libs/JUCE_VERSION names, and the
-# repository records for libs/JUCE the commit checked out there. One fixture
-# for each of the two rules; each test fails when the other rule is reported
-# too, so a fixture cannot pass for another reason than its own.
+# JUCE pin: libs/JUCE is at the tag libs/JUCE_VERSION names, the repository
+# records for libs/JUCE the commit checked out there, and the files there are
+# that commit's. At least one fixture for each of the three rules; each test
+# passes only when the script reports that rule and counts exactly one
+# violation, so a fixture cannot pass for another reason than its own.
 hums_add_script_guardrail(guardrail_juce_pin check_juce_pin.py)
 # The first rule: a version file naming another tag.
 hums_add_script_guardrail_fixture(guardrail_juce_pin_fixture_pinned_tag_fails check_juce_pin.py
-    "check_juce_pin: VIOLATION: .*pins JUCE '9\\.0\\.5'"
+    "check_juce_pin: VIOLATION: [^\n]*pins JUCE '9\\.0\\.5'[^\n]*\ncheck_juce_pin: 1 violation"
     --version-file "${PROJECT_SOURCE_DIR}/tools/fixtures/check_juce_pin/JUCE_VERSION")
-set_tests_properties(guardrail_juce_pin_fixture_pinned_tag_fails PROPERTIES
-    FAIL_REGULAR_EXPRESSION "check_juce_pin: VIOLATION: the repository records")
 # The second rule: an index that records another commit for libs/JUCE, as a
 # staged move of the submodule that was never checked out leaves it. The
 # script asks Hums' own index with the caller's git environment, so
@@ -129,10 +128,33 @@ set_tests_properties(guardrail_juce_pin_fixture_pinned_tag_fails PROPERTIES
 #   GIT_INDEX_FILE=tools/fixtures/check_juce_pin/recorded_commit.index \
 #       git update-index --add --cacheinfo 160000,1111111111111111111111111111111111111111,libs/JUCE
 hums_add_script_guardrail_fixture(guardrail_juce_pin_fixture_recorded_commit_fails check_juce_pin.py
-    "check_juce_pin: VIOLATION: the repository records commit 111111111111 for libs/JUCE")
+    "check_juce_pin: VIOLATION: the repository records commit 111111111111 for libs/JUCE[^\n]*\ncheck_juce_pin: 1 violation")
 set_tests_properties(guardrail_juce_pin_fixture_recorded_commit_fails PROPERTIES
-    ENVIRONMENT "GIT_INDEX_FILE=${PROJECT_SOURCE_DIR}/tools/fixtures/check_juce_pin/recorded_commit.index"
-    FAIL_REGULAR_EXPRESSION "check_juce_pin: VIOLATION: [^\n]*pins JUCE")
+    ENVIRONMENT "GIT_INDEX_FILE=${PROJECT_SOURCE_DIR}/tools/fixtures/check_juce_pin/recorded_commit.index")
+# The third rule: a file in libs/JUCE that is edited, and one that is added,
+# neither committed. A test must not touch the real libs/JUCE, and a
+# repository cannot be checked in inside another, so each fixture is a small
+# stand-in repository that a script makes in the build directory before the
+# test runs (a CTest fixture: asking for the test alone runs the script too).
+# In the stand-in the first two rules hold.
+function(hums_add_juce_pin_stand_in_fixture case changed_file)
+    set(stand_in "${CMAKE_CURRENT_BINARY_DIR}/juce_pin_stand_in/${case}")
+    add_test(NAME guardrail_juce_pin_fixture_${case}_setup
+        COMMAND "${HUMS_XCRUN}" python3
+            "${PROJECT_SOURCE_DIR}/tools/fixtures/check_juce_pin/make_stand_in_repository.py"
+            ${case} "${stand_in}")
+    set_tests_properties(guardrail_juce_pin_fixture_${case}_setup PROPERTIES
+        FIXTURES_SETUP juce_pin_stand_in_${case}
+        PASS_REGULAR_EXPRESSION "make_stand_in_repository: ok")
+    hums_add_script_guardrail_fixture(guardrail_juce_pin_fixture_${case}_fails check_juce_pin.py
+        "check_juce_pin: VIOLATION: the files in libs/JUCE are not the files of commit [^\n]*: ${changed_file}\ncheck_juce_pin: 1 violation"
+        --repository-root "${stand_in}")
+    set_tests_properties(guardrail_juce_pin_fixture_${case}_fails PROPERTIES
+        FIXTURES_REQUIRED juce_pin_stand_in_${case})
+endfunction()
+
+hums_add_juce_pin_stand_in_fixture(edited_file "modules/juce_core\\.h")
+hums_add_juce_pin_stand_in_fixture(added_file  "modules/juce_added\\.h")
 # The check does not go by the caller's git environment: with GIT_DIR naming
 # Hums' own repository, as git sets it for a hook in a linked worktree, the
 # questions meant for libs/JUCE were answered for Hums and the check reported
