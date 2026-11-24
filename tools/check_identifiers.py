@@ -54,7 +54,12 @@ The functions of ours are not a list kept by hand: the check reads every
 declaration under the source root and remembers which parameters of which
 function are a juce::Identifier, as it reads the names from Ids.h. A call is
 matched by the function's name alone, whichever class it belongs to, and with
-or without template arguments: readAs<int> (node, "pitch").
+or without template arguments: readAs<int> (node, "pitch"). The return type
+of a function type is no function of ours: std::function<juce::String (const
+juce::Identifier&)> declares none called "String". And a declaration that
+returns an Identifier or a ValueTree is no construction of one: in
+"juce::ValueTree find (const juce::String& label = "none");" the default of
+the parameter is a text, not a name.
 
 The structs of ours are read the same way: the check reads every struct and
 class under the source root and remembers which of its members are a
@@ -213,6 +218,26 @@ NOT_A_FUNCTION_NAME = frozenset(
         "signed", "unsigned", "float", "double", "auto", "const",
     )
 )
+
+#    What stands before the return type of a function type, which declares no
+#    function either: std::function<juce::String (const juce::Identifier&)>
+#    and "using Describe = juce::String (const juce::Identifier&);" declare
+#    none called "String". Without this, every juce::String ("...") under the
+#    source root would be read as a call that takes a name. A declaration of
+#    a function stands behind neither a "<" nor a "=".
+RETURN_TYPE_OF_FUNCTION_TYPE_BEFORE = re.compile(r"[<=]\s*(?:const\s+)?(?:\w+\s*::\s*)*$")
+
+#    A parameter with a default, as it stands in a declaration: a type, a
+#    name, "=". "juce::ValueTree find (const juce::String& label = "none");"
+#    opens like the construction of a variable called find, but what stands
+#    in its brackets is a parameter and its default text, not a name. One
+#    word before the "=" is no parameter: in "juce::Identifier name (text = "pitch")"
+#    the literal does become the name. Nor is a parameter that is itself an
+#    Identifier: its default is a name.
+PARAMETER_WITH_DEFAULT = re.compile(
+    r"\s*(?:const\s+)?(?:\w+\s*::\s*)*\w+(?:\s*<[^()]*>)?(?:\s*const\b)?\s*(?:[&*]+\s*|\s+)\w+\s*=(?!=)"
+)
+IDENTIFIER_TYPE_WORD = re.compile(r"\b(?:" + "|".join(IDENTIFIER_TYPES) + r")\b")
 
 # 2. What a function returns: "juce::Identifier nameOf() { return "tick"; }",
 #    a list of them ("std::vector<juce::Identifier> names() { return { ... }; }"),
@@ -500,6 +525,10 @@ def name_taking_functions(texts):
                 name = opening.group(1)
                 if name in NOT_A_FUNCTION_NAME or name in IDENTIFIER_TYPES:
                     continue
+                if RETURN_TYPE_OF_FUNCTION_TYPE_BEFORE.search(
+                    text, max(0, opening.start() - 80), opening.start()
+                ):
+                    continue
                 parameters = arguments_of(text, opening.end() - 1, angles_are_brackets=True)
                 for index, (start, end) in enumerate(parameters):
                     if IDENTIFIER_PARAMETER.fullmatch(text, start, end):
@@ -689,6 +718,11 @@ def hits_in_file(text, names, document_only_layer, name_functions, structs, wrap
                 if text[subtree_position] == "{":
                     remember_tree_names(subtree_position, where)
 
+    def is_parameter_with_default(start, end):
+        """Whether the argument is a parameter of a declaration, with a default that is no name."""
+        parameter = PARAMETER_WITH_DEFAULT.match(text, start, end)
+        return parameter is not None and not IDENTIFIER_TYPE_WORD.search(parameter.group())
+
     def remember_argument(bracket_position, index, where):
         """The names in one argument of the brackets, if there are that many."""
         arguments = arguments_of(text, bracket_position, angles_are_brackets=False)
@@ -737,10 +771,21 @@ def hits_in_file(text, names, document_only_layer, name_functions, structs, wrap
             continue
         bracket_position = opening.end() - 1
         where = f"{opening.group(1)} {text[bracket_position]}...{CLOSING_BRACKET[text[bracket_position]]}"
+        # "Type name (" opens the construction of a variable and the
+        # declaration of a function alike. In a declaration, a parameter
+        # with a default text names nothing.
+        has_declared_name = text[opening.end(1) : bracket_position].strip() != ""
+        may_be_declaration = has_declared_name and text[bracket_position] == "("
+        arguments = arguments_of(text, bracket_position, angles_are_brackets=False)
         if opening.group(1) == "ValueTree":
+            if may_be_declaration and is_parameter_with_default(*arguments[0]):
+                continue
             remember_tree_names(bracket_position, where)
         else:
-            remember_names(bracket_position, end_of_brackets(text, bracket_position), where)
+            for start, end in arguments:
+                if may_be_declaration and is_parameter_with_default(start, end):
+                    continue
+                remember_names(start, end, where)
 
     for assignment in ASSIGNMENT.finditer(text):
         remember(assignment.start(2) - 1, assignment.group(2), f"{assignment.group(1)} ... = ")

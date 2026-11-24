@@ -285,6 +285,14 @@ hums_add_identifiers_fixture(literal_name_set_property_excluding_listener "model
 # text on either side; a comparison of two texts beside it is no hit.
 hums_add_identifiers_fixture(type_comparison                       "render/SnapshotBuilder.cpp:6"  "identifier")
 hums_add_identifiers_fixture(type_comparison_text_first            "model/Validator.cpp:5"         "identifier")
+# What is no hit, each beside one that is. The return type of a function type
+# (std::function<juce::String (const juce::Identifier&)>) is no function of
+# ours, so a juce::String made from a text takes no name; and a declaration
+# that returns a ValueTree or an Identifier is no construction, so the default
+# text of its parameter is no name, while the default of a parameter that is
+# an Identifier is one.
+hums_add_identifiers_fixture(function_type                         "model/NoteDescription.cpp:23"  "identifier")
+hums_add_identifiers_fixture(declaration_default_argument          "model/NodeSearch.h:10"         "identifier")
 
 hums_add_identifiers_fixture(ids_constant_differs_from_string "model/Ids.h:9"  "ids-file")
 hums_add_identifiers_fixture(ids_unreadable_declaration       "model/Ids.h:10" "ids-file")
