@@ -115,8 +115,9 @@ REPOSITORY_ROOT = pathlib.Path(__file__).resolve().parent.parent
 # Only src/ is scanned, so the second entry excuses nothing today. It is here
 # because the contract names it: if the scan is ever widened to tests/, the
 # project fixtures stay exempt. (tests/guardrails/ToolchainJuceTest.cpp spells
-# two identifiers of its own as literals, on purpose; they are not schema
-# names and would not be hits either.)
+# two identifiers of its own as literals, on purpose. One of them, "value",
+# is also a schema name, of CcValue: a scan widened to tests/ would report
+# it, and that file would have to be dealt with first.)
 EXEMPT_FILES = ("src/io/Migrations.cpp",)
 EXEMPT_DIRECTORIES = ("tests/io/fixtures/",)
 

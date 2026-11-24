@@ -15,7 +15,7 @@ Each milestone names a demonstration and its pass criterion. Do not start UI for
 
 ## Carried-over issues
 
-Known gaps that are not decisions (those are in `docs/DECISIONS.md`) and are not fixed yet. Each names the milestone at whose start it is picked up, or the event that makes it due; delete an entry in the commit that settles it. Found by the code review of milestone 0 on 20 Nov 2026; the three before the last by the code review of 21 Nov 2026, which Roland marked "can wait" (they are as the review reported them, not reproduced since); the last was left by the fix of that review's finding 7.
+Known gaps that are not decisions (those are in `docs/DECISIONS.md`) and are not fixed yet. Each names the milestone at whose start it is picked up, or the event that makes it due; delete an entry in the commit that settles it. Most were found by the code review of milestone 0 on 20 Nov 2026; the others by the code review of 21 Nov 2026 and by the work on milestone 1.
 
 | pick up at | issue |
 |---|---|
@@ -27,8 +27,6 @@ Known gaps that are not decisions (those are in `docs/DECISIONS.md`) and are not
 | milestone 3 | `miditiming` exits 0 on NOT MET (`targetsMet()` has no caller), so a script cannot use it as a check. Decide the exit code before the milestone 3 pass criterion is run. |
 | milestone 3 | Listen mode's recording window starts with the first message on the input. A stray message more than 2 s before playback ends the recording before the playback does (the report then shows drops). Keep the port quiet, or let the window follow the last arrival. |
 | milestone 3 | Nothing in `tools/miditiming` is covered by the test suite; its report logic was checked with throw-away harnesses outside the repository. If the milestone 3 pass criterion leans on listen mode, `ListenReport` and `ReferenceFile` deserve tests of their own, which needs a place in the layout (`tests/tools/`?) and Roland's yes. |
-| the gate first runs from a git hook or `git rebase --exec` | `tools/check_juce_pin.py` fails when `GIT_DIR` is exported: git then answers for the repository and not for the submodule in `libs/JUCE`. No hook is installed today. The fix is to clear git's environment variables for the script's own git calls (a guardrail script change: Roland's yes). |
 | the first `.mm` file under `platform/mac/` | `.clang-format` has one section, `Language: Cpp`, so `xcrun clang-format` refuses an Objective-C++ file. It needs an `ObjC` section with the same style. |
-| the first false violation it causes | `tools/cpp_text.py`, which tells comments and literals from code for the guardrail scripts, does not handle a raw string that runs over several lines: it takes each line for itself, so a quote in the middle of such a string can open a literal that is none. Fixing it is a guardrail script change: Roland's yes. |
 | the first false violation it causes | `tools/check_identifiers.py` checks every `return { … }` in the body of a function or lambda that returns a `juce::ValueTree`, and every `return` in one that returns a `juce::Identifier`, also a `return` that belongs to a lambda nested in that body and returns something else. A string in such a nested `return` is then taken for a name. Telling the bodies apart is a guardrail script change: Roland's yes. |
 | milestone 2 | No command sets `Project.name`; no task of milestone 1 asked for one. Roland decided on 22 Nov 2026 that it is added in milestone 2: a command in `model/commands/` with its test and its entry in the table of `tests/guardrails/CommandDriver`. |
