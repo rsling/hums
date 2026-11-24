@@ -19,6 +19,7 @@ library only.
 """
 
 import argparse
+import os
 import pathlib
 import subprocess
 import sys
@@ -31,17 +32,32 @@ class CheckError(Exception):
     """The check could not run (as opposed to: it ran and found a violation)."""
 
 
-def run_git(directory, *arguments):
+def run_git(directory, *arguments, environment=None):
     result = subprocess.run(
         ["git", "-C", str(directory), *arguments],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         universal_newlines=True,
+        env=environment,
     )
     if result.returncode != 0:
         command = " ".join(arguments)
         raise CheckError(f"git {command} failed in {directory}: {result.stderr.strip()}")
     return result.stdout.strip()
+
+
+def environment_that_names_no_repository():
+    """The caller's environment without the variables that tell git where a
+    repository is.
+
+    GIT_DIR and its relatives name one repository, and whoever set them (git
+    itself, for a hook in a linked worktree) meant Hums. A question put to
+    libs/JUCE with them set is answered for Hums: its HEAD, its tags. Without
+    them git finds the submodule by looking, from the directory it is run in.
+    Git itself says which variables these are.
+    """
+    names = run_git(REPOSITORY_ROOT, "rev-parse", "--local-env-vars").split()
+    return {name: value for name, value in os.environ.items() if name not in names}
 
 
 def read_pinned_tag(version_file):
@@ -70,8 +86,14 @@ def find_violations(repository_root, submodule_path, version_file):
     if not (juce_directory / ".git").exists():
         raise CheckError(f"{juce_directory} is not checked out (git submodule update --init)")
 
-    checked_out = run_git(juce_directory, "rev-parse", "HEAD")
-    tags = run_git(juce_directory, "tag", "--points-at", "HEAD").split()
+    # The two questions to the submodule are asked without the caller's
+    # repository variables. The question to Hums' own index keeps them: during
+    # a commit git names there the index that the commit will be made from.
+    submodule_environment = environment_that_names_no_repository()
+    checked_out = run_git(juce_directory, "rev-parse", "HEAD", environment=submodule_environment)
+    tags = run_git(
+        juce_directory, "tag", "--points-at", "HEAD", environment=submodule_environment
+    ).split()
     recorded = recorded_commit(repository_root, submodule_path)
 
     violations = []

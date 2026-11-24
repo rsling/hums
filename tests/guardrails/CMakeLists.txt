@@ -116,6 +116,15 @@ hums_add_script_guardrail(guardrail_juce_pin check_juce_pin.py)
 hums_add_script_guardrail_fixture(guardrail_juce_pin_fixture_fails check_juce_pin.py
     "check_juce_pin: VIOLATION: .*pins JUCE '9\\.0\\.5'"
     --version-file "${PROJECT_SOURCE_DIR}/tools/fixtures/check_juce_pin/JUCE_VERSION")
+# The check does not go by the caller's git environment: with GIT_DIR naming
+# Hums' own repository, as git sets it for a hook in a linked worktree, the
+# questions meant for libs/JUCE were answered for Hums and the check reported
+# a pin that held. Judged by the script's "ok" line, which it prints only when
+# it found no violation.
+hums_add_script_guardrail(guardrail_juce_pin_ignores_git_dir check_juce_pin.py)
+set_tests_properties(guardrail_juce_pin_ignores_git_dir PROPERTIES
+    ENVIRONMENT "GIT_DIR=${PROJECT_SOURCE_DIR}/.git"
+    PASS_REGULAR_EXPRESSION "check_juce_pin: ok")
 
 # Guardrail 2: the include graph under src/ obeys the layer rules. Each
 # fixture is a small tree standing in for src/ with one planted violation; its
