@@ -2054,6 +2054,8 @@ const std::vector<RefusedFixture> refusedFixtures {
     { "refused/invariant_11_two_pads_with_one_index.xml", Outcome::invalidDocument, "Project/Routing/PadMap/Pad[1]", "index" },
     { "refused/invariant_11_two_players_with_one_name.xml", Outcome::invalidDocument, "Project/Routing/Player[1]", "name" },
     { "refused/invariant_12_no_session.xml", Outcome::invalidDocument, "Project", "" },
+    { "refused/invariant_12_step_clip_with_events.xml", Outcome::invalidDocument, "Project/ClipPool/Clip[0]", "" },
+    { "refused/invariant_12_event_clip_with_a_grid.xml", Outcome::invalidDocument, "Project/ClipPool/Clip[2]", "" },
 };
 
 juce::File fixtureFile (const char* fileName)

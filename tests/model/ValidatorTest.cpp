@@ -2273,3 +2273,38 @@ TEST_CASE ("Invariant 12: an event clip has its Events, once", "[model][Validato
         requireOnlyViolation (project, noteClip, "");
     }
 }
+
+TEST_CASE ("Invariant 12: a clip has no content of the other kind", "[model][Validator]")
+{
+    SECTION ("an empty Events in a step clip")
+    {
+        const auto project = validDocument();
+        append (clipOf (project, 0), "<Events/>");
+
+        requireOnlyViolation (project, "Project/ClipPool/Clip[0]", "");
+    }
+
+    SECTION ("an Events with a note in a step clip")
+    {
+        const auto project = validDocument();
+        append (clipOf (project, 0), R"(<Events><Note tick="0" length="240" pitch="60"/></Events>)");
+
+        requireOnlyViolation (project, "Project/ClipPool/Clip[0]", "");
+    }
+
+    SECTION ("an empty Grid in an event clip")
+    {
+        const auto project = validDocument();
+        append (clipOf (project, 2), "<Grid/>");
+
+        requireOnlyViolation (project, noteClip, "");
+    }
+
+    SECTION ("a Grid with a lane and its cells in an event clip")
+    {
+        const auto project = validDocument();
+        append (clipOf (project, 2), R"(<Grid stepCount="2"><Lane id="7c2e9a0b4d6f4b8a8a9b0c1d2e3f4a5b"><Cell on="1"/><Cell/></Lane></Grid>)");
+
+        requireOnlyViolation (project, noteClip, "");
+    }
+}

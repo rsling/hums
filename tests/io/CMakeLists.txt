@@ -1,6 +1,7 @@
 # io/: one test file per IO format. Links the io layer and the model layer it
 # stands on, never the engine or the app.
 hums_add_test_executable(io_tests
+    ClipContentChildTest.cpp
     MigrationsTest.cpp
     ProjectFileTest.cpp
     XmlWellFormednessTest.cpp)

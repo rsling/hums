@@ -1243,6 +1243,10 @@ namespace
     // standard, because the tree of docs/SCHEMA.md has each exactly once and
     // the wrappers count on it: the PadMap of Routing and the Events of an
     // event clip. (The Grid of a step clip is with invariant 2.)
+    //
+    // A clip has the content of its own kind and none of the other: no Grid
+    // in an event clip, no Events in a step clip. No command makes such a
+    // clip, and nothing would ever read or remove what the child holds.
 
     void checkExactlyOne (const juce::ValueTree& parent, const juce::Identifier& childType, Violations& violations)
     {
@@ -1250,6 +1254,14 @@ namespace
 
         if (count != 1)
             addNodeViolation (violations, parent, "has " + juce::String (static_cast<std::int64_t> (count)) + " " + childType.toString() + " children; exactly one is required");
+    }
+
+    void checkNone (const juce::ValueTree& parent, const juce::Identifier& childType, const juce::String& parentInWords, Violations& violations)
+    {
+        const auto count = childrenOfType (parent, childType).size();
+
+        if (count != 0)
+            addNodeViolation (violations, parent, "has " + juce::String (static_cast<std::int64_t> (count)) + " " + childType.toString() + " children; " + parentInWords + " has none");
     }
 
     void checkContainers (const juce::ValueTree& project, Violations& violations)
@@ -1261,8 +1273,17 @@ namespace
             checkExactlyOne (routing, ids::PadMap, violations);
 
         for (const auto& clip : clipsOf (project))
+        {
             if (isEventClip (clip))
+            {
                 checkExactlyOne (clip, ids::Events, violations);
+                checkNone (clip, ids::Grid, "an event clip", violations);
+            }
+            else if (isStepClip (clip))
+            {
+                checkNone (clip, ids::Events, "a step clip", violations);
+            }
+        }
 
         for (const auto& track : tracksOf (project))
             for (const auto& container : { ids::Placements, ids::AutomationLanes, ids::Knobs, ids::Slots })
