@@ -74,6 +74,27 @@ def blank_out_comments(text):
     return "".join(result)
 
 
+def blank_out_character_literals(text):
+    """Replaces what stands between the quotes of every character literal
+    with spaces; keeps the quotes, string literals and every position.
+
+    A bracket, a comma or a quote in a character literal is a character, not
+    code: after this, '}' closes nothing and ',' separates nothing for a
+    reader that counts brackets. A literal that its line does not close is
+    left as it is.
+    """
+    result = []
+    position = 0
+    for kind, start, end in _comments_and_literals(text):
+        closed = end - start >= 2 and text[end - 1] == "'"
+        if kind == "literal" and text[start] == "'" and closed:
+            result.append(text[position:start + 1])
+            result.append(" " * (end - start - 2))
+            position = end - 1
+    result.append(text[position:])
+    return "".join(result)
+
+
 def literal_spans(text):
     """Where the string and character literals are: a list of (start, end),
     quotes included, in the order they stand.

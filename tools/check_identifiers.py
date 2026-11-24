@@ -19,7 +19,8 @@ setProperty (ids::kind, "cc", ...) is no hit. In a ValueTree constructed with
 its properties and subtrees, the names are the type and the first half of
 each pair: juce::ValueTree { "Event", { { "kind", "cc" } } } has two. The
 body of a lambda after "-> juce::ValueTree {" is no construction. The same
-word in a comment, a log message or a UI label is not a hit.
+word in a comment, a log message or a UI label is not a hit. What stands in a
+character literal is a character, not code: '}' closes nothing.
 
 juce::Identifier converts from a string literal without a word, so a literal
 is accepted wherever an Identifier is expected, not only in JUCE's own calls.
@@ -84,7 +85,7 @@ import pathlib
 import re
 import sys
 
-from cpp_text import blank_out_comments, literal_spans
+from cpp_text import blank_out_character_literals, blank_out_comments, literal_spans
 
 NAME = "check_identifiers"
 REPOSITORY_ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -278,10 +279,18 @@ class Violation:
 
 
 def read_source(path):
+    """The text of a source file as the check reads it: comments and what
+    stands in character literals are spaces, everything else is where it was.
+
+    The functions below count brackets and commas and skip string literals
+    as they go. A character literal holds no name, so it is emptied here,
+    once, and '}' or ',' is never taken for code by any of them.
+    """
     try:
-        return blank_out_comments(path.read_text(encoding="utf-8", errors="replace"))
+        text = path.read_text(encoding="utf-8", errors="replace")
     except OSError as error:
         raise CheckError(f"cannot read {path}: {error}")
+    return blank_out_character_literals(blank_out_comments(text))
 
 
 def line_number_at(text, position):

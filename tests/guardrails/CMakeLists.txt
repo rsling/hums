@@ -194,6 +194,12 @@ hums_add_identifiers_fixture(subscript_in_string     "model/Validator.cpp:12"   
 # The ' in 1'000 opens no character literal (tools/cpp_text.py): a comment
 # after such a number is still a comment, and code after it is still code.
 hums_add_identifiers_fixture(digit_separator         "model/GridModel.cpp:11"                "identifier")
+# A bracket or a comma in a character literal is a character, not code: '}'
+# ends no body, '{' lets none run on into the next function (whose "Clip" is
+# text), and ',' separates no arguments.
+hums_add_identifiers_fixture(character_literal_closing_brace "io/ProjectFile.cpp:9" "identifier")
+hums_add_identifiers_fixture(character_literal_opening_brace "views/Label.cpp:11"   "identifier")
+hums_add_identifiers_fixture(character_literal_comma         "model/NoteModel.cpp:6" "identifier")
 hums_add_identifiers_fixture(identifier_construction "model/ClipModel.cpp:3"                 "identifier")
 hums_add_identifiers_fixture(identifier_assignment   "render/SnapshotBuilder.cpp:3"          "identifier")
 hums_add_identifiers_fixture(value_tree_construction "model/commands/TrackCommands.cpp:4"    "identifier")
