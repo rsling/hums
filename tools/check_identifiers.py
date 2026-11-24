@@ -12,7 +12,9 @@ is constructed or a ValueTree property or child is named:
     juce::ValueTree note { "Note" }   node["pitch"]
 
 and the other calls in IDENTIFIER_CALLS. The variable may be a member defined
-outside its class: const juce::Identifier NoteModel::pitch ("pitch"). The name is the first argument of
+outside its class: const juce::Identifier NoteModel::pitch ("pitch"). It may
+be a reference, or the parameter of a lambda with a default:
+const juce::Identifier& property = "pitch". The name is the first argument of
 every one of these calls, wherever it stands and on whichever line; what
 follows it is a value, and a value is not a name even when it equals one:
 setProperty (ids::kind, "cc", ...) is no hit. In a few of JUCE's calls the
@@ -166,14 +168,21 @@ IDENTIFIER_TYPES = ("Identifier", "ValueTree")
 # outside its class, "NoteModel::pitch".
 DECLARED_NAME = r"(?:\w+\s*::\s*)*\w+"
 
+# What may stand between the type and the variable: a reference is given its
+# name from a literal as a value is, "const juce::Identifier& property = "pitch";"
+# (the literal becomes a temporary Identifier the reference is bound to), and
+# so is the parameter of a lambda with such a default.
+REFERENCE = r"(?:const\s*)?&{0,2}\s*"
+
 STRING_LITERAL = re.compile(r'"((?:[^"\\\n]|\\.)*)"')
 
 CALL_OPENING = re.compile(r"\b(" + "|".join(IDENTIFIER_CALLS) + r")\s*\(")
 CONSTRUCTION_OPENING = re.compile(
-    r"\b(" + "|".join(IDENTIFIER_TYPES) + r")\b\s*(?:" + DECLARED_NAME + r"\s*)?[({]"
+    r"\b(" + "|".join(IDENTIFIER_TYPES) + r")\b\s*" + REFERENCE + r"(?:" + DECLARED_NAME + r"\s*)?[({]"
 )
 ASSIGNMENT = re.compile(
-    r"\b(" + "|".join(IDENTIFIER_TYPES) + r")\b\s*" + DECLARED_NAME + r"\s*=\s*" + STRING_LITERAL.pattern
+    r"\b(" + "|".join(IDENTIFIER_TYPES) + r")\b\s*" + REFERENCE + r"(?:" + DECLARED_NAME + r")?\s*=\s*"
+    + STRING_LITERAL.pattern
 )
 SUBSCRIPT = re.compile(r"\[\s*" + STRING_LITERAL.pattern + r"\s*\]")
 

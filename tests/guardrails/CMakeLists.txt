@@ -293,6 +293,12 @@ hums_add_identifiers_fixture(type_comparison_text_first            "model/Valida
 # an Identifier is one.
 hums_add_identifiers_fixture(function_type                         "model/NoteDescription.cpp:23"  "identifier")
 hums_add_identifiers_fixture(declaration_default_argument          "model/NodeSearch.h:10"         "identifier")
+# A reference to a juce::Identifier bound to a literal, with "=" and with
+# braces, and the default of a lambda's parameter that is one. Beside each, a
+# reference or a default that names nothing and is no hit.
+hums_add_identifiers_fixture(identifier_reference_assignment       "model/NoteModel.cpp:10"               "identifier")
+hums_add_identifiers_fixture(identifier_reference_construction     "render/SnapshotBuilder.cpp:14"        "identifier")
+hums_add_identifiers_fixture(lambda_parameter_default              "views/pianoroll/NoteComponent.cpp:7"  "identifier")
 
 hums_add_identifiers_fixture(ids_constant_differs_from_string "model/Ids.h:9"  "ids-file")
 hums_add_identifiers_fixture(ids_unreadable_declaration       "model/Ids.h:10" "ids-file")
