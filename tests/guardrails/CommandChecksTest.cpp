@@ -155,13 +155,32 @@ TEST_CASE ("guardrail 3: a refused command that has changed the undo history is 
     auto project = validDocument();
     juce::UndoManager undoManager;
 
+    // A generated Project has a name or has none, and the write has to be
+    // taken back in either: where there was no name, setting "the name as it
+    // was" would leave an empty one, and the document would have changed.
+    SECTION ("the Project has a name")
+    {
+        project.setProperty (ids::name, "Berlin test", nullptr);
+    }
+
+    SECTION ("the Project has no name")
+    {
+        project.removeProperty (ids::name, nullptr);
+    }
+
     // It takes its write back before it refuses, and the document is as it
     // was; but the history has two actions more, and the redo history is
     // gone.
     const auto failures = CommandChecks::failuresOf (project, undoManager, [&] {
+        const auto hadAName = project.hasProperty (ids::name);
         const auto nameBefore = project[ids::name];
         project.setProperty (ids::name, "tried", &undoManager);
-        project.setProperty (ids::name, nameBefore, &undoManager);
+
+        if (hadAName)
+            project.setProperty (ids::name, nameBefore, &undoManager);
+        else
+            project.removeProperty (ids::name, &undoManager);
+
         return CommandChecks::Attempt { "tries and reverts", false, false };
     });
 
