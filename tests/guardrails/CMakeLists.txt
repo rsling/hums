@@ -33,6 +33,8 @@ hums_add_test_executable(guardrail_properties
     DocumentGenerator.cpp
     DocumentGenerator.h
     DocumentGeneratorTest.cpp
+    PropertyRun.cpp
+    PropertyRun.h
     PropertyTest.cpp
     RandomSource.cpp
     RandomSource.h

@@ -7,12 +7,14 @@
 #include "CommandChecks.h"
 #include "CommandDriver.h"
 #include "DocumentGenerator.h"
+#include "PropertyRun.h"
 #include "RandomSource.h"
 #include "model/Ids.h"
 
 #include <cstdint>
 #include <set>
 #include <string>
+#include <vector>
 
 namespace
 {
@@ -46,7 +48,7 @@ TEST_CASE ("guardrail 3: the driver's table of commands has no name twice", "[gu
     CHECK (! names.empty());
 }
 
-TEST_CASE ("guardrail 3: over the first 100 seeds every command is applied in a valid form and refused in an invalid one", "[guardrails][CommandDriver]")
+TEST_CASE ("guardrail 3: over the first 300 seeds of the property run every command is applied in a valid form and refused in an invalid one", "[guardrails][CommandDriver]")
 {
     std::set<std::string> applied;
     std::set<std::string> refused;
@@ -55,33 +57,27 @@ TEST_CASE ("guardrail 3: over the first 100 seeds every command is applied in a 
     // larger afterwards: the refcount gate made a clone.
     std::set<std::string> madeUnique;
 
-    for (std::uint64_t seed = 1; seed <= 100; ++seed)
+    // The seeds and the commands are those of the property run itself
+    // (PropertyRun), so what is counted here is what that run does. 300 in
+    // every configuration, although an instrumented one goes through 200
+    // seeds by default: removeLane, moveLane and the like need a shared step
+    // clip that has lanes, and the last command to make its first clone
+    // makes it at seed 220. The instrumented configurations get the clones
+    // of the seeds past 200 from this test.
+    for (std::uint64_t seed = 1; seed <= 300; ++seed)
     {
-        auto project = guardrails::DocumentGenerator::generate (seed);
-        juce::UndoManager undoManager;
-        guardrails::RandomSource random (seed);
-        guardrails::CommandDriver driver (project, undoManager, random);
+        std::vector<guardrails::PropertyRun::CommandOutcome> outcomes;
+        const auto failures = guardrails::PropertyRun::failuresOfSeed (seed, &outcomes);
 
-        // Enough of them for every command of the table to make a clone
-        // somewhere in the hundred seeds: with a longer table each command
-        // is drawn less often, and removeLane and moveLane, which need a
-        // shared step clip that has lanes, clone least often of all.
-        for (int command = 0; command < 250; ++command)
+        INFO ("seed " << seed);
+        REQUIRE (failures.empty());
+
+        for (const auto& outcome : outcomes)
         {
-            const auto clipPool = project.getChildWithName (model::ids::ClipPool);
-            const auto clipsBefore = clipPool.getNumChildren();
+            if (outcome.clipsAdded == 1)
+                madeUnique.insert (outcome.name);
 
-            undoManager.beginNewTransaction();
-            const auto attempt = driver.attemptOne();
-
-            if (clipPool.getNumChildren() == clipsBefore + 1)
-                madeUnique.insert (nameIn (attempt.description));
-
-            // What is expected of a form is what happened; that every form
-            // is expected rightly is the property test's to show.
-            INFO (attempt.description);
-            REQUIRE (attempt.expectedToApply == attempt.wasApplied);
-            (attempt.wasApplied ? applied : refused).insert (nameIn (attempt.description));
+            (outcome.wasApplied ? applied : refused).insert (outcome.name);
         }
     }
 
