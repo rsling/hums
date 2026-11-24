@@ -2,6 +2,7 @@
 
 #include "model/CanonicalDouble.h"
 #include "model/Ids.h"
+#include "model/MarkerModel.h"
 #include "model/commands/NodeLookup.h"
 
 #include <cmath>
@@ -199,6 +200,11 @@ CommandResult renameMarker (juce::ValueTree project, const juce::ValueTree& mark
 {
     if (! isMarkerOf (project, marker))
         return notAMarker();
+
+    // A marker that reads as this name already is left alone, so that an
+    // empty name that was never stored stays unstored.
+    if (MarkerModel (marker).getName() == name)
+        return CommandResult::applied();
 
     auto node = marker;
     node.setProperty (ids::name, name, &undoManager);

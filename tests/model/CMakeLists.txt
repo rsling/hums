@@ -15,6 +15,7 @@ hums_add_test_executable(model_tests
     CopyNameTest.cpp
     CommandFixture.h
     DeclaredIdentifiersTest.cpp
+    DefaultValueUndoStepTest.cpp
     EditContextTest.cpp
     EventClipCommandsTest.cpp
     EventModelTest.cpp

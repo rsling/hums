@@ -1,6 +1,7 @@
 #include "model/commands/PadMapCommands.h"
 
 #include "model/Ids.h"
+#include "model/PadModel.h"
 #include "model/commands/NodeLookup.h"
 
 namespace model::commands
@@ -130,6 +131,11 @@ CommandResult setPadLabel (juce::ValueTree project, int index, const juce::Strin
 
     if (! pad.isValid())
         return noSuchPad (index);
+
+    // A pad that reads as this label already is left alone, so that an
+    // empty label that was never stored stays unstored.
+    if (PadModel (pad).getLabel() == label)
+        return CommandResult::applied();
 
     pad.setProperty (ids::label, label, &undoManager);
 

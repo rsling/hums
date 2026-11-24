@@ -1,6 +1,8 @@
 #include "model/commands/RoutingCommands.h"
 
 #include "model/Ids.h"
+#include "model/PerformerModel.h"
+#include "model/PlayerModel.h"
 #include "model/PropertyReader.h"
 #include "model/commands/NodeLookup.h"
 
@@ -109,8 +111,14 @@ namespace
         if (! port.isValid())
             return noSuchPort (portType, id);
 
-        port.setProperty (ids::deviceIdentifier, deviceIdentifier, &undoManager);
-        port.setProperty (ids::deviceName, deviceName, &undoManager);
+        // Each of the two is written only where it differs from what the
+        // port reads as, so that undo holds what changed and an empty text
+        // that was never stored stays unstored.
+        if (PropertyReader::getString (port, ids::deviceIdentifier, "") != deviceIdentifier)
+            port.setProperty (ids::deviceIdentifier, deviceIdentifier, &undoManager);
+
+        if (PropertyReader::getString (port, ids::deviceName, "") != deviceName)
+            port.setProperty (ids::deviceName, deviceName, &undoManager);
 
         return CommandResult::applied();
     }
@@ -147,6 +155,11 @@ CommandResult setPerformerChannelFilter (juce::ValueTree project, const juce::St
     if (channelFilter < 0 || channelFilter > 16)
         return CommandResult::refused ("A channel filter is 0 for every channel or a channel from 1 to 16, not " + juce::String (channelFilter) + ".");
 
+    // A performer that reads as this filter already is left alone, so that
+    // the default (every channel) stays unstored and nothing is left to undo.
+    if (PerformerModel (performer).getChannelFilter() == channelFilter)
+        return CommandResult::applied();
+
     performer.setProperty (ids::channelFilter, channelFilter, &undoManager);
 
     return CommandResult::applied();
@@ -178,6 +191,11 @@ CommandResult setPlayerSendClock (juce::ValueTree project, const juce::String& p
 
     if (! player.isValid())
         return noSuchPort (ids::Player, playerId);
+
+    // A player that reads as this already is left alone, so that the default
+    // (no clock) stays unstored and nothing is left to undo.
+    if (PlayerModel (player).getSendClock() == sendClock)
+        return CommandResult::applied();
 
     // Booleans are stored as 0 / 1 (docs/SCHEMA.md -> Conventions).
     player.setProperty (ids::sendClock, sendClock ? 1 : 0, &undoManager);

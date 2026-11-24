@@ -2,6 +2,9 @@
 
 #include "model/ColourText.h"
 #include "model/Ids.h"
+#include "model/KnobModel.h"
+#include "model/PropertyReader.h"
+#include "model/TrackModel.h"
 #include "model/commands/NodeLookup.h"
 #include "model/commands/SiblingOrder.h"
 
@@ -47,12 +50,19 @@ namespace
         return cc >= 0 && cc <= 127;
     }
 
+    // The setters below leave a track alone that reads as the value already,
+    // so that a default that was never stored stays unstored and nothing is
+    // left to undo. An absent text reads as empty and an absent flag as off
+    // (docs/SCHEMA.md -> Tracks / Track).
     CommandResult setTrackText (juce::ValueTree project, const juce::String& trackId, const juce::Identifier& property, const juce::String& text, juce::UndoManager& undoManager)
     {
         auto track = trackOf (project, trackId);
 
         if (! track.isValid())
             return noSuchTrack (trackId);
+
+        if (PropertyReader::getString (track, property, "") == text)
+            return CommandResult::applied();
 
         track.setProperty (property, text, &undoManager);
 
@@ -65,6 +75,9 @@ namespace
 
         if (! track.isValid())
             return noSuchTrack (trackId);
+
+        if (PropertyReader::getBool (track, property, false) == flag)
+            return CommandResult::applied();
 
         // Booleans are stored as 0 / 1 (docs/SCHEMA.md -> Conventions).
         track.setProperty (property, flag ? 1 : 0, &undoManager);
@@ -83,6 +96,9 @@ namespace
 
         if (portId.isNotEmpty() && ! NodeLookup::childWithId (project.getChildWithName (ids::Routing), portType, portId).isValid())
             return CommandResult::refused ("There is no " + portType.toString() + " with the id \"" + portId + "\".");
+
+        if (PropertyReader::getString (track, referenceProperty, "") == portId)
+            return CommandResult::applied();
 
         track.setProperty (referenceProperty, portId, &undoManager);
 
@@ -166,6 +182,11 @@ CommandResult setTrackChannel (juce::ValueTree project, const juce::String& trac
 
     if (channel < 1 || channel > 16)
         return CommandResult::refused ("A MIDI channel is 1 to 16, not " + juce::String (channel) + ".");
+
+    // A track that plays on this channel already is left alone, so that the
+    // default channel stays unstored and nothing is left to undo.
+    if (TrackModel (track).getChannel() == channel)
+        return CommandResult::applied();
 
     track.setProperty (ids::channel, channel, &undoManager);
 
@@ -277,6 +298,11 @@ CommandResult setKnobLabel (juce::ValueTree project, const juce::String& trackId
 
     if (! knob.isValid())
         return noSuchKnob (cc);
+
+    // A knob that reads as this label already is left alone, so that an
+    // empty label that was never stored stays unstored.
+    if (KnobModel (knob).getLabel() == label)
+        return CommandResult::applied();
 
     knob.setProperty (ids::label, label, &undoManager);
 

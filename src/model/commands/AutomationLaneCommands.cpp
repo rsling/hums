@@ -1,5 +1,6 @@
 #include "model/commands/AutomationLaneCommands.h"
 
+#include "model/AutomationLaneModel.h"
 #include "model/Ids.h"
 #include "model/commands/NodeLookup.h"
 #include "model/commands/SiblingOrder.h"
@@ -82,6 +83,11 @@ CommandResult setAutomationLaneName (juce::ValueTree project, const juce::String
 
     if (! lane.isValid())
         return noSuchLane (laneId);
+
+    // A lane that reads as this name already is left alone, so that an
+    // empty name that was never stored stays unstored.
+    if (AutomationLaneModel (lane).getName() == name)
+        return CommandResult::applied();
 
     lane.setProperty (ids::name, name, &undoManager);
 
