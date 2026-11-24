@@ -43,6 +43,18 @@ struct Seen
     int ticksBeyondAnInt = 0;
 };
 
+// Whether a property is a time or a length in ticks (docs/SCHEMA.md). Only
+// these are asked whether they go beyond an int: an id that begins with ten
+// digits and a skipMask read as numbers too, and are none.
+bool holdsTicks (const juce::Identifier& property)
+{
+    for (const auto& tickProperty : { ids::tick, ids::length, ids::start, ids::offset, ids::loopLength, ids::stepLength, ids::launchQuantise, ids::loopStart, ids::loopEnd, ids::exportLength })
+        if (property == tickProperty)
+            return true;
+
+    return false;
+}
+
 void look (const juce::ValueTree& node, Seen& seen)
 {
     seen.names.insert (node.getType().toString());
@@ -59,7 +71,7 @@ void look (const juce::ValueTree& node, Seen& seen)
         else
             seen.propertiesHeldAsNumbers.insert (property.toString());
 
-        if (value.toString().getLargeIntValue() > 2147483647)
+        if (holdsTicks (property) && value.toString().getLargeIntValue() > 2147483647)
             ++seen.ticksBeyondAnInt;
     }
 
