@@ -52,6 +52,7 @@ hums_add_test_executable(model_tests
     TimelineModelTest.cpp
     TrackCommandsTest.cpp
     TrackModelTest.cpp
+    UnusedEventFieldsTest.cpp
     TracksModelTest.cpp
     ValidatorTest.cpp)
 target_link_libraries(model_tests PRIVATE

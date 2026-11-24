@@ -963,6 +963,14 @@ namespace
         checkBool (note, ids::enabled, violations);
     }
 
+    // An a or b that the event's kind has no use for: 0, which is also what
+    // an absent one reads as.
+    void checkUnused (const juce::ValueTree& event, const juce::Identifier& property, std::optional<std::int64_t> value, const juce::String& kind, Violations& violations)
+    {
+        if (value.has_value() && *value != 0)
+            addViolation (violations, event, property, "is " + juce::String (*value) + "; a " + kind + " event has no " + property.toString() + ", it is 0");
+    }
+
     void checkEventValues (const juce::ValueTree& event, Violations& violations)
     {
         const auto kind = requiredValue (violations, event, ids::kind, PropertyReader::readString (event, ids::kind));
@@ -971,26 +979,16 @@ namespace
 
         checkBool (event, ids::enabled, violations);
 
-        // The payload of a sysex event, without F0 and F7. At most 64 KB,
-        // and a byte is two digits.
-        const auto data = PropertyReader::readString (event, ids::data);
-        const int mostDataDigits = 2 * 64 * 1024;
-
-        if (data.isValid())
-        {
-            if (! isHexadecimal (data.value))
-                addViolation (violations, event, ids::data, "holds a character that is no hexadecimal digit");
-            else if (data.value.length() % 2 != 0)
-                addViolation (violations, event, ids::data, "has " + juce::String (data.value.length()) + " hexadecimal digits; a byte is two of them");
-            else if (data.value.length() > mostDataDigits)
-                addViolation (violations, event, ids::data, "holds " + juce::String (data.value.length() / 2) + " bytes; the most allowed is 65536");
-        }
-
         if (! kind.has_value())
             return;
 
-        // The table of docs/SCHEMA.md -> Event. What a kind does not use is
-        // not judged.
+        // The table of docs/SCHEMA.md -> Event. An event carries only what
+        // its kind uses: an a or b the kind has no use for is 0, and only a
+        // sysex event has data (invariant 10). That is what the commands
+        // make, so anything else is nothing Hums wrote [D17].
+        const auto data = PropertyReader::readString (event, ids::data);
+        const auto hasData = data.isValid() && data.value.isNotEmpty();
+
         if (*kind == "cc" || *kind == "polyPressure")
         {
             checkWithin (event, ids::a, a, 0, 127, violations);
@@ -999,15 +997,42 @@ namespace
         else if (*kind == "pitchBend")
         {
             checkWithin (event, ids::a, a, 0, 16383, violations);
+            checkUnused (event, ids::b, b, *kind, violations);
         }
         else if (*kind == "programChange" || *kind == "channelPressure")
         {
             checkWithin (event, ids::a, a, 0, 127, violations);
+            checkUnused (event, ids::b, b, *kind, violations);
         }
-        else if (*kind != "sysex")
+        else if (*kind == "sysex")
+        {
+            checkUnused (event, ids::a, a, *kind, violations);
+            checkUnused (event, ids::b, b, *kind, violations);
+
+            // The payload, without F0 and F7. At most 64 KB, and a byte is
+            // two digits.
+            const int mostDataDigits = 2 * 64 * 1024;
+
+            if (! hasData)
+                return;
+
+            if (! isHexadecimal (data.value))
+                addViolation (violations, event, ids::data, "holds a character that is no hexadecimal digit");
+            else if (data.value.length() % 2 != 0)
+                addViolation (violations, event, ids::data, "has " + juce::String (data.value.length()) + " hexadecimal digits; a byte is two of them");
+            else if (data.value.length() > mostDataDigits)
+                addViolation (violations, event, ids::data, "holds " + juce::String (data.value.length() / 2) + " bytes; the most allowed is 65536");
+
+            return;
+        }
+        else
         {
             addViolation (violations, event, ids::kind, "\"" + *kind + "\" is not one of: cc, pitchBend, programChange, channelPressure, polyPressure, sysex");
+            return;
         }
+
+        if (hasData)
+            addViolation (violations, event, ids::data, "is there; only a sysex event has data, not a " + *kind + " event");
     }
 
     void checkGridValues (const juce::ValueTree& grid, Violations& violations)

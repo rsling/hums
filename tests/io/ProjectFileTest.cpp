@@ -2050,6 +2050,7 @@ const std::vector<RefusedFixture> refusedFixtures {
     { "refused/invariant_10_bpm_with_a_huge_exponent.xml", Outcome::invalidDocument, "Project/Timeline/TempoEvent[0]", "bpm" },
     { "refused/invariant_10_player_with_an_empty_name.xml", Outcome::invalidDocument, "Project/Routing/Player[0]", "name" },
     { "refused/invariant_10_pitch_128.xml", Outcome::invalidDocument, "Project/ClipPool/Clip[2]/Events/Note[0]", "pitch" },
+    { "refused/invariant_10_pitch_bend_with_a_b.xml", Outcome::invalidDocument, "Project/ClipPool/Clip[2]/Events/Event[2]", "b" },
     { "refused/invariant_11_two_pads_with_one_index.xml", Outcome::invalidDocument, "Project/Routing/PadMap/Pad[1]", "index" },
     { "refused/invariant_11_two_players_with_one_name.xml", Outcome::invalidDocument, "Project/Routing/Player[1]", "name" },
     { "refused/invariant_12_no_session.xml", Outcome::invalidDocument, "Project", "" },
