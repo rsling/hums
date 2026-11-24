@@ -11,6 +11,7 @@
 #include <optional>
 #include <set>
 #include <string>
+#include <vector>
 
 namespace model
 {
@@ -658,13 +659,34 @@ namespace
             addViolation (violations, port, ids::name, "is empty; a " + port.getType().toString() + " has a name");
     }
 
+    bool isOneOf (const std::vector<juce::String>& texts, const juce::String& text)
+    {
+        return std::find (texts.begin(), texts.end(), text) != texts.end();
+    }
+
+    // The texts with ", " between them, an empty one included.
+    juce::String separatedByCommas (const std::vector<juce::String>& texts)
+    {
+        juce::String joined;
+
+        for (size_t index = 0; index < texts.size(); ++index)
+        {
+            if (index > 0)
+                joined += ", ";
+
+            joined += texts[index];
+        }
+
+        return joined;
+    }
+
     // A string that, when present, is one of a list.
-    void checkListedText (const juce::ValueTree& node, const juce::Identifier& property, const juce::StringArray& allowed, Violations& violations)
+    void checkListedText (const juce::ValueTree& node, const juce::Identifier& property, const std::vector<juce::String>& allowed, Violations& violations)
     {
         const auto stored = PropertyReader::readString (node, property);
 
-        if (stored.isValid() && ! allowed.contains (stored.value))
-            addViolation (violations, node, property, "\"" + stored.value + "\" is not one of: " + allowed.joinIntoString (", "));
+        if (stored.isValid() && ! isOneOf (allowed, stored.value))
+            addViolation (violations, node, property, "\"" + stored.value + "\" is not one of: " + separatedByCommas (allowed));
     }
 
     bool isHexadecimal (const juce::String& text)
@@ -826,7 +848,7 @@ namespace
 
     bool isOtherThanCc (const juce::String& eventKind)
     {
-        return juce::StringArray { "pitchBend", "programChange", "channelPressure", "polyPressure", "sysex" }.contains (eventKind);
+        return isOneOf ({ "pitchBend", "programChange", "channelPressure", "polyPressure", "sysex" }, eventKind);
     }
 
     void checkAutomationClips (const juce::ValueTree& project, Violations& violations)

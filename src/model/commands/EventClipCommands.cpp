@@ -9,6 +9,7 @@
 #include "model/commands/PlacementOffsets.h"
 #include "model/commands/RefcountGate.h"
 
+#include <algorithm>
 #include <limits>
 #include <vector>
 
@@ -430,7 +431,9 @@ CommandResult setClipQuantise (juce::ValueTree project, const juce::String& clip
         return CommandResult::refused (admission.refusal);
 
     // The list of docs/SCHEMA.md -> ClipPool / Clip.
-    if (! juce::StringArray { "", "1/2", "1/4", "1/8", "1/2T", "1/4T", "1/8T" }.contains (quantise))
+    const std::vector<juce::String> settings { "", "1/2", "1/4", "1/8", "1/2T", "1/4T", "1/8T" };
+
+    if (std::find (settings.begin(), settings.end(), quantise) == settings.end())
         return CommandResult::refused ("\"" + quantise + "\" is no quantisation: it is one of 1/2, 1/4, 1/8, 1/2T, 1/4T, 1/8T, or nothing for off.");
 
     if (ClipModel (admission.clip).getQuantise() == quantise)
