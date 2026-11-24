@@ -265,6 +265,26 @@ hums_add_identifiers_fixture(literal_name_struct_member            "io/ProjectFi
 hums_add_identifiers_fixture(xml_tag_name                          "io/ProjectFile.cpp:6"          "identifier")
 hums_add_identifiers_fixture(xml_construction                      "io/ProjectFile.cpp:5"          "identifier")
 hums_add_identifiers_fixture(literal_name_xml_attribute            "io/ProjectFile.cpp:6"          "literal-name")
+# The tag a document's root must have: juce::XmlDocument's call, and the free
+# function that takes the tag as its second argument, after the text to parse.
+hums_add_identifiers_fixture(xml_document_tag                      "io/ProjectFile.cpp:5"          "identifier")
+hums_add_identifiers_fixture(xml_parse_tag                         "io/ProjectFile.cpp:7"          "identifier")
+# JUCE's calls whose name is the second argument, and its property wrappers
+# (juce::CachedValue, juce::ValueTreePropertyWithDefault), which take a tree
+# and then a name: constructed, referred to a property later, and as a member
+# that a constructor initialises (the check reads the member from the header
+# inside the fixture). A value beside the name is no hit here either.
+hums_add_identifiers_fixture(set_property_excluding_listener       "model/commands/EventCommands.cpp:7"   "identifier")
+hums_add_identifiers_fixture(send_property_change_message          "model/commands/NoteCommands.cpp:5"    "identifier")
+hums_add_identifiers_fixture(cached_value_construction             "views/pianoroll/NoteComponent.cpp:8"  "identifier")
+hums_add_identifiers_fixture(cached_value_refer_to                 "model/NoteModel.cpp:5"                "identifier")
+hums_add_identifiers_fixture(cached_value_member_initialiser       "views/pianoroll/NoteComponent.cpp:5"  "identifier")
+hums_add_identifiers_fixture(property_with_default_construction    "views/stepseq/CellComponent.cpp:6"    "identifier")
+hums_add_identifiers_fixture(literal_name_set_property_excluding_listener "model/commands/NoteCommands.cpp:6" "literal-name")
+# A node's type compared with a text names the type as hasType does, with the
+# text on either side; a comparison of two texts beside it is no hit.
+hums_add_identifiers_fixture(type_comparison                       "render/SnapshotBuilder.cpp:6"  "identifier")
+hums_add_identifiers_fixture(type_comparison_text_first            "model/Validator.cpp:5"         "identifier")
 
 hums_add_identifiers_fixture(ids_constant_differs_from_string "model/Ids.h:9"  "ids-file")
 hums_add_identifiers_fixture(ids_unreadable_declaration       "model/Ids.h:10" "ids-file")

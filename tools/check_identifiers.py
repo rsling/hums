@@ -15,7 +15,18 @@ and the other calls in IDENTIFIER_CALLS. The variable may be a member defined
 outside its class: const juce::Identifier NoteModel::pitch ("pitch"). The name is the first argument of
 every one of these calls, wherever it stands and on whichever line; what
 follows it is a value, and a value is not a name even when it equals one:
-setProperty (ids::kind, "cc", ...) is no hit. In a ValueTree constructed with
+setProperty (ids::kind, "cc", ...) is no hit. In a few of JUCE's calls the
+name is the second argument (NAME_POSITION_IN_CALL), and there the second is
+looked at and no other:
+
+    node.setPropertyExcludingListener (listener, "pitch", 60, nullptr)
+    juce::CachedValue<int> pitch (node, "pitch", nullptr)
+    pitch.referTo (node, "pitch", nullptr)
+
+A juce::CachedValue or juce::ValueTreePropertyWithDefault that is a member is
+checked also where a constructor initialises it: ": pitch (node, "pitch",
+nullptr)". And a node's type compared with a text names the type as hasType
+does: node.getType() == "Note", with == or !=, the text on either side. In a ValueTree constructed with
 its properties and subtrees, the names are the type and the first half of
 each pair: juce::ValueTree { "Event", { { "kind", "cc" } } } has two. The
 body of a lambda after "-> juce::ValueTree {" is no construction. The same
@@ -33,6 +44,7 @@ literal that stands for the name:
     juce::ValueTree g() { return { "Note", {} }; }  Identifier or as a ValueTree
     std::array<juce::Identifier, 2> { ... }       a list of Identifiers
     xml.getIntAttribute ("pitch")                 an XML tag or attribute name
+    document.getDocumentElementIfTagMatches ("Project")
     PropertyRule rule { "Note", "pitch", 0 }      a member of a struct of ours
     rows.push_back ({ slot, "scene", 0 })         that is a juce::Identifier
     RowKey::RowKey() : rowProperty ("scene")
@@ -119,7 +131,26 @@ IDENTIFIER_CALLS = (
     "getOrCreateChildWithName",
     "getChildWithProperty",
     "hasType",
+    "sendPropertyChangeMessage",
+    "setPropertyExcludingListener",
+    "referTo",
 )
+
+# The name is the first argument of each of them, except of these: of
+# ValueTree::setPropertyExcludingListener (listener, name, ...), and of
+# referTo (tree, name, ...) of a juce::CachedValue and of a
+# juce::ValueTreePropertyWithDefault (juce_ValueTree.h, juce_CachedValue.h and
+# juce_ValueTreePropertyWithDefault.h at the pinned tag). The position counts
+# from 0.
+NAME_POSITION_IN_CALL = {
+    "setPropertyExcludingListener": 1,
+    "referTo": 1,
+}
+
+# JUCE's types that are constructed from a tree and the name of one of its
+# properties, in that order: "juce::CachedValue<int> pitch (node, ids::pitch, nullptr)".
+PROPERTY_WRAPPER_TYPES = ("CachedValue", "ValueTreePropertyWithDefault")
+NAME_POSITION_IN_PROPERTY_WRAPPER = 1
 
 # Types constructed from a name: "Type (...)", "Type {...}", and the
 # declaration forms "Type variable (...)", "Type variable {...}",
@@ -140,6 +171,16 @@ ASSIGNMENT = re.compile(
     r"\b(" + "|".join(IDENTIFIER_TYPES) + r")\b\s*" + DECLARED_NAME + r"\s*=\s*" + STRING_LITERAL.pattern
 )
 SUBSCRIPT = re.compile(r"\[\s*" + STRING_LITERAL.pattern + r"\s*\]")
+
+# A node's type compared with a text: "node.getType() == "Note"", and the text
+# first, which C++20 compiles as the same comparison. juce::Identifier has an
+# operator== and an operator!= that take text (juce_Identifier.h at the pinned
+# tag), so the literal names a type exactly as the one in hasType does. Not
+# "getType().toString() == ...", which compares two texts.
+TYPE_COMPARISON = re.compile(r"\bgetType\s*\(\s*\)\s*[!=]=\s*" + STRING_LITERAL.pattern)
+TYPE_COMPARISON_TEXT_FIRST = re.compile(
+    STRING_LITERAL.pattern + r"\s*[!=]=\s*[^;,{}\"=!<>&|?]*\bgetType\s*\(\s*\)(?!\s*\.)"
+)
 
 # What stands before the type in a trailing return type: "[] () -> juce::ValueTree {"
 # opens the body of a lambda, not the brackets of a construction.
@@ -207,6 +248,18 @@ IDENTIFIER_LIST = re.compile(
 #    a call: template arguments, as in "readAs<int> (node, ids::pitch)".
 TEMPLATE_ARGUMENTS = r"<[^;(){}]*>"
 
+#    One of JUCE's property wrappers constructed: "juce::CachedValue<int> pitch (...)",
+#    "juce::CachedValue<int> { ... }"; and one declared, whose variable a
+#    constructor can initialise elsewhere: "juce::CachedValue<int> pitch;".
+PROPERTY_WRAPPER_OPENING = re.compile(
+    r"\b(" + "|".join(PROPERTY_WRAPPER_TYPES) + r")\b\s*"
+    r"(?:" + TEMPLATE_ARGUMENTS + r"\s*)?(?:" + DECLARED_NAME + r"\s*)?[({]"
+)
+PROPERTY_WRAPPER_VARIABLE = re.compile(
+    r"\b(?:" + "|".join(PROPERTY_WRAPPER_TYPES) + r")\b\s*"
+    r"(?:" + TEMPLATE_ARGUMENTS + r"\s*)?(\w+)\s*[;={]"
+)
+
 # 5. A member of a struct or class of ours that is a juce::Identifier, or a
 #    list of them. "struct PropertyRule {" and "class RowKey final : public Base {"
 #    open a body; "enum class ValueKind {" does not, and is told apart by the
@@ -238,7 +291,10 @@ ELEMENT_CALLS = ("push_back", "emplace_back")
 # 4. juce::XmlElement names a tag or an attribute in the first argument of
 #    these calls and of its constructors, mostly as text (a StringRef), so no
 #    Identifier is even involved. The list is the one in
-#    libs/JUCE/modules/juce_core/xml/juce_XmlElement.h at the pinned tag.
+#    libs/JUCE/modules/juce_core/xml/juce_XmlElement.h at the pinned tag, and
+#    after it the two of juce_XmlDocument.h that take the tag a document's
+#    root must have: getDocumentElementIfTagMatches (tag) and the free
+#    function parseXMLIfTagMatches (text or file, tag).
 XML_NAME_CALLS = (
     "hasTagName",
     "hasTagNameIgnoringNamespace",
@@ -258,7 +314,12 @@ XML_NAME_CALLS = (
     "deleteAllChildElementsWithTagName",
     "getChildElementAllSubText",
     "getChildWithTagNameIterator",
+    "getDocumentElementIfTagMatches",
+    "parseXMLIfTagMatches",
 )
+NAME_POSITION_IN_XML_CALL = {
+    "parseXMLIfTagMatches": 1,
+}
 XML_TYPE = "XmlElement"
 XML_OPENING = re.compile(
     r"\b(" + "|".join(XML_NAME_CALLS) + r")\s*\("
@@ -446,6 +507,21 @@ def name_taking_functions(texts):
     return found
 
 
+def property_wrapper_variables(texts):
+    """The names of the variables declared as one of JUCE's property wrappers:
+    "juce::CachedValue<int> pitch;" gives "pitch".
+
+    Such a variable is mostly a member, declared in a header and initialised
+    by a constructor in another file, so the names are read from all sources
+    first. Only the name is kept, as for the functions and the structs.
+    """
+    found = set()
+    for text in texts:
+        for declaration in PROPERTY_WRAPPER_VARIABLE.finditer(text):
+            found.add(declaration.group(1))
+    return found
+
+
 def declarations_in_class(text, body_position):
     """(text, whether it is a function) of everything that stands directly in
     the class body whose brace is at body_position, in order.
@@ -572,7 +648,7 @@ class StructsWithNames:
         return self.struct_names() + r"\s*(?:,[^<>;(){}]*)?>\s*(?:const\s+)?&?\s*"
 
 
-def hits_in_file(text, names, document_only_layer, name_functions, structs):
+def hits_in_file(text, names, document_only_layer, name_functions, structs, wrapper_variables):
     """(position, rule, string, where it was found) for every hit, in order.
 
     A schema name in the place of the name is an [identifier] hit in every
@@ -613,14 +689,46 @@ def hits_in_file(text, names, document_only_layer, name_functions, structs):
                 if text[subtree_position] == "{":
                     remember_tree_names(subtree_position, where)
 
-    # JUCE's own calls: the name is the first argument of every one of them
-    # (juce_ValueTree.h at the pinned tag). What follows it is a value, and
-    # a value that equals a schema name, as in setProperty (ids::kind, "cc",
-    # ...), is not a name.
+    def remember_argument(bracket_position, index, where):
+        """The names in one argument of the brackets, if there are that many."""
+        arguments = arguments_of(text, bracket_position, angles_are_brackets=False)
+        if index < len(arguments):
+            remember_names(*arguments[index], where)
+
+    # JUCE's own calls: the name is the first argument of nearly every one of
+    # them (juce_ValueTree.h at the pinned tag) and the second of the few in
+    # NAME_POSITION_IN_CALL. What stands beside it is a value, and a value
+    # that equals a schema name, as in setProperty (ids::kind, "cc", ...), is
+    # not a name.
     for opening in CALL_OPENING.finditer(text):
+        index = NAME_POSITION_IN_CALL.get(opening.group(1), 0)
+        remember_argument(opening.end() - 1, index, f"{opening.group(1)} (...)")
+
+    # JUCE's property wrappers, constructed from a tree and a name. Not a
+    # function that returns one, whose brackets hold parameters.
+    for opening in PROPERTY_WRAPPER_OPENING.finditer(text):
         bracket_position = opening.end() - 1
-        start, end = arguments_of(text, bracket_position, angles_are_brackets=False)[0]
-        remember_names(start, end, f"{opening.group(1)} (...)")
+        if text[bracket_position] == "(" and BETWEEN_PARAMETERS_AND_BODY.match(
+            text, end_of_brackets(text, bracket_position)
+        ):
+            continue
+        where = f"{opening.group(1)} {text[bracket_position]}...{CLOSING_BRACKET[text[bracket_position]]}"
+        remember_argument(bracket_position, NAME_POSITION_IN_PROPERTY_WRAPPER, where)
+
+    # One that is a member, in a constructor: "NoteView::NoteView (juce::ValueTree& note)
+    # : pitch (note, "pitch", nullptr)".
+    if wrapper_variables:
+        initialised = re.compile(r"(?<!:)[:,]\s*(" + "|".join(sorted(wrapper_variables)) + r")\s*[({]")
+        for opening in initialised.finditer(text):
+            remember_argument(
+                opening.end() - 1, NAME_POSITION_IN_PROPERTY_WRAPPER, f"the member {opening.group(1)}"
+            )
+
+    # A node's type compared with a text.
+    for comparison in TYPE_COMPARISON.finditer(text):
+        remember(comparison.start(1) - 1, comparison.group(1), "a comparison with getType()")
+    for comparison in TYPE_COMPARISON_TEXT_FIRST.finditer(text):
+        remember(comparison.start(1) - 1, comparison.group(1), "a comparison with getType()")
 
     for opening in CONSTRUCTION_OPENING.finditer(text):
         # "-> juce::ValueTree {" is the return type of a lambda and the brace
@@ -794,8 +902,8 @@ def hits_in_file(text, names, document_only_layer, name_functions, structs):
     #    element is the project file; in app/ it can be something else.
     if document_only_layer:
         for opening in XML_OPENING.finditer(text):
-            start, end = arguments_of(text, opening.end() - 1, angles_are_brackets=False)[0]
-            remember_names(start, end, f"{opening.group(1) or opening.group(2)} (...)")
+            index = NAME_POSITION_IN_XML_CALL.get(opening.group(1), 0)
+            remember_argument(opening.end() - 1, index, f"{opening.group(1) or opening.group(2)} (...)")
 
     return [(position, *hits[position]) for position in sorted(hits)]
 
@@ -833,12 +941,13 @@ def find_violations(source_root, ids_file):
         texts[path] = read_source(path)
     name_functions = name_taking_functions(texts.values())
     structs = StructsWithNames(list(texts.values()))
+    wrapper_variables = property_wrapper_variables(texts.values())
 
     for path, text in texts.items():
         layer_path = path.relative_to(source_root).as_posix()
         document_only_layer = layer_path.startswith(DOCUMENT_ONLY_LAYERS)
         for position, rule, string, where in hits_in_file(
-            text, names, document_only_layer, name_functions, structs
+            text, names, document_only_layer, name_functions, structs, wrapper_variables
         ):
             if rule == "identifier":
                 message = (
