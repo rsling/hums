@@ -39,6 +39,12 @@
 // heard. A seek and a loop are what an export does not have: there the case
 // is played as the engine plays, through Renderer::seek.
 //
+// Every case is the list of this file, goldenCases: the required cases of the
+// contract. The directory is held to it, so that a case cannot lose its files
+// and a file cannot lie there unrendered. Beyond its expected file each case
+// is held to guardrails::RenderChecks (docs/GUARDRAILS.md -> 4, Beyond the
+// golden files).
+//
 // With HUMS_REGENERATE_GOLDEN=1 in the environment (the regenerate_golden
 // target) nothing is compared: the event lines of every expected file are
 // written anew from what the renderer gives, under the header the file has.
@@ -46,10 +52,11 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include "guardrails/RenderChecks.h"
+#include "guardrails/RenderRun.h"
 #include "io/ProjectFile.h"
 #include "model/ProjectModel.h"
-#include "render/Kernel.h"
-#include "render/NoteTracker.h"
+#include "model/Validator.h"
 #include "render/Renderer.h"
 #include "render/SnapshotBuilder.h"
 #include "render/snapshot/Snapshot.h"
@@ -57,7 +64,6 @@
 #include <juce_core/juce_core.h>
 #include <juce_data_structures/juce_data_structures.h>
 
-#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -215,116 +221,50 @@ juce::String lineOf (const render::Renderer::Event& event, const render::Snapsho
     return line;
 }
 
-// A case while it is played: the tracker lives from one stretch of ticks to
-// the next, and every event that goes out becomes a line.
-struct Playback
+// The events of a run, one line per event.
+juce::StringArray linesOf (const guardrails::RenderRun::Result& result, const render::Snapshot& snapshot)
 {
-    explicit Playback (const model::ProjectModel& project)
-        : snapshot (render::SnapshotBuilder::build (project)),
-          destinations (render::SnapshotBuilder::destinationsWithoutHardware (project)),
-          allTracks (snapshot.trackPlans.size(), true),
-          tracker (destinations.count)
-    {
-    }
-
-    void addLines (std::size_t eventCount)
-    {
-        for (std::size_t index = 0; index < eventCount; ++index)
-            lines.add (lineOf (buffer[index], snapshot));
-    }
-
-    // The ticks [start, end), in their order.
-    void render (std::int64_t start, std::int64_t end)
-    {
-        render::Kernel::Position position { start, 0 };
-
-        for (bool isFinished = false; ! isFinished;)
-        {
-            const auto progress = render::Renderer::render (snapshot, allTracks, destinations.destinationOfTrack, tracker, position, end, buffer);
-
-            addLines (progress.eventCount);
-            position = progress.next;
-            isFinished = progress.isFinished;
-        }
-    }
-
-    // Playback leaves one tick for another: a seek, or the wrap of the loop.
-    void seek (std::int64_t leftTick, std::int64_t targetTick)
-    {
-        render::Renderer::ChasePosition position;
-
-        for (bool isFinished = false; ! isFinished;)
-        {
-            const auto progress = render::Renderer::seek (snapshot, allTracks, destinations.destinationOfTrack, tracker, leftTick, targetTick, position, buffer);
-
-            addLines (progress.eventCount);
-            position = progress.next;
-            isFinished = progress.isFinished;
-        }
-    }
-
-    // The end, as an export ends: with the off of every note that still
-    // sounds.
-    void stop (std::int64_t stopTick)
-    {
-        do
-        {
-            addLines (render::Renderer::stop (tracker, stopTick, buffer));
-        } while (tracker.soundingCount() > 0);
-    }
-
-    const render::Snapshot snapshot;
-    const render::SnapshotBuilder::Destinations destinations;
-    const std::vector<bool> allTracks;
-    render::NoteTracker tracker;
-    std::array<render::Renderer::Event, 256> buffer;
     juce::StringArray lines;
-};
 
-// What the project renders to when it is played as the header of its
-// expected file says, one line per event. `arrangementEnd` is where a case
-// without a range line ends.
-juce::StringArray renderedLines (const model::ProjectModel& project, const Expected& expected, std::int64_t arrangementEnd)
+    for (const auto& event : result.events)
+        lines.add (lineOf (event, snapshot));
+
+    return lines;
+}
+
+// How the header of an expected file says its case is played.
+// `arrangementEnd` is where a case without a range line ends.
+guardrails::RenderRun::Plan planOf (const Expected& expected, std::int64_t arrangementEnd)
 {
-    const std::int64_t start = expected.seekTick.value_or (expected.rangeStart.value_or (0));
-    const std::int64_t end = expected.rangeEnd.value_or (arrangementEnd);
+    guardrails::RenderRun::Plan plan;
+    plan.start = expected.seekTick.value_or (expected.rangeStart.value_or (0));
+    plan.end = expected.rangeEnd.value_or (arrangementEnd);
+    plan.beginsWithSeek = expected.seekTick.has_value();
+    plan.loopStart = expected.loopStart;
+    plan.loopEnd = expected.loopEnd;
 
     // A range line beside a seek line must not say another start.
     if (expected.seekTick.has_value() && expected.rangeStart.has_value())
         REQUIRE (*expected.rangeStart == *expected.seekTick);
 
-    REQUIRE (start <= end);
-
-    Playback playback (project);
-
-    // Nothing sounds yet, so the seek gives the chase alone.
-    if (expected.seekTick.has_value())
-        playback.seek (start, start);
+    REQUIRE (plan.start <= plan.end);
 
     if (expected.loopStart.has_value())
     {
         // One wrap: up to the loop's end, back to its start, and on to the
         // end of the range.
-        REQUIRE (start < *expected.loopEnd);
-        REQUIRE (*expected.loopStart <= end);
-        REQUIRE (end <= *expected.loopEnd);
-
-        playback.render (start, *expected.loopEnd);
-        playback.seek (*expected.loopEnd, *expected.loopStart);
-        playback.render (*expected.loopStart, end);
-    }
-    else
-    {
-        playback.render (start, end);
+        REQUIRE (plan.start < *expected.loopEnd);
+        REQUIRE (*expected.loopStart <= plan.end);
+        REQUIRE (plan.end <= *expected.loopEnd);
     }
 
-    playback.stop (end);
-
-    return playback.lines;
+    return plan;
 }
 
 // Renders the fixture of a case and holds the result to its expected file,
-// or writes it there when the golden files are being regenerated.
+// or writes it there when the golden files are being regenerated. Then the
+// case is held to the render checks: the same events in small windows, no
+// allocation, every note-on with its note-off.
 void checkGoldenCase (const juce::String& caseName)
 {
     juce::ValueTree document;
@@ -333,6 +273,10 @@ void checkGoldenCase (const juce::String& caseName)
     const auto loadResult = io::ProjectFile::load (goldenFile (caseName + ".xml"), document, undoManager);
     INFO ("loading " << caseName << ".xml: " << loadResult.message);
     REQUIRE (loadResult.wasLoaded());
+
+    // The load has run the Validator; said here once more, because the
+    // contract says it of every fixture by name.
+    CHECK (model::Validator::validate (document).empty());
 
     const juce::File expectedFile = goldenFile (caseName + ".txt");
     const Expected expected = readExpected (expectedFile);
@@ -344,7 +288,14 @@ void checkGoldenCase (const juce::String& caseName)
     // say its range.
     REQUIRE ((expected.rangeEnd.has_value() || arrangementEnd.has_value()));
 
-    const juce::StringArray rendered = renderedLines (project, expected, arrangementEnd.value_or (0));
+    // Rendered as an export renders: the destinations are those without
+    // hardware.
+    const auto snapshot = render::SnapshotBuilder::build (project);
+    const auto destinations = render::SnapshotBuilder::destinationsWithoutHardware (project);
+    const guardrails::RenderRun run (snapshot, destinations.destinationOfTrack, destinations.count);
+    const auto plan = planOf (expected, arrangementEnd.value_or (0));
+
+    const juce::StringArray rendered = linesOf (run.play (plan, guardrails::RenderRun::oneWindow, 256), snapshot);
 
     if (isRegenerating())
     {
@@ -356,196 +307,129 @@ void checkGoldenCase (const juce::String& caseName)
         return;
     }
 
-    INFO ("rendered:\n"
-          << rendered.joinIntoString ("\n"));
-    INFO ("expected (" << caseName << ".txt):\n"
-                       << expected.eventLines.joinIntoString ("\n"));
-    CHECK (rendered == expected.eventLines);
+    {
+        INFO ("rendered:\n"
+              << rendered.joinIntoString ("\n"));
+        INFO ("expected (" << caseName << ".txt):\n"
+                           << expected.eventLines.joinIntoString ("\n"));
+        CHECK (rendered == expected.eventLines);
+    }
+
+    juce::StringArray checkFailures;
+
+    for (const auto& failure : guardrails::RenderChecks::failuresOf (run, plan, guardrails::RenderChecks::TickByTick::yes))
+        checkFailures.add (failure);
+
+    INFO ("render checks:\n"
+          << checkFailures.joinIntoString ("\n"));
+    CHECK (checkFailures.isEmpty());
+}
+
+// The required cases of docs/GUARDRAILS.md -> 4. Render golden files, in the
+// order and nearly the words of that list, each with the name of its pair of
+// files. This list is what is rendered and what golden/ is held to: a case
+// that is added to the contract is added here, and its files with it.
+struct GoldenCase
+{
+    const char* rule;
+    const char* fileName;
+};
+
+const std::vector<GoldenCase>& goldenCases()
+{
+    static const std::vector<GoldenCase> cases {
+        { "skipped column", "step_skipped_column" },
+        { "resetAt shorter than stepCount", "step_reset_at_shorter_than_step_count" },
+        { "gate > 1.0 into a different pitch", "step_gate_over_one_into_different_pitch" },
+        { "gate > 1.0 into the same pitch (merge)", "step_gate_over_one_into_same_pitch" },
+        { "gate reaching into a skipped column", "step_gate_reaching_into_skipped_column" },
+        { "gate across the loop point into a different pitch", "step_gate_across_loop_point_into_different_pitch" },
+        { "gate across the loop point into the same pitch (retrigger, not merge)", "step_gate_across_loop_point_into_same_pitch" },
+        { "fixedPitch lane ignoring cell pitch", "step_fixed_pitch_ignoring_cell_pitch" },
+        { "off-cell CC values", "step_off_cell_cc_values" },
+        { "placement offset", "placement_offset" },
+        { "placement shorter than the clip loop", "placement_shorter_than_loop" },
+        { "placement longer than the clip loop", "placement_longer_than_loop" },
+        { "two placements of one clip restarting (offset 0)", "placements_restarting" },
+        { "two placements of one clip phase-continuous (merged)", "placements_phase_continuous" },
+        { "split during a held note", "split_during_held_note" },
+        { "same-pitch overlap on one track", "same_pitch_overlap_one_track" },
+        { "same-pitch overlap across two tracks on one destination", "same_pitch_overlap_two_tracks" },
+        { "bank-select, program change and note at one tick", "bank_select_program_change_note" },
+        { "note-off and note-on of one pitch at one tick", "note_off_and_note_on_same_pitch_same_tick" },
+        { "AutomationLane overriding", "automation_lane_overriding" },
+        { "AutomationLane passing through", "automation_lane_passing_through" },
+        { "AutomationLane restoring the underlying value at exit", "automation_lane_restoring_at_exit" },
+        { "a lane whose first event comes after its placement start", "automation_lane_first_event_after_placement_start" },
+        { "two lanes overriding the same CC", "automation_two_lanes_one_cc" },
+        { "event-clip note crossing loopLength", "note_crossing_loop_length" },
+        { "content past loopLength silent", "content_past_loop_length" },
+        { "quantise at 1/8", "quantise_eighth" },
+        { "quantise at 1/8T", "quantise_eighth_triplet" },
+        { "quantise moving an onset across the loop point, in a loop that is not a multiple of the grid", "quantise_wrap_across_loop_point" },
+        { "two notes of one pitch quantised onto one tick", "quantise_two_notes_one_pitch_one_tick" },
+        { "transport loop wrap with a held note", "transport_loop_wrap_with_held_note" },
+        { "chase at a seek target: value found in the current placement", "chase_value_in_current_placement" },
+        { "chase at a seek target: value found in an earlier iteration of the placement", "chase_value_in_earlier_iteration" },
+        { "chase at a seek target: value found in an earlier placement", "chase_value_in_earlier_placement" },
+        { "chase at a seek target: no value at all", "chase_no_value_at_all" },
+        { "export range cutting a note", "export_range_cutting_note" },
+        { "a track with no Player rendering normally", "track_without_player" },
+    };
+
+    return cases;
 }
 
 } // namespace
 
-TEST_CASE ("golden: placement offset", "[render][golden]")
+TEST_CASE ("guardrail 4: every required case has its pair of files, and golden/ holds no other file", "[render][golden]")
 {
-    checkGoldenCase ("placement_offset");
+    juce::StringArray listedFiles;
+
+    for (const auto& goldenCase : goldenCases())
+    {
+        INFO ("case: " << goldenCase.rule);
+
+        for (const char* suffix : { ".xml", ".txt" })
+        {
+            const juce::String fileName = juce::String (goldenCase.fileName) + suffix;
+
+            CHECK (goldenFile (fileName).existsAsFile());
+
+            // No pair stands for two cases.
+            CHECK (! listedFiles.contains (fileName));
+            listedFiles.add (fileName);
+        }
+    }
+
+    // The 37 cases of the contract. A case more is a change of
+    // docs/GUARDRAILS.md and of this number; a case fewer is never right.
+    CHECK (goldenCases().size() == 37);
+
+    // Everything in golden/, hidden files and directories too: a fixture
+    // that no case names would be a golden file that nothing renders.
+    const juce::File directory (HUMS_RENDER_GOLDEN_DIRECTORY);
+    REQUIRE (directory.isDirectory());
+
+    for (const auto& file : directory.findChildFiles (juce::File::findFilesAndDirectories, false))
+    {
+        // What the Finder leaves in a directory it has shown, by its exact
+        // name, as tools/check_layers.py passes it over under src/.
+        if (file.getFileName() == ".DS_Store")
+            continue;
+
+        INFO ("in golden/: " << file.getFileName());
+        CHECK (listedFiles.contains (file.getFileName()));
+    }
 }
 
-TEST_CASE ("golden: placement shorter than the clip loop", "[render][golden]")
+TEST_CASE ("guardrail 4: every case renders to its expected file, the same in small windows, without an allocation, and every note-on gets its note-off", "[render][golden]")
 {
-    checkGoldenCase ("placement_shorter_than_loop");
-}
-
-TEST_CASE ("golden: placement longer than the clip loop", "[render][golden]")
-{
-    checkGoldenCase ("placement_longer_than_loop");
-}
-
-TEST_CASE ("golden: event-clip note crossing loopLength", "[render][golden]")
-{
-    checkGoldenCase ("note_crossing_loop_length");
-}
-
-TEST_CASE ("golden: content past loopLength silent", "[render][golden]")
-{
-    checkGoldenCase ("content_past_loop_length");
-}
-
-TEST_CASE ("golden: export range cutting a note", "[render][golden]")
-{
-    checkGoldenCase ("export_range_cutting_note");
-}
-
-TEST_CASE ("golden: a track with no Player rendering normally", "[render][golden]")
-{
-    checkGoldenCase ("track_without_player");
-}
-
-TEST_CASE ("golden: bank select, program change and note at one tick", "[render][golden]")
-{
-    checkGoldenCase ("bank_select_program_change_note");
-}
-
-TEST_CASE ("golden: note-off and note-on of one pitch at one tick", "[render][golden]")
-{
-    checkGoldenCase ("note_off_and_note_on_same_pitch_same_tick");
-}
-
-TEST_CASE ("golden: same-pitch overlap on one track", "[render][golden]")
-{
-    checkGoldenCase ("same_pitch_overlap_one_track");
-}
-
-TEST_CASE ("golden: same-pitch overlap across two tracks on one destination", "[render][golden]")
-{
-    checkGoldenCase ("same_pitch_overlap_two_tracks");
-}
-
-TEST_CASE ("golden: two placements of one clip, the second restarting", "[render][golden]")
-{
-    checkGoldenCase ("placements_restarting");
-}
-
-TEST_CASE ("golden: two placements of one clip, phase-continuous (merged)", "[render][golden]")
-{
-    checkGoldenCase ("placements_phase_continuous");
-}
-
-TEST_CASE ("golden: split during a held note", "[render][golden]")
-{
-    checkGoldenCase ("split_during_held_note");
-}
-
-TEST_CASE ("golden: quantise at 1/8", "[render][golden]")
-{
-    checkGoldenCase ("quantise_eighth");
-}
-
-TEST_CASE ("golden: quantise at 1/8T", "[render][golden]")
-{
-    checkGoldenCase ("quantise_eighth_triplet");
-}
-
-TEST_CASE ("golden: quantise moving an onset across the loop point, in a loop that is no multiple of the grid", "[render][golden]")
-{
-    checkGoldenCase ("quantise_wrap_across_loop_point");
-}
-
-TEST_CASE ("golden: two notes of one pitch quantised onto one tick", "[render][golden]")
-{
-    checkGoldenCase ("quantise_two_notes_one_pitch_one_tick");
-}
-
-TEST_CASE ("golden: skipped column", "[render][golden]")
-{
-    checkGoldenCase ("step_skipped_column");
-}
-
-TEST_CASE ("golden: resetAt shorter than stepCount", "[render][golden]")
-{
-    checkGoldenCase ("step_reset_at_shorter_than_step_count");
-}
-
-TEST_CASE ("golden: fixedPitch lane ignoring cell pitch", "[render][golden]")
-{
-    checkGoldenCase ("step_fixed_pitch_ignoring_cell_pitch");
-}
-
-TEST_CASE ("golden: off-cell CC values", "[render][golden]")
-{
-    checkGoldenCase ("step_off_cell_cc_values");
-}
-
-TEST_CASE ("golden: gate > 1.0 into a different pitch", "[render][golden]")
-{
-    checkGoldenCase ("step_gate_over_one_into_different_pitch");
-}
-
-TEST_CASE ("golden: gate reaching into a skipped column", "[render][golden]")
-{
-    checkGoldenCase ("step_gate_reaching_into_skipped_column");
-}
-
-TEST_CASE ("golden: gate > 1.0 into the same pitch (merge)", "[render][golden]")
-{
-    checkGoldenCase ("step_gate_over_one_into_same_pitch");
-}
-
-TEST_CASE ("golden: gate across the loop point into a different pitch", "[render][golden]")
-{
-    checkGoldenCase ("step_gate_across_loop_point_into_different_pitch");
-}
-
-TEST_CASE ("golden: gate across the loop point into the same pitch (retrigger, not merge)", "[render][golden]")
-{
-    checkGoldenCase ("step_gate_across_loop_point_into_same_pitch");
-}
-
-TEST_CASE ("golden: chase at a seek target, value found in the current placement", "[render][golden]")
-{
-    checkGoldenCase ("chase_value_in_current_placement");
-}
-
-TEST_CASE ("golden: chase at a seek target, value found in an earlier iteration of the placement", "[render][golden]")
-{
-    checkGoldenCase ("chase_value_in_earlier_iteration");
-}
-
-TEST_CASE ("golden: chase at a seek target, value found in an earlier placement", "[render][golden]")
-{
-    checkGoldenCase ("chase_value_in_earlier_placement");
-}
-
-TEST_CASE ("golden: chase at a seek target, no value at all", "[render][golden]")
-{
-    checkGoldenCase ("chase_no_value_at_all");
-}
-
-TEST_CASE ("golden: transport loop wrap with a held note", "[render][golden]")
-{
-    checkGoldenCase ("transport_loop_wrap_with_held_note");
-}
-
-TEST_CASE ("golden: AutomationLane overriding", "[render][golden]")
-{
-    checkGoldenCase ("automation_lane_overriding");
-}
-
-TEST_CASE ("golden: AutomationLane passing through", "[render][golden]")
-{
-    checkGoldenCase ("automation_lane_passing_through");
-}
-
-TEST_CASE ("golden: AutomationLane restoring the underlying value at exit", "[render][golden]")
-{
-    checkGoldenCase ("automation_lane_restoring_at_exit");
-}
-
-TEST_CASE ("golden: a lane whose first event comes after its placement start", "[render][golden]")
-{
-    checkGoldenCase ("automation_lane_first_event_after_placement_start");
-}
-
-TEST_CASE ("golden: two lanes overriding the same CC", "[render][golden]")
-{
-    checkGoldenCase ("automation_two_lanes_one_cc");
+    for (const auto& goldenCase : goldenCases())
+    {
+        DYNAMIC_SECTION ("golden: " << goldenCase.rule)
+        {
+            checkGoldenCase (goldenCase.fileName);
+        }
+    }
 }

@@ -181,11 +181,13 @@ tests/
                        the load path must refuse (malformed, too new, one or more per invariant)
   render/              render_core_tests (the render core; links no JUCE), render_tests (SnapshotBuilder; links the model layer and JUCE)
                        and render_golden_tests (the golden files; links io/ too, for the real load path)
-    golden/            fixture project + expected event list, one pair per rendering case
+    golden/            fixture project + expected event list, one pair per rendering case, and nothing else: the golden test holds the directory to its list of cases
   engine/
   platform/            the pure parts of the platform/mac/ backends (no MIDI hardware needed)
   guardrails/          invariant property tests (seeded document generator, document checks, random commands and the checks on each); drives the tools/ scripts and their negative fixtures;
-                       sanitizer canaries; the two programs that prove a JUCE assertion or leak report fails a test
+                       sanitizer canaries; the two programs that prove a JUCE assertion or leak report fails a test;
+                       the render checks beyond the golden files (RenderRun plays a Snapshot, RenderChecks holds it to the same events in small windows,
+                       no allocation and a note-off for every note-on; AllocationCounter counts), compiled into the property tests and the golden tests
 ```
 
 ## Core concepts (glossary)
@@ -261,7 +263,7 @@ Roland is the only maintainer and will not read every line, so structure is enfo
 1. **Schema names live only in `Ids.h`** — `tools/check_identifiers.py`; exceptions are listed explicitly in the script, never wildcarded. It looks wherever a `juce::Identifier` is expected, calls to our own functions that take one and members of our own structs that are one included, and at XML tag and attribute names. In `model/`, `io/` and `render/` no name at all is spelled as a string, schema name or not [D15].
 2. **Layer rules** — `tools/check_layers.py` enforces the table above, including the std-only render core, the std-only `platform/` interfaces, OS headers and `.mm` files only under `platform/mac/`, and `TransportFacade.h`. Our own headers are included with quotes; one in angle brackets fails in every layer. A file under `src/` that is neither source by its suffix nor named in the script as not source fails too, and so does a symbolic link.
 3. **Invariants as property tests** — random valid documents × random valid and invalid commands; Validator, undo/redo XML identity, canonical save→load→save byte identity. Seeds printed; failures shrunk into named regression tests.
-4. **Render golden files** — one fixture + hand-reasoned expected event list per rendering rule, in emission order. Regenerated only via the `regenerate_golden` target, and the diff is read before committing.
+4. **Render golden files** — one fixture + hand-reasoned expected event list per rendering rule, in emission order. Regenerated only via the `regenerate_golden` target, and the diff is read before committing. `tests/render/golden/` is held to the list of required cases. Whatever is rendered, a golden case or a seed of guardrail 3, gives the same events in small windows as in one, without an allocation in the render core (counted in the plain configuration), and every note-on gets its note-off.
 5. **Loading is a wall** — every malformed, too-new or invalid fixture is refused with the current document and source file untouched.
 
 Beside the five, `tools/check_juce_pin.py` checks that `libs/JUCE` is at the tag `libs/JUCE_VERSION` names and that its files are that commit's (`docs/GUARDRAILS.md → JUCE pin`).

@@ -10,7 +10,9 @@ namespace guardrails
 // What the property tests do with one seed (docs/GUARDRAILS.md -> 3): the
 // document of the seed is built and held to the document checks, then a
 // sequence of random commands is applied to it, each held to the command
-// checks.
+// checks. The document is also rendered and held to the render checks
+// (docs/GUARDRAILS.md -> 4, Beyond the golden files), twice: as it was
+// built, and as the commands have left it.
 //
 // It stands here, and not in the test that goes through the seeds, so that
 // the test which shows what the run reaches counts the commands of this very

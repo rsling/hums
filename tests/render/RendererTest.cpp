@@ -5,6 +5,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include "guardrails/AllocationCounter.h"
 #include "render/Kernel.h"
 #include "render/NoteTracker.h"
 #include "render/Renderer.h"
@@ -13,6 +14,7 @@
 #include "render/snapshot/Snapshot.h"
 #include "render/snapshot/TrackPlan.h"
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -554,4 +556,84 @@ TEST_CASE ("A seek and the playback behind it leave a controller that a lane own
     // chased and the restored one is played.
     CHECK (intoTheLane.seek (900, 800) == Texts { "800 0 cc 74 90" });
     CHECK (intoTheLane.render (800, 1000) == Texts { "800 0 cc 74 11" });
+}
+
+TEST_CASE ("The render core allocates nothing while it plays: Kernel, NoteTracker and Renderer", "[render][renderer][allocation]")
+{
+    // Counted in the plain configuration; in an instrumented one the count
+    // stays 0 and the test only plays (guardrails::AllocationCounter).
+    //
+    // Chords, repeated pitches and controllers on two tracks that share a
+    // destination, and a lane, so that every part has work: the loop, the
+    // same-pitch rule, the restore at a lane placement's end, the chase.
+    auto snapshot = oneTrackPerTemplate (
+        { withChaseTables (templateWith (240, { noteAt (0, 300, 60), noteAt (0, 100, 64), noteAt (120, 500, 60) }, { ccAt (0, 1, 1), ccAt (0, 74, 2), programChangeAt (10, 5) })),
+          withChaseTables (templateWith (100, { noteAt (0, 100, 60), noteAt (50, 75, 72) }, { ccAt (50, 9, 9) })) },
+        4800);
+    snapshot.clipTemplates.push_back (withChaseTables (templateWith (400, {}, { ccAt (200, 74, 90) })));
+    snapshot.trackPlans[0].automationLanes.push_back ({ { { 400, 1000, 0, 2 } } });
+
+    // Everything the calls take is made before the count begins: the tracker
+    // allocates when it is made and never afterwards.
+    const std::vector<bool> allTracks (snapshot.trackPlans.size(), true);
+    const std::vector<std::size_t> destinationOfTrack { 0, 0 };
+    NoteTracker tracker (1);
+    std::array<Renderer::Event, 8> buffer;
+    std::array<Kernel::Event, 8> kernelBuffer;
+    std::size_t eventCount = 0;
+
+    const std::size_t allocationsBefore = guardrails::AllocationCounter::count();
+
+    // In windows of 100 ticks to the middle, a wrap back to 300, on to the
+    // end, and the stop.
+    const auto play = [&] (std::int64_t start, std::int64_t end) {
+        for (std::int64_t windowStart = start; windowStart < end; windowStart += 100)
+        {
+            Kernel::Position position { windowStart, 0 };
+
+            for (bool isFinished = false; ! isFinished;)
+            {
+                const auto progress = Renderer::render (snapshot, allTracks, destinationOfTrack, tracker, position, windowStart + 100, buffer);
+                eventCount += progress.eventCount;
+                position = progress.next;
+                isFinished = progress.isFinished;
+            }
+        }
+    };
+
+    play (0, 2400);
+
+    Renderer::ChasePosition chasePosition;
+
+    for (bool isFinished = false; ! isFinished;)
+    {
+        const auto progress = Renderer::seek (snapshot, allTracks, destinationOfTrack, tracker, 2400, 300, chasePosition, buffer);
+        eventCount += progress.eventCount;
+        chasePosition = progress.next;
+        isFinished = progress.isFinished;
+    }
+
+    play (300, 4800);
+
+    do
+    {
+        eventCount += Renderer::stop (tracker, 4800, buffer);
+    } while (tracker.soundingCount() > 0);
+
+    // The Kernel by itself, as the Renderer calls it.
+    for (Kernel::Position position { 0, 0 }; position.tick < 4800;)
+    {
+        const auto progress = Kernel::expand (snapshot, allTracks, position, 4800, kernelBuffer);
+        eventCount += progress.eventCount;
+        position = progress.next;
+    }
+
+    const auto chased = Kernel::chase (snapshot, 0, 700);
+
+    const std::size_t allocationsAfter = guardrails::AllocationCounter::count();
+
+    // Not an empty run that allocates nothing for want of anything to do.
+    CHECK (eventCount > 500);
+    CHECK (chased.controllerValues[74] == 90);
+    CHECK (allocationsAfter == allocationsBefore);
 }

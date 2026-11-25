@@ -10,6 +10,9 @@ hums_add_test_executable(render_core_tests
 target_link_libraries(render_core_tests PRIVATE
     hums_render_core
     juce::juce_recommended_warning_flags)
+# One of them counts allocations: the render core takes nothing from the heap.
+hums_count_allocations(render_core_tests)
+target_include_directories(render_core_tests PRIVATE "${PROJECT_SOURCE_DIR}/tests")
 hums_discover_tests(render_core_tests "render_core.")
 
 # The rest of render/ (SnapshotBuilder) reads the document, so its tests link
@@ -23,13 +26,16 @@ hums_discover_tests(render_tests "render.")
 
 # Guardrail 4, the render golden files (docs/GUARDRAILS.md -> 4. Render golden
 # files): each fixture project in golden/ is loaded through the real load
-# path, so this executable alone links io/ beside render/.
+# path, so this executable links io/ beside render/. Every case is also held
+# to the render checks of tests/guardrails/.
 hums_add_test_executable(render_golden_tests
     GoldenTest.cpp)
 target_link_libraries(render_golden_tests PRIVATE
     hums_io
     hums_render
     juce::juce_recommended_warning_flags)
+hums_add_render_checks(render_golden_tests)
+target_include_directories(render_golden_tests PRIVATE "${PROJECT_SOURCE_DIR}/tests")
 # The tests read the pairs from the source tree, and regenerate_golden writes
 # the expected files there.
 target_compile_definitions(render_golden_tests PRIVATE

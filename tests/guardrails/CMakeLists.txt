@@ -19,8 +19,11 @@ hums_discover_tests(guardrail_toolchain_juce "guardrail.toolchain_juce.")
 # generator of random valid documents, the checks every document is held to,
 # the driver that applies random commands, the checks every command is held
 # to, and the run over the seeds. It saves and loads through the real load path,
-# so it links the io layer and the model layer under it.
+# so it links the io layer and the model layer under it. Every seed's document
+# is also rendered and held to the render checks (docs/GUARDRAILS.md -> 4,
+# Beyond the golden files), so it links render/ too.
 hums_add_test_executable(guardrail_properties
+    AllocationCounterTest.cpp
     CommandChecks.cpp
     CommandChecks.h
     CommandChecksTest.cpp
@@ -39,12 +42,15 @@ hums_add_test_executable(guardrail_properties
     RandomSource.cpp
     RandomSource.h
     RandomSourceTest.cpp
+    RenderChecksTest.cpp
     SeedRange.cpp
     SeedRange.h
     SeedRangeTest.cpp)
 target_link_libraries(guardrail_properties PRIVATE
     hums_io
+    hums_render
     juce::juce_recommended_warning_flags)
+hums_add_render_checks(guardrail_properties)
 # How many seeds a run goes through when HUMS_PROPERTY_SEEDS does not say
 # (SeedRange.h): few enough for the loop between two edits. Fewer still in the
 # instrumented configurations, where every seed costs several times as much.

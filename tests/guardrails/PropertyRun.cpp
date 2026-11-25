@@ -5,7 +5,11 @@
 #include "DocumentChecks.h"
 #include "DocumentGenerator.h"
 #include "RandomSource.h"
+#include "RenderChecks.h"
+#include "RenderRun.h"
 #include "model/Ids.h"
+#include "model/ProjectModel.h"
+#include "render/SnapshotBuilder.h"
 
 namespace guardrails
 {
@@ -31,12 +35,30 @@ namespace
         return description.substr (0, description.find (' '));
     }
 
+    // The document as the renderer plays it, held to the render checks
+    // (docs/GUARDRAILS.md -> 4, Beyond the golden files). The destinations
+    // are those without hardware, as in an export. The document must be
+    // valid: the document checks have passed it.
+    std::vector<std::string> renderFailuresOf (const juce::ValueTree& project)
+    {
+        const model::ProjectModel projectModel (project);
+        const auto snapshot = render::SnapshotBuilder::build (projectModel);
+        const auto destinations = render::SnapshotBuilder::destinationsWithoutHardware (projectModel);
+
+        return RenderChecks::failuresOf (RenderRun (snapshot, destinations.destinationOfTrack, destinations.count));
+    }
+
 } // namespace
 
 std::vector<std::string> PropertyRun::failuresOfSeed (std::uint64_t seed, std::vector<CommandOutcome>* outcomes)
 {
     auto project = DocumentGenerator::generate (seed);
     auto failures = DocumentChecks::failuresOf (project);
+
+    if (! failures.empty())
+        return failures;
+
+    failures = renderFailuresOf (project);
 
     if (! failures.empty())
         return failures;
@@ -72,7 +94,14 @@ std::vector<std::string> PropertyRun::failuresOfSeed (std::uint64_t seed, std::v
             undoManager.undo();
     }
 
-    return {};
+    // Once more as the commands have left the document: editing makes
+    // documents that the generator does not. Every command has left it valid.
+    failures = renderFailuresOf (project);
+
+    if (! failures.empty())
+        failures.insert (failures.begin(), "after the commands of the seed:");
+
+    return failures;
 }
 
 } // namespace guardrails

@@ -22,6 +22,33 @@ function(hums_discover_tests target prefix)
         PROPERTIES FAIL_REGULAR_EXPRESSION "${HUMS_JUCE_REPORT_REGEX}")
 endfunction()
 
+# Lets a test executable count what it takes from the heap
+# (tests/guardrails/AllocationCounter.h), for the tests that show the render
+# core to allocate nothing. Counting replaces the program's operator new, so
+# it is done in the plain configuration only: in an instrumented one the
+# sanitizer's own operator new stays, and AllocationCounter counts nothing.
+function(hums_count_allocations target)
+    target_sources(${target} PRIVATE
+        "${PROJECT_SOURCE_DIR}/tests/guardrails/AllocationCounter.cpp"
+        "${PROJECT_SOURCE_DIR}/tests/guardrails/AllocationCounter.h")
+    if(NOT HUMS_SANITIZE)
+        target_compile_definitions(${target} PRIVATE HUMS_COUNT_ALLOCATIONS=1)
+    endif()
+endfunction()
+
+# The render checks (tests/guardrails/RenderChecks.h) and the run they play a
+# Snapshot with, for the two executables that render documents: the golden
+# tests and the property tests. Std and the render core only; they count
+# allocations.
+function(hums_add_render_checks target)
+    target_sources(${target} PRIVATE
+        "${PROJECT_SOURCE_DIR}/tests/guardrails/RenderChecks.cpp"
+        "${PROJECT_SOURCE_DIR}/tests/guardrails/RenderChecks.h"
+        "${PROJECT_SOURCE_DIR}/tests/guardrails/RenderRun.cpp"
+        "${PROJECT_SOURCE_DIR}/tests/guardrails/RenderRun.h")
+    hums_count_allocations(${target})
+endfunction()
+
 add_subdirectory(guardrails)
 add_subdirectory(io)
 add_subdirectory(model)
