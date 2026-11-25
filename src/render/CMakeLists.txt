@@ -5,6 +5,8 @@
 # nothing else.
 hums_add_layer(hums_render_core
     SOURCES
+        NoteTracker.cpp
+        NoteTracker.h
         TempoMap.cpp
         TempoMap.h
         snapshot/ClipTemplate.h
