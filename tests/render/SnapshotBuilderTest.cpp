@@ -143,6 +143,110 @@ TEST_CASE ("A template's notes are in tick order, and in child order at one tick
     CHECK (pitches == std::vector<int> { 62, 61, 50, 70, 60 });
 }
 
+// The template of one event clip with a quantise setting.
+namespace
+{
+
+ClipTemplate templateOfQuantisedClip (const juce::String& quantise, const juce::String& loopLength, const juce::String& content)
+{
+    const auto project = projectWith (
+        oneTempo,
+        R"(<Clip id="11111111111141118111111111111111" kind="event" loopLength=")" + loopLength + R"(" quantise=")" + quantise
+            + R"("><Events>)" + content + "</Events></Clip>",
+        "");
+
+    return SnapshotBuilder::templateOf (model::ProjectModel (project).getClipPool().getClips().front());
+}
+
+} // namespace
+
+TEST_CASE ("A quantised clip's notes stand at their quantised onsets with their stored lengths", "[render][SnapshotBuilder]")
+{
+    const auto clipTemplate = templateOfQuantisedClip ("1/8", "1920", R"(
+        <Note tick="10" length="200" pitch="60"/>
+        <Note tick="250" length="100" pitch="62"/>
+        <Note tick="1000" length="2000" pitch="65"/>)");
+
+    REQUIRE (clipTemplate.notes.size() == 3);
+    CHECK (clipTemplate.notes[0].tick == 0);
+    CHECK (clipTemplate.notes[0].length == 200);
+    CHECK (clipTemplate.notes[1].tick == 480);
+    CHECK (clipTemplate.notes[1].length == 100);
+    CHECK (clipTemplate.notes[2].tick == 960);
+    CHECK (clipTemplate.notes[2].length == 2000);
+}
+
+TEST_CASE ("Each quantise setting has its grid in the template", "[render][SnapshotBuilder]")
+{
+    // A note one tick before the second line of each grid goes onto it.
+    const auto onsetWith = [] (const juce::String& quantise, const juce::String& storedTick) {
+        const auto clipTemplate = templateOfQuantisedClip (quantise, "7680", R"(<Note tick=")" + storedTick + R"(" length="10" pitch="60"/>)");
+        REQUIRE (clipTemplate.notes.size() == 1);
+        return clipTemplate.notes[0].tick;
+    };
+
+    CHECK (onsetWith ("1/2", "1919") == 1920);
+    CHECK (onsetWith ("1/4", "959") == 960);
+    CHECK (onsetWith ("1/8", "479") == 480);
+    CHECK (onsetWith ("1/2T", "1279") == 1280);
+    CHECK (onsetWith ("1/4T", "639") == 640);
+    CHECK (onsetWith ("1/8T", "319") == 320);
+    CHECK (onsetWith ("", "319") == 319);
+}
+
+TEST_CASE ("Quantising moves no event", "[render][SnapshotBuilder]")
+{
+    const auto clipTemplate = templateOfQuantisedClip ("1/8", "1920", R"(
+        <Event tick="250" kind="cc" a="7" b="90"/>
+        <Event tick="1900" kind="programChange" a="5"/>)");
+
+    REQUIRE (clipTemplate.events.size() == 2);
+    CHECK (clipTemplate.events[0].tick == 250);
+    CHECK (clipTemplate.events[1].tick == 1900);
+}
+
+TEST_CASE ("A quantised onset near the loop point wraps to tick 0, and the template is in the order of the quantised onsets", "[render][SnapshotBuilder]")
+{
+    // A loop of 1000 is no multiple of the grid of 480: 990 is nearer to the
+    // loop point than to the line at 960.
+    const auto clipTemplate = templateOfQuantisedClip ("1/8", "1000", R"(
+        <Note tick="700" length="50" pitch="67"/>
+        <Note tick="990" length="100" pitch="72"/>
+        <Note tick="0" length="50" pitch="60"/>)");
+
+    REQUIRE (clipTemplate.notes.size() == 3);
+    // Both at tick 0, in child order: the wrapped note first.
+    CHECK (clipTemplate.notes[0].tick == 0);
+    CHECK (clipTemplate.notes[0].pitch == 72);
+    CHECK (clipTemplate.notes[0].length == 100);
+    CHECK (clipTemplate.notes[1].tick == 0);
+    CHECK (clipTemplate.notes[1].pitch == 60);
+    CHECK (clipTemplate.notes[2].tick == 480);
+    CHECK (clipTemplate.notes[2].pitch == 67);
+}
+
+TEST_CASE ("Notes quantised onto one tick stay in child order, whatever their stored ticks", "[render][SnapshotBuilder]")
+{
+    const auto clipTemplate = templateOfQuantisedClip ("1/8", "1920", R"(
+        <Note tick="500" length="300" pitch="60" velocity="90"/>
+        <Note tick="470" length="100" pitch="60" velocity="100"/>)");
+
+    REQUIRE (clipTemplate.notes.size() == 2);
+    CHECK (clipTemplate.notes[0].tick == 480);
+    CHECK (clipTemplate.notes[0].velocity == 90);
+    CHECK (clipTemplate.notes[1].tick == 480);
+    CHECK (clipTemplate.notes[1].velocity == 100);
+}
+
+TEST_CASE ("A note at or past the loop length is silent in a quantised clip too", "[render][SnapshotBuilder]")
+{
+    const auto clipTemplate = templateOfQuantisedClip ("1/8", "1000", R"(
+        <Note tick="1000" length="10" pitch="61"/>
+        <Note tick="1430" length="10" pitch="62"/>)");
+
+    CHECK (clipTemplate.notes.empty());
+}
+
 TEST_CASE ("A template's events are in tick order, and in child order at one tick", "[render][SnapshotBuilder]")
 {
     // Bank select, then the program change, at one tick: nothing is sorted

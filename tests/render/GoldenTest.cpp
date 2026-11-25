@@ -317,3 +317,23 @@ TEST_CASE ("golden: split during a held note", "[render][golden]")
 {
     checkGoldenCase ("split_during_held_note");
 }
+
+TEST_CASE ("golden: quantise at 1/8", "[render][golden]")
+{
+    checkGoldenCase ("quantise_eighth");
+}
+
+TEST_CASE ("golden: quantise at 1/8T", "[render][golden]")
+{
+    checkGoldenCase ("quantise_eighth_triplet");
+}
+
+TEST_CASE ("golden: quantise moving an onset across the loop point, in a loop that is no multiple of the grid", "[render][golden]")
+{
+    checkGoldenCase ("quantise_wrap_across_loop_point");
+}
+
+TEST_CASE ("golden: two notes of one pitch quantised onto one tick", "[render][golden]")
+{
+    checkGoldenCase ("quantise_two_notes_one_pitch_one_tick");
+}

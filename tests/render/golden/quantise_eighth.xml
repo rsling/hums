@@ -1,0 +1,35 @@
+<!-- Golden case: quantise at 1/8. Notes off the grid, one exactly between two lines, one on a line, and a cc event that stays where it is. -->
+<Project schemaVersion="1" name="Quantise at 1/8" ppq="960">
+  <Routing>
+    <Player id="757eabc1f3ba4207a6c77ec16847c434" name="Synth"/>
+    <PadMap/>
+  </Routing>
+  <Timeline>
+    <TempoEvent tick="0" bpm="120"/>
+    <TimeSigEvent tick="0" numerator="4" denominator="4"/>
+  </Timeline>
+  <ClipPool>
+    <Clip id="6c5b76f2e4584751a4291f1965409117" name="Loose eighths" kind="event" loopLength="1920" quantise="1/8">
+      <Events>
+        <Note tick="10" length="200" pitch="60"/>
+        <Note tick="720" length="300" pitch="64"/>
+        <Note tick="250" length="100" pitch="62"/>
+        <Event tick="250" kind="cc" a="7" b="90"/>
+        <Note tick="1000" length="480" pitch="65"/>
+        <Note tick="1440" length="240" pitch="67"/>
+      </Events>
+    </Clip>
+  </ClipPool>
+  <Tracks>
+    <Track id="47fa0432aaaa407bbc6bdff219feeae4" name="Lead" playerId="757eabc1f3ba4207a6c77ec16847c434" channel="1">
+      <Placements>
+        <Placement id="c746f8d6e369479daa72b1fe941ce51a" clipId="6c5b76f2e4584751a4291f1965409117" start="0" length="1920"/>
+      </Placements>
+      <AutomationLanes/>
+      <Knobs/>
+      <Slots/>
+    </Track>
+  </Tracks>
+  <Session/>
+  <UiState/>
+</Project>

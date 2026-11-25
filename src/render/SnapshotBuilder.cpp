@@ -3,6 +3,7 @@
 #include "model/EventModel.h"
 #include "model/NoteModel.h"
 #include "model/PlacementModel.h"
+#include "model/Quantise.h"
 #include "model/TrackModel.h"
 
 #include <juce_core/juce_core.h>
@@ -147,12 +148,18 @@ ClipTemplate SnapshotBuilder::templateOf (const model::ClipModel& clip)
     if (clip.getKind() == model::ClipModel::Kind::step)
         return clipTemplate;
 
+    const std::int64_t quantiseGrid = clip.getQuantiseGrid();
+
     for (const auto& note : clip.getNotes())
     {
         if (! note.isEnabled() || note.getTick() >= clipTemplate.loopLength)
             continue;
 
-        clipTemplate.notes.push_back ({ note.getTick(), note.getLength(), note.getPitch(), note.getVelocity(), note.getOffVelocity() });
+        // From here on the quantised onset is the note's position; the
+        // stored tick is editing data. The length is kept.
+        const std::int64_t onset = model::Quantise::onsetOf (note.getTick(), quantiseGrid, clipTemplate.loopLength);
+
+        clipTemplate.notes.push_back ({ onset, note.getLength(), note.getPitch(), note.getVelocity(), note.getOffVelocity() });
     }
 
     for (const auto& event : clip.getEvents())
@@ -177,7 +184,8 @@ ClipTemplate SnapshotBuilder::templateOf (const model::ClipModel& clip)
     }
 
     // A stable sort: what shares a tick stays in child order, which is the
-    // tie-breaker at equal ticks. The document itself is never sorted.
+    // tie-breaker at equal ticks, also for notes that quantising has put on
+    // one tick. The document itself is never sorted.
     std::stable_sort (clipTemplate.notes.begin(), clipTemplate.notes.end(), [] (const ClipTemplate::Note& earlier, const ClipTemplate::Note& later) {
         return earlier.tick < later.tick;
     });

@@ -1,0 +1,31 @@
+<!-- Golden case: two notes of one pitch quantised onto one tick. Stored at 500 and 470, both play at 480. -->
+<Project schemaVersion="1" name="Two notes of one pitch quantised onto one tick" ppq="960">
+  <Routing>
+    <Player id="d40a57a0640a404eb2309e8cd4759288" name="Synth"/>
+    <PadMap/>
+  </Routing>
+  <Timeline>
+    <TempoEvent tick="0" bpm="120"/>
+    <TimeSigEvent tick="0" numerator="4" denominator="4"/>
+  </Timeline>
+  <ClipPool>
+    <Clip id="a3c7ba62978b4ea78b4d241c6febaff7" name="Flam" kind="event" loopLength="1920" quantise="1/8">
+      <Events>
+        <Note tick="500" length="300" pitch="60" velocity="90" offVelocity="40"/>
+        <Note tick="470" length="100" pitch="60" velocity="100" offVelocity="30"/>
+      </Events>
+    </Clip>
+  </ClipPool>
+  <Tracks>
+    <Track id="798466e2cae843bf93359290c1ca661e" name="Lead" playerId="d40a57a0640a404eb2309e8cd4759288" channel="1">
+      <Placements>
+        <Placement id="a8d2b223ba9f41f597729942cae272b6" clipId="a3c7ba62978b4ea78b4d241c6febaff7" start="0" length="1920"/>
+      </Placements>
+      <AutomationLanes/>
+      <Knobs/>
+      <Slots/>
+    </Track>
+  </Tracks>
+  <Session/>
+  <UiState/>
+</Project>

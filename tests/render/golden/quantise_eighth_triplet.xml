@@ -1,0 +1,35 @@
+<!-- Golden case: quantise at 1/8T. Notes off the triplet grid of 320 ticks, one exactly between two lines. -->
+<Project schemaVersion="1" name="Quantise at 1/8T" ppq="960">
+  <Routing>
+    <Player id="7eebe6a445864291879dc615ec979f7f" name="Synth"/>
+    <PadMap/>
+  </Routing>
+  <Timeline>
+    <TempoEvent tick="0" bpm="120"/>
+    <TimeSigEvent tick="0" numerator="4" denominator="4"/>
+  </Timeline>
+  <ClipPool>
+    <Clip id="dc11ae1e65504f7c819d7b92ed3f1041" name="Loose triplets" kind="event" loopLength="1920" quantise="1/8T">
+      <Events>
+        <Note tick="100" length="150" pitch="60"/>
+        <Note tick="170" length="100" pitch="62"/>
+        <Note tick="480" length="320" pitch="64"/>
+        <Note tick="650" length="100" pitch="65"/>
+        <Note tick="1130" length="200" pitch="67"/>
+        <Note tick="1700" length="100" pitch="69"/>
+      </Events>
+    </Clip>
+  </ClipPool>
+  <Tracks>
+    <Track id="013716b0272c435c9b9c134ed8498cfc" name="Lead" playerId="7eebe6a445864291879dc615ec979f7f" channel="1">
+      <Placements>
+        <Placement id="b5c0cede5e27402fb52899626f199dbe" clipId="dc11ae1e65504f7c819d7b92ed3f1041" start="0" length="1920"/>
+      </Placements>
+      <AutomationLanes/>
+      <Knobs/>
+      <Slots/>
+    </Track>
+  </Tracks>
+  <Session/>
+  <UiState/>
+</Project>

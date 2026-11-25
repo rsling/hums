@@ -1,0 +1,29 @@
+# quantise at 1/8T (docs/SCHEMA.md -> ClipPool / Clip).
+#
+# The grid is 320 ticks from clip tick 0. The loop is 1920 long, six lines:
+# 0, 320, 640, 960, 1280, 1600, and 1920 standing for 0. The notes in child
+# order:
+#
+#   pitch  stored  nearest line                      plays   length
+#   60     100     0 (100 away; 320 is 220 away)     0       150 -> off 150
+#   62     170     320 (150 away; 0 is 170 away)     320     100 -> off 420
+#   64     480     320 and 640 both 160 away:        320     320 -> off 640
+#                  a tie goes down
+#   65     650     640 (10 away)                     640     100 -> off 740
+#   67     1130    1280 (150 away; 960 is 170 away)  1280    200 -> off 1480
+#   69     1700    1600 (100 away; 1920 is 220 away) 1600    100 -> off 1700
+#
+# Notes 62 and 64 both begin at 320, in child order. At 640 the off of note
+# 64 falls due and comes before the on of note 65.
+0 0 1 noteOn 60 100
+150 0 1 noteOff 60 64
+320 0 1 noteOn 62 100
+320 0 1 noteOn 64 100
+420 0 1 noteOff 62 64
+640 0 1 noteOff 64 64
+640 0 1 noteOn 65 100
+740 0 1 noteOff 65 64
+1280 0 1 noteOn 67 100
+1480 0 1 noteOff 67 64
+1600 0 1 noteOn 69 100
+1700 0 1 noteOff 69 64

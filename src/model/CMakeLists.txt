@@ -48,6 +48,8 @@ hums_add_layer(hums_model
         ProjectModel.h
         PropertyReader.cpp
         PropertyReader.h
+        Quantise.cpp
+        Quantise.h
         RoutingModel.cpp
         RoutingModel.h
         SceneModel.cpp

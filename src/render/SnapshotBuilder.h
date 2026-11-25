@@ -34,7 +34,10 @@ public:
     // content at or past the loop length is never played. Each list is put
     // in tick order, and what shares a tick stays in child order, which is
     // the tie-breaker of docs/RENDERING.md -> Equal-tick order. The clip's
-    // quantise setting is not applied yet: a note stands at its stored tick.
+    // quantise setting is applied here, once (model/Quantise): a note stands
+    // at its quantised onset with its stored length, and that onset is its
+    // position for the order within the template and for every later rule.
+    // An event is never quantised.
     //
     // A step clip: its loop length only. Expanding the Grid into notes and
     // events is not written yet.

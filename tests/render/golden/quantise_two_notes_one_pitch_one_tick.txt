@@ -1,0 +1,19 @@
+# Two notes of one pitch quantised onto one tick (docs/SCHEMA.md -> ClipPool
+# / Clip; docs/RENDERING.md -> Same-pitch overlap).
+#
+# The grid is 480 ticks (1/8). Two notes of pitch 60, in child order:
+#
+#   stored 500, 300 long, velocity 90, off velocity 40    -> plays at 480
+#   stored 470, 100 long, velocity 100, off velocity 30   -> plays at 480
+#
+# The quantised onset is the position for the order at one tick and for the
+# same-pitch rule; the stored tick is editing data only. So both begin at
+# 480, and the first in child order goes out first although it is stored
+# later. Two notes of one pitch that begin on one tick: on, the first note's
+# off (off velocity 40), on, all at 480, and the second note's length and
+# velocity count. Its off comes at 480 + 100 = 580 (off velocity 30); the off
+# the first would have had at 780 is cancelled.
+480 0 1 noteOn 60 90
+480 0 1 noteOff 60 40
+480 0 1 noteOn 60 100
+580 0 1 noteOff 60 30

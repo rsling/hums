@@ -138,6 +138,7 @@ src/
     PropertyReader     typed reading of properties (int, int64, bool, double, string); absent vs malformed
     CanonicalDouble    a double as the document holds it: six significant digits, stored as its saved text [D14]
     TempoRange         the tempos Hums takes: 3.57628 to 999.999 bpm [D23]; what the Validator and the tempo command check
+    Quantise           where a clip's quantise setting puts a note onset: nearest grid line, ties down, the loop point standing for tick 0; for the template build and, later, applyQuantise
     ColourText         a colour as the document holds it: "#AARRGGBB" or empty; what the Validator and the commands check
     CopyName           the name of a clip made as a copy of another: "Bass (copy 1)" [D20]
     AutomationClipRule what an AutomationLane requires of a clip it references (invariant 9: cc events only, and on lanes only [D21]), for the commands on both sides of it

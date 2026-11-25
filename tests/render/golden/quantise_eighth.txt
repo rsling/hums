@@ -1,0 +1,33 @@
+# quantise at 1/8 (docs/SCHEMA.md -> ClipPool / Clip; docs/RENDERING.md ->
+# Pipeline: quantisation is applied when the template is built).
+#
+# The grid is 480 ticks from clip tick 0. The loop is 1920 long, so the
+# candidate lines are 0, 480, 960, 1440 and 1920, the last standing for 0.
+# Each onset goes to the nearest line, the note's end goes with it (the
+# length is kept), and nothing else is quantised. The notes in child order:
+#
+#   pitch  stored  nearest line                     plays      length
+#   60     10      0 (10 away; 480 is 470 away)     0          200 -> off 200
+#   64     720     480 and 960 both 240 away:       480        300 -> off 780
+#                  a tie goes down
+#   62     250     480 (230 away; 0 is 250 away)    480        100 -> off 580
+#   65     1000    960 (40 away)                    960        480 -> off 1440
+#   67     1440    on a line already                1440       240 -> off 1680
+#
+# The cc event at 250 is no note and stays at 250.
+#
+# The quantised onset is the note's position for the order at one tick:
+# notes 64 and 62 both begin at 480 and go out in child order, 64 first,
+# although 62 is stored earlier. At 1440 the off of note 65 falls due and
+# comes before the on of note 67.
+0 0 1 noteOn 60 100
+200 0 1 noteOff 60 64
+250 0 1 cc 7 90
+480 0 1 noteOn 64 100
+480 0 1 noteOn 62 100
+580 0 1 noteOff 62 64
+780 0 1 noteOff 64 64
+960 0 1 noteOn 65 100
+1440 0 1 noteOff 65 64
+1440 0 1 noteOn 67 100
+1680 0 1 noteOff 67 64

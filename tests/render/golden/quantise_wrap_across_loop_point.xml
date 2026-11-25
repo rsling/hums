@@ -1,0 +1,34 @@
+<!-- Golden case: quantise moving an onset across the loop point. The loop of 1000 ticks is no multiple of the grid of 480; a note at 990 wraps to tick 0. -->
+<Project schemaVersion="1" name="Quantise across the loop point" ppq="960">
+  <Routing>
+    <Player id="b6f94216e1214274a16bb2fa3506e9eb" name="Synth"/>
+    <PadMap/>
+  </Routing>
+  <Timeline>
+    <TempoEvent tick="0" bpm="120"/>
+    <TimeSigEvent tick="0" numerator="4" denominator="4"/>
+  </Timeline>
+  <ClipPool>
+    <Clip id="470493f7d03b4f06a66a95a8d2e4c65d" name="Late pickup" kind="event" loopLength="1000" quantise="1/8">
+      <Events>
+        <Note tick="990" length="100" pitch="72" velocity="90"/>
+        <Note tick="0" length="50" pitch="60"/>
+        <Note tick="980" length="100" pitch="64"/>
+        <Note tick="700" length="50" pitch="67"/>
+        <Event tick="990" kind="cc" a="1" b="64"/>
+      </Events>
+    </Clip>
+  </ClipPool>
+  <Tracks>
+    <Track id="4713e7a8999f4ad8bfb06cb2fa0fff64" name="Lead" playerId="b6f94216e1214274a16bb2fa3506e9eb" channel="1">
+      <Placements>
+        <Placement id="adec15dde7724f2ab396c79b361b2311" clipId="470493f7d03b4f06a66a95a8d2e4c65d" start="0" length="2000"/>
+      </Placements>
+      <AutomationLanes/>
+      <Knobs/>
+      <Slots/>
+    </Track>
+  </Tracks>
+  <Session/>
+  <UiState/>
+</Project>

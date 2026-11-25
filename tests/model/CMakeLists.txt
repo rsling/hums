@@ -35,6 +35,7 @@ hums_add_test_executable(model_tests
     ProjectModelTest.cpp
     ProjectCommandsTest.cpp
     PropertyReaderTest.cpp
+    QuantiseTest.cpp
     RefcountGateTest.cpp
     RoutingCommandsTest.cpp
     RoutingModelTest.cpp
