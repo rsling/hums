@@ -15,6 +15,8 @@ namespace render
 // the loop. Notes and events are two lists because the order at one tick
 // keeps them apart (note-offs, then events, then note-ons); each list is in
 // tick order, and at one tick in the order the clip has them as children.
+// The chase tables say the cc and program change events once more, by
+// controller.
 //
 // Std only, and fixed in size once built: reading it allocates nothing.
 struct ClipTemplate
@@ -64,6 +66,34 @@ struct ClipTemplate
     // The payloads of the sysex events one after the other, each without F0
     // and F7.
     std::vector<std::uint8_t> sysexBytes;
+
+    // One entry of a chase table: the value that an event of `events` sets
+    // at its tick.
+    struct ChasePoint
+    {
+        // 0 <= tick < loopLength.
+        std::int64_t tick = 0;
+        // A cc event's value, or a program change's program.
+        int value = 0;
+    };
+
+    // The chase table of one controller: the values of the cc events for it,
+    // in the order of `events`, so in tick order and at one tick in child
+    // order. Never empty.
+    struct ControllerChase
+    {
+        // 0 to 127.
+        int controller = 0;
+        std::vector<ChasePoint> points;
+    };
+
+    // The chase tables (docs/RENDERING.md -> Chase): what a seek reads to
+    // find the last value before a tick without going through `events`. One
+    // for every controller that `events` holds a cc event for, in the order
+    // of the controller numbers, and one for the program changes, which is
+    // empty when the clip has none. They hold nothing that `events` does not.
+    std::vector<ControllerChase> controllerChases;
+    std::vector<ChasePoint> programChanges;
 };
 
 } // namespace render

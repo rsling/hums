@@ -64,6 +64,11 @@ public:
     // tied across the loop point [D3]: the last column's note plays on into
     // the next pass like any note that is longer than the rest of the loop,
     // and the first column begins its own note there.
+    //
+    // The chase tables (docs/RENDERING.md -> Chase) are made from the
+    // template's events, so they hold what is played and nothing else: the
+    // cc events by controller and the program changes, of an event clip, and
+    // of a step clip the CC values of its cells.
     static ClipTemplate templateOf (const model::ClipModel& clip);
 
     // The Timeline's tempos in tick order, each as the whole microseconds

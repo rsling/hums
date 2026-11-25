@@ -156,10 +156,12 @@ src/
   render/              document → plain data, and the playback kernel shared by engine and export
     snapshot/          plain structs only: Snapshot, ClipTemplate, TrackPlan, chase tables — std only
     TempoMap           the one tick ↔ time authority — std only
-    Kernel             expands a Snapshot over a tick window into an event stream, allocation-free — std only
+    Kernel             expands a Snapshot over a tick window into an event stream, and chases a track's controllers
+                       for a tick from the chase tables, allocation-free — std only
     NoteTracker        active-note bookkeeping per physical destination, allocation-free — std only
     Renderer           Kernel + NoteTracker over a tick window: the events as they go out, note-offs included;
-                       the one such loop, for engine, export and golden tests, allocation-free — std only
+                       the one such loop, for engine, export and golden tests, and the one seek (pending note-offs,
+                       then the chase), which is also the wrap of the transport loop; allocation-free — std only
                        (the five std-only entries above are the "render core")
     SnapshotBuilder    model → Snapshot, including TempoMap data and chase tables, and which destination each track
                        plays into where there is no hardware; message thread

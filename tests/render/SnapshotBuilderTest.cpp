@@ -351,6 +351,116 @@ TEST_CASE ("A sysex event's payload is in the template as bytes", "[render][Snap
     CHECK (clipTemplate.events[3].dataLength == 0);
 }
 
+TEST_CASE ("A template has a chase table for every controller it sends, in the order of the controller numbers", "[render][SnapshotBuilder]")
+{
+    const auto clipTemplate = templateOfEventClip ("3840", R"(
+        <Event tick="960" kind="cc" a="74" b="90"/>
+        <Event tick="0" kind="cc" a="74" b="10"/>
+        <Event tick="0" kind="cc" a="7" b="100"/>
+        <Event tick="480" kind="cc" a="74" b="50"/>)");
+
+    REQUIRE (clipTemplate.controllerChases.size() == 2);
+
+    CHECK (clipTemplate.controllerChases[0].controller == 7);
+    REQUIRE (clipTemplate.controllerChases[0].points.size() == 1);
+    CHECK (clipTemplate.controllerChases[0].points[0].tick == 0);
+    CHECK (clipTemplate.controllerChases[0].points[0].value == 100);
+
+    // In tick order, whatever the child order.
+    CHECK (clipTemplate.controllerChases[1].controller == 74);
+    REQUIRE (clipTemplate.controllerChases[1].points.size() == 3);
+    CHECK (clipTemplate.controllerChases[1].points[0].tick == 0);
+    CHECK (clipTemplate.controllerChases[1].points[0].value == 10);
+    CHECK (clipTemplate.controllerChases[1].points[1].tick == 480);
+    CHECK (clipTemplate.controllerChases[1].points[1].value == 50);
+    CHECK (clipTemplate.controllerChases[1].points[2].tick == 960);
+    CHECK (clipTemplate.controllerChases[1].points[2].value == 90);
+
+    CHECK (clipTemplate.programChanges.empty());
+}
+
+TEST_CASE ("A template's program changes have a chase table of their own", "[render][SnapshotBuilder]")
+{
+    const auto clipTemplate = templateOfEventClip ("3840", R"(
+        <Event tick="1920" kind="programChange" a="12"/>
+        <Event tick="0" kind="programChange" a="5"/>)");
+
+    CHECK (clipTemplate.controllerChases.empty());
+    REQUIRE (clipTemplate.programChanges.size() == 2);
+    CHECK (clipTemplate.programChanges[0].tick == 0);
+    CHECK (clipTemplate.programChanges[0].value == 5);
+    CHECK (clipTemplate.programChanges[1].tick == 1920);
+    CHECK (clipTemplate.programChanges[1].value == 12);
+}
+
+TEST_CASE ("Values of one controller at one tick stand in a chase table in child order", "[render][SnapshotBuilder]")
+{
+    const auto clipTemplate = templateOfEventClip ("3840", R"(
+        <Event tick="100" kind="cc" a="7" b="1"/>
+        <Event tick="100" kind="cc" a="7" b="2"/>
+        <Event tick="100" kind="programChange" a="3"/>
+        <Event tick="100" kind="programChange" a="4"/>)");
+
+    REQUIRE (clipTemplate.controllerChases.size() == 1);
+    REQUIRE (clipTemplate.controllerChases[0].points.size() == 2);
+    CHECK (clipTemplate.controllerChases[0].points[0].value == 1);
+    CHECK (clipTemplate.controllerChases[0].points[1].value == 2);
+
+    REQUIRE (clipTemplate.programChanges.size() == 2);
+    CHECK (clipTemplate.programChanges[0].value == 3);
+    CHECK (clipTemplate.programChanges[1].value == 4);
+}
+
+TEST_CASE ("A chase table holds only what is played, and only controllers and program changes", "[render][SnapshotBuilder]")
+{
+    const auto clipTemplate = templateOfEventClip ("960", R"(
+        <Note tick="0" length="100" pitch="60"/>
+        <Event tick="0" kind="cc" a="7" b="100" enabled="0"/>
+        <Event tick="960" kind="cc" a="10" b="64"/>
+        <Event tick="0" kind="programChange" a="5" enabled="0"/>
+        <Event tick="2000" kind="programChange" a="6"/>
+        <Event tick="0" kind="pitchBend" a="10000"/>
+        <Event tick="0" kind="channelPressure" a="50"/>
+        <Event tick="0" kind="polyPressure" a="60" b="50"/>
+        <Event tick="0" kind="sysex" data="7e7f0601"/>
+        <Event tick="959" kind="cc" a="11" b="1"/>)");
+
+    // A disabled event, and one at or past the loop length, own no entry.
+    REQUIRE (clipTemplate.controllerChases.size() == 1);
+    CHECK (clipTemplate.controllerChases[0].controller == 11);
+    REQUIRE (clipTemplate.controllerChases[0].points.size() == 1);
+    CHECK (clipTemplate.controllerChases[0].points[0].tick == 959);
+    CHECK (clipTemplate.programChanges.empty());
+}
+
+TEST_CASE ("A step clip's chase tables hold the CC values of its cells at the starts of their columns", "[render][SnapshotBuilder]")
+{
+    // Column 1 is skipped: its value is not played, and column 2 begins at
+    // tick 240.
+    const auto clipTemplate = templateOfStepClip (R"(stepLength="240" stepCount="3" skipMask="010")", R"(
+        <Lane id="22222222222242228222222222222222">
+          <Cell on="1"><CcValue cc="74" value="20"/></Cell>
+          <Cell><CcValue cc="74" value="99"/></Cell>
+          <Cell><CcValue cc="74" value="60"/><CcValue cc="71" value="5"/></Cell>
+        </Lane>)");
+
+    REQUIRE (clipTemplate.controllerChases.size() == 2);
+
+    CHECK (clipTemplate.controllerChases[0].controller == 71);
+    REQUIRE (clipTemplate.controllerChases[0].points.size() == 1);
+    CHECK (clipTemplate.controllerChases[0].points[0].tick == 240);
+    CHECK (clipTemplate.controllerChases[0].points[0].value == 5);
+
+    CHECK (clipTemplate.controllerChases[1].controller == 74);
+    REQUIRE (clipTemplate.controllerChases[1].points.size() == 2);
+    CHECK (clipTemplate.controllerChases[1].points[0].tick == 0);
+    CHECK (clipTemplate.controllerChases[1].points[0].value == 20);
+    CHECK (clipTemplate.controllerChases[1].points[1].tick == 240);
+    CHECK (clipTemplate.controllerChases[1].points[1].value == 60);
+
+    CHECK (clipTemplate.programChanges.empty());
+}
+
 TEST_CASE ("A step clip's template has the loop length that follows from its grid", "[render][SnapshotBuilder]")
 {
     // Eight columns of 240 ticks, the fourth skipped, reset after the sixth:

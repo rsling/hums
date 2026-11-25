@@ -1,0 +1,30 @@
+# Chase at a seek target: the value found in an earlier placement
+# (docs/RENDERING.md -> Chase).
+#
+# Two placements of two clips, each clip 960 long:
+#
+#   "Intro"  0 to 960      cc 74 = 40 and cc 7 = 90 at 0, cc 74 = 80 at 480
+#   (nothing from 960 to 1920)
+#   "Verse"  1920 to 3840  note 62 at 480 (240 long), cc 7 = 60 at 720
+#
+# Playback begins at 2000 by a seek: 80 ticks into the first pass of "Verse".
+#
+#   cc 7    "Verse" has a cc 7, but at 720 of its loop: by 2000 it has not
+#           sent it, and there is no pass before its first. So the placement
+#           before is asked: "Intro" sent cc 7 = 90 at tick 0
+#   cc 74   "Verse" has none; "Intro" sent 80 last, at 480
+#
+# The gap between the placements changes nothing: the synth still stands
+# where "Intro" left it. By number: cc 7, then cc 74.
+#
+# Then "Verse": note 62 at 2400; at 2640 its off, then cc 7 = 60; the same
+# in the second pass at 3360 and 3600.
+seek 2000
+2000 0 1 cc 7 90
+2000 0 1 cc 74 80
+2400 0 1 noteOn 62 100
+2640 0 1 noteOff 62 64
+2640 0 1 cc 7 60
+3360 0 1 noteOn 62 100
+3600 0 1 noteOff 62 64
+3600 0 1 cc 7 60

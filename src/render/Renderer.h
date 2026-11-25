@@ -22,6 +22,10 @@ namespace render
 // in the Kernel's order. A note-on of a pitch that still sounds on its
 // destination is preceded by the earlier note's off (Same-pitch overlap).
 //
+// Where playback leaves the order of the ticks (a seek, the wrap of the
+// transport loop), `seek` gives what goes out in between: the offs of the
+// notes that sound, and the controllers chased for the new place.
+//
 // The Renderer keeps nothing itself. The notes that sound are held by the
 // NoteTracker the caller hands in, from one window to the next. Std only, and
 // it allocates nothing.
@@ -122,6 +126,70 @@ public:
     //
     // The buffer must have room for one event at least.
     static std::size_t stop (NoteTracker& tracker, std::int64_t stopTick, std::span<Event> buffer) noexcept;
+
+    // How far the chase of a seek has come: every track before `track` is
+    // done, and of that track's values the first `valuesTaken`. A seek is
+    // begun at { 0, 0 }.
+    struct ChasePosition
+    {
+        std::size_t track = 0;
+        std::size_t valuesTaken = 0;
+    };
+
+    struct SeekProgress
+    {
+        // How many events were written to the front of the buffer.
+        std::size_t eventCount = 0;
+        // Where to go on when the seek is not finished.
+        ChasePosition next;
+        // Whether everything of the seek has been written.
+        bool isFinished = false;
+    };
+
+    // When playback leaves the tick `leftTick` for the tick `targetTick`: a
+    // seek, the wrap of the transport loop (from loopEnd to loopStart), or
+    // playback beginning at a tick (then both are that tick). Written once,
+    // for all of them (docs/RENDERING.md -> Transport loop, Chase). Into the
+    // buffer go, in this order:
+    //
+    // - the note-off of every note that still sounds, as `stop` gives them,
+    //   at `leftTick`. No note is begun again at the target, also not one
+    //   that would be sounding there;
+    // - for every track that is heard, in track order, at `targetTick`: what
+    //   it has last sent before that tick (Kernel::chase), so that the synth
+    //   stands as if playback had come there from tick 0. Of one track first
+    //   bank select (cc 0, then cc 32), then the program change, then the
+    //   other controllers in the order of their numbers (decided 25 Nov
+    //   2026): a synth takes a bank select with the next program change, and
+    //   a new patch may set its controllers anew.
+    //
+    // After it the caller renders on from { targetTick, 0 }: what stands at
+    // the target itself is played, not chased. When the buffer runs full the
+    // caller comes back with the returned position:
+    //
+    //     Renderer::ChasePosition position;
+    //
+    //     for (bool isFinished = false; ! isFinished;)
+    //     {
+    //         const auto progress = Renderer::seek (snapshot, audibleTracks, destinationOfTrack, tracker, leftTick, targetTick, position, buffer);
+    //         ... the first progress.eventCount events of the buffer ...
+    //         position = progress.next;
+    //         isFinished = progress.isFinished;
+    //     }
+    //
+    // audibleTracks and destinationOfTrack are what `render` takes. The
+    // buffer must have room for one event at least. Like `render` it
+    // allocates nothing.
+    //
+    // 0 <= leftTick, 0 <= targetTick.
+    static SeekProgress seek (const Snapshot& snapshot,
+                              const std::vector<bool>& audibleTracks,
+                              std::span<const std::size_t> destinationOfTrack,
+                              NoteTracker& tracker,
+                              std::int64_t leftTick,
+                              std::int64_t targetTick,
+                              ChasePosition from,
+                              std::span<Event> buffer) noexcept;
 };
 
 } // namespace render

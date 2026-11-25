@@ -1,0 +1,39 @@
+<!-- Golden case: chase at a seek target, the value found in an earlier placement. The seek lands in a second placement, of another clip, which has sent no controller yet; there is a gap between the two. -->
+<Project schemaVersion="1" name="Chase, value in an earlier placement" ppq="960">
+  <Routing>
+    <Player id="75047fadd6744ef8b155875c78705b18" name="Synth"/>
+    <PadMap/>
+  </Routing>
+  <Timeline>
+    <TempoEvent tick="0" bpm="120"/>
+    <TimeSigEvent tick="0" numerator="4" denominator="4"/>
+  </Timeline>
+  <ClipPool>
+    <Clip id="d85fc74d77094f7589ce73e5ff0d4079" name="Intro" kind="event" loopLength="960">
+      <Events>
+        <Event tick="0" kind="cc" a="74" b="40"/>
+        <Event tick="0" kind="cc" a="7" b="90"/>
+        <Event tick="480" kind="cc" a="74" b="80"/>
+      </Events>
+    </Clip>
+    <Clip id="ce255b0211aa4d0ca506e1ed2e0b123a" name="Verse" kind="event" loopLength="960">
+      <Events>
+        <Note tick="480" length="240" pitch="62"/>
+        <Event tick="720" kind="cc" a="7" b="60"/>
+      </Events>
+    </Clip>
+  </ClipPool>
+  <Tracks>
+    <Track id="e5a9c6509a794ba4a4a7f25f6c1cde45" name="Lead" playerId="75047fadd6744ef8b155875c78705b18" channel="1">
+      <Placements>
+        <Placement id="601fba86d7b04206ade29f34ed02a4bb" clipId="d85fc74d77094f7589ce73e5ff0d4079" start="0" length="960"/>
+        <Placement id="20bef9b23f30479c9da19c47e6b1bed9" clipId="ce255b0211aa4d0ca506e1ed2e0b123a" start="1920" length="1920"/>
+      </Placements>
+      <AutomationLanes/>
+      <Knobs/>
+      <Slots/>
+    </Track>
+  </Tracks>
+  <Session/>
+  <UiState/>
+</Project>

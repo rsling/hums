@@ -1,0 +1,31 @@
+# Chase at a seek target: the value found in the current placement
+# (docs/RENDERING.md -> Chase).
+#
+# One placement, 0 to 1920, of a clip of that length. Playback begins at 960
+# by a seek. Before anything of tick 960 is played, the track sends what it
+# would have sent last before 960 had it been played from tick 0:
+#
+#   cc 0 = 1, cc 32 = 2      at tick 0
+#   program change 5         at tick 0
+#   cc 7 = 100               at tick 0
+#   cc 74 = 50               at 480; the 10 at tick 0 is older, and the 90 at
+#                            1440 lies behind the seek
+#
+# They go out at the tick of the seek, in the order of the chase and not in
+# the clip's child order (there cc 74 is first and cc 0 last): bank select,
+# cc 0 then cc 32; the program change; the other controllers by number.
+#
+# cc 10 = 64 stands at 960 itself. It is not before the seek, so it is not
+# chased: it is played, with the note of that tick, after the chase.
+#
+# Then on as ever: at 1440 the note's off, then cc 74 = 90.
+seek 960
+960 0 1 cc 0 1
+960 0 1 cc 32 2
+960 0 1 programChange 5 0
+960 0 1 cc 7 100
+960 0 1 cc 74 50
+960 0 1 cc 10 64
+960 0 1 noteOn 60 100
+1440 0 1 noteOff 60 64
+1440 0 1 cc 74 90

@@ -1,0 +1,18 @@
+# Chase at a seek target: no value at all (docs/RENDERING.md -> Chase).
+#
+# One placement, 0 to 1920, of a clip of that length. Playback begins at 960
+# by a seek.
+#
+#   cc 74 = 64        stands at 1440, behind the seek. The placement is in
+#                     its first pass and no placement lies before it, so
+#                     cc 74 has no value before 960: nothing is sent for it
+#   pitch bend 10000  stands at tick 0, before the seek, and is not sent
+#                     either: the chase is for controllers and program
+#                     changes only
+#   note 60, 0 to 480 ended before the seek; notes are never chased
+#
+# So the seek sends nothing, and the first event is the note of 960.
+seek 960
+960 0 1 noteOn 64 100
+1440 0 1 noteOff 64 64
+1440 0 1 cc 74 64

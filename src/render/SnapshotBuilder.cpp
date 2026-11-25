@@ -272,6 +272,30 @@ namespace
         }
     }
 
+// The chase tables of a template (docs/RENDERING.md -> Chase), from its
+// events as they stand: in tick order, and in child order at one tick. Each
+// table is therefore in that order too, and of two values at one tick the
+// later child's is the later one.
+    void addChaseTables (ClipTemplate& clipTemplate)
+    {
+        std::map<int, std::vector<ClipTemplate::ChasePoint>> pointsOfController;
+
+        for (const auto& event : clipTemplate.events)
+        {
+            if (event.kind == ClipTemplate::EventKind::cc)
+                pointsOfController[event.a].push_back ({ event.tick, event.b });
+            else if (event.kind == ClipTemplate::EventKind::programChange)
+                clipTemplate.programChanges.push_back ({ event.tick, event.a });
+        }
+
+        // A map goes through its keys in order: the controllers by number.
+        for (auto& [controller, points] : pointsOfController)
+        {
+            points.shrink_to_fit();
+            clipTemplate.controllerChases.push_back ({ controller, std::move (points) });
+        }
+    }
+
 } // namespace
 
 Snapshot SnapshotBuilder::build (const model::ProjectModel& project)
@@ -324,7 +348,11 @@ ClipTemplate SnapshotBuilder::templateOf (const model::ClipModel& clip)
         return earlier.tick < later.tick;
     });
 
+    addChaseTables (clipTemplate);
+
     // Fixed in size once built: nothing is left over to grow into.
+    clipTemplate.controllerChases.shrink_to_fit();
+    clipTemplate.programChanges.shrink_to_fit();
     clipTemplate.notes.shrink_to_fit();
     clipTemplate.events.shrink_to_fit();
     clipTemplate.sysexBytes.shrink_to_fit();

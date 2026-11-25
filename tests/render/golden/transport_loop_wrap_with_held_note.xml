@@ -1,0 +1,34 @@
+<!-- Golden case: transport loop wrap with a held note. The loop is 960 to 1920; one note is held across its end, another would be sounding at its start. -->
+<Project schemaVersion="1" name="Transport loop wrap with a held note" ppq="960">
+  <Routing>
+    <Player id="b8dccd4e65bc4798ac5f66778bfdf7dc" name="Synth"/>
+    <PadMap/>
+  </Routing>
+  <Timeline>
+    <TempoEvent tick="0" bpm="120"/>
+    <TimeSigEvent tick="0" numerator="4" denominator="4"/>
+  </Timeline>
+  <ClipPool>
+    <Clip id="9bd7a135240a4b448bb710dd6d608078" name="Four beats" kind="event" loopLength="3840">
+      <Events>
+        <Note tick="480" length="960" pitch="62"/>
+        <Note tick="1440" length="1920" pitch="60"/>
+        <Event tick="0" kind="cc" a="7" b="100"/>
+        <Event tick="480" kind="cc" a="74" b="30"/>
+        <Event tick="2400" kind="cc" a="74" b="90"/>
+      </Events>
+    </Clip>
+  </ClipPool>
+  <Tracks>
+    <Track id="9c00219109bc477a8c6c41dfb6716ad3" name="Lead" playerId="b8dccd4e65bc4798ac5f66778bfdf7dc" channel="1">
+      <Placements>
+        <Placement id="6831315a37ed43c5af535308ac93eda9" clipId="9bd7a135240a4b448bb710dd6d608078" start="0" length="3840"/>
+      </Placements>
+      <AutomationLanes/>
+      <Knobs/>
+      <Slots/>
+    </Track>
+  </Tracks>
+  <Session/>
+  <UiState/>
+</Project>

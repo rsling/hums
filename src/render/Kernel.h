@@ -2,6 +2,7 @@
 
 #include "render/snapshot/Snapshot.h"
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <span>
@@ -124,6 +125,44 @@ public:
                             Position from,
                             std::int64_t end,
                             std::span<Event> buffer) noexcept;
+
+    // What a track has last sent of each controller and as a program change
+    // before a tick.
+    struct ChasedValues
+    {
+        // Stands where the track has sent no value.
+        static constexpr int none = -1;
+
+        ChasedValues() noexcept
+        {
+            controllerValues.fill (none);
+        }
+
+        // By controller number: its last value, 0 to 127, or `none`.
+        std::array<int, 128> controllerValues;
+        // The last program, 0 to 127, or `none`.
+        int program = none;
+    };
+
+    // The chase (docs/RENDERING.md -> Chase): for one track, the value of
+    // each controller and the program that it would have sent last had it
+    // been played from tick 0 up to `tick`. What stands at `tick` itself is
+    // not among them; expand gives that from `tick` on.
+    //
+    // The track's placements are gone through backwards from the tick. In
+    // each, the last value before the tick of the loop to which the
+    // placement has come is looked up in the clip's chase table; if the pass
+    // of the loop in hand has none, the pass before had the table's last
+    // one; if the placement has played none at all, the placement before it
+    // is asked. A controller is settled by the first value found. What a
+    // placement does not play counts for nothing: what stands before its
+    // `offset` in its first pass, and what its end cuts off.
+    //
+    // It reads the Snapshot alone and allocates nothing; its cost is that of
+    // the track's placements times the controllers their clips hold.
+    //
+    // 0 <= tick.
+    static ChasedValues chase (const Snapshot& snapshot, std::size_t trackIndex, std::int64_t tick) noexcept;
 };
 
 } // namespace render

@@ -119,7 +119,129 @@ namespace
 // Kernel is asked, not what is played.
     constexpr std::size_t kernelEventsAtATime = 64;
 
+// The controllers that select a bank: they go out before the program change.
+    constexpr int bankSelectCoarse = 0;
+    constexpr int bankSelectFine = 32;
+
+// One track's chased values while they are written, in the order in which
+// they go out, and the count by which a later call finds its place again.
+    struct ChaseOutput
+    {
+        Output& output;
+        // What every event of the track has in common.
+        Renderer::Event eventOfTrack;
+        // Of the track's values, how many an earlier call has given already,
+        // and how many have come by in this call.
+        std::size_t valuesToSkip = 0;
+        std::size_t valuesSeen = 0;
+
+        // Takes the track's next value, if it has one for this controller or
+        // as a program. False when the buffer has no room for it: the value
+        // is then not counted as seen.
+        bool take (Renderer::EventKind kind, int a, int b, int chasedValue) noexcept
+        {
+            if (chasedValue == Kernel::ChasedValues::none)
+                return true;
+
+            if (valuesSeen >= valuesToSkip)
+            {
+                if (output.room() == 0)
+                    return false;
+
+                Renderer::Event event = eventOfTrack;
+                event.kind = kind;
+                event.a = a;
+                event.b = b;
+                output.write (event);
+            }
+
+            ++valuesSeen;
+            return true;
+        }
+
+        bool takeController (const Kernel::ChasedValues& values, int controller) noexcept
+        {
+            const int value = values.controllerValues[static_cast<std::size_t> (controller)];
+            return take (Renderer::EventKind::cc, controller, value, value);
+        }
+    };
+
+// Everything a track has last sent before the seek's target: bank select,
+// the program change, then the other controllers by number. False when the
+// buffer ran full on the way.
+    bool writeChasedValues (const Kernel::ChasedValues& values, ChaseOutput& chaseOutput) noexcept
+    {
+        if (! chaseOutput.takeController (values, bankSelectCoarse) || ! chaseOutput.takeController (values, bankSelectFine))
+            return false;
+
+        if (! chaseOutput.take (Renderer::EventKind::programChange, values.program, 0, values.program))
+            return false;
+
+        for (int controller = 0; controller < static_cast<int> (values.controllerValues.size()); ++controller)
+        {
+            if (controller == bankSelectCoarse || controller == bankSelectFine)
+                continue;
+
+            if (! chaseOutput.takeController (values, controller))
+                return false;
+        }
+
+        return true;
+    }
+
 } // namespace
+
+Renderer::SeekProgress Renderer::seek (const Snapshot& snapshot,
+                                       const std::vector<bool>& audibleTracks,
+                                       std::span<const std::size_t> destinationOfTrack,
+                                       NoteTracker& tracker,
+                                       std::int64_t leftTick,
+                                       std::int64_t targetTick,
+                                       ChasePosition from,
+                                       std::span<Event> buffer) noexcept
+{
+    assert (audibleTracks.size() == snapshot.trackPlans.size());
+    assert (destinationOfTrack.size() == snapshot.trackPlans.size());
+    assert (leftTick >= 0 && targetTick >= 0);
+    assert (! buffer.empty());
+
+    Output output;
+    output.buffer = buffer;
+
+    // First the offs of what sounds. The tracker holds what is left of them,
+    // so a later call goes on by itself.
+    while (tracker.soundingCount() > 0)
+    {
+        if (output.room() == 0)
+            return { output.eventCount, from, false };
+
+        const std::optional<NoteTracker::NoteOff> off = tracker.takeOffAtStop (leftTick);
+        assert (off.has_value());
+        output.write (eventOf (*off));
+    }
+
+    // Then the chase, track after track.
+    for (std::size_t trackIndex = from.track; trackIndex < snapshot.trackPlans.size(); ++trackIndex)
+    {
+        if (! audibleTracks[trackIndex])
+            continue;
+
+        Event eventOfTrack;
+        eventOfTrack.tick = targetTick;
+        eventOfTrack.track = trackIndex;
+        eventOfTrack.destination = destinationOfTrack[trackIndex];
+        eventOfTrack.channel = snapshot.trackPlans[trackIndex].channel;
+
+        // Only the track the caller comes back to can have values that are
+        // given already.
+        ChaseOutput chaseOutput { output, eventOfTrack, trackIndex == from.track ? from.valuesTaken : 0, 0 };
+
+        if (! writeChasedValues (Kernel::chase (snapshot, trackIndex, targetTick), chaseOutput))
+            return { output.eventCount, { trackIndex, chaseOutput.valuesSeen }, false };
+    }
+
+    return { output.eventCount, { snapshot.trackPlans.size(), 0 }, true };
+}
 
 Renderer::Progress Renderer::render (const Snapshot& snapshot,
                                      const std::vector<bool>& audibleTracks,

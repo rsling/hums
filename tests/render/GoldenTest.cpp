@@ -7,9 +7,23 @@
 //
 // The expected file begins with a header: lines that begin with "#", which
 // say what the case shows and how its events follow from the rules, and at
-// most one line "range <start> <end>", the ticks that are rendered. Without
-// that line the case is rendered from tick 0 to the arrangement end. Every
-// line after the header is one event, in the order in which it goes out:
+// most one of each of these lines, which say how the case is played:
+//
+//   range <start> <end>   the ticks that are rendered; without it, tick 0 to
+//                         the arrangement end
+//   seek <tick>           playback begins at that tick by a seek: the
+//                         controllers are chased for it, and the case is
+//                         rendered from there to the end of the range. A
+//                         range line beside it begins at that tick
+//   loop <start> <end>    the transport loop. The case is rendered from its
+//                         start to the loop's end; there playback wraps, once
+//                         (the offs of the notes that sound, the controllers
+//                         chased for the loop's start), and goes on from the
+//                         loop's start to the end of the range, which lies
+//                         inside the loop or on its end
+//
+// Every line after the header is one event, in the order in which it goes
+// out:
 //
 //   tick track channel type a b [data]
 //
@@ -22,7 +36,8 @@
 // The case is rendered as an SMF export would render it: Kernel + NoteTracker
 // through render::Renderer, the destinations those without hardware, and at
 // the end of the range every note that still sounds is ended. Every track is
-// heard.
+// heard. A seek and a loop are what an export does not have: there the case
+// is played as the engine plays, through Renderer::seek.
 //
 // With HUMS_REGENERATE_GOLDEN=1 in the environment (the regenerate_golden
 // target) nothing is compared: the event lines of every expected file are
@@ -69,6 +84,11 @@ struct Expected
     // The ticks to render, when the header says them.
     std::optional<std::int64_t> rangeStart;
     std::optional<std::int64_t> rangeEnd;
+    // Where playback begins by a seek, when the header says so.
+    std::optional<std::int64_t> seekTick;
+    // The transport loop, when the header says one.
+    std::optional<std::int64_t> loopStart;
+    std::optional<std::int64_t> loopEnd;
     juce::StringArray eventLines;
 };
 
@@ -111,6 +131,31 @@ Expected readExpected (const juce::File& file)
             REQUIRE (expected.rangeStart.has_value());
             REQUIRE (expected.rangeEnd.has_value());
             REQUIRE (*expected.rangeStart <= *expected.rangeEnd);
+        }
+        else if (line.startsWith ("seek "))
+        {
+            INFO ("header line: " << line);
+            REQUIRE_FALSE (expected.seekTick.has_value());
+
+            const auto words = juce::StringArray::fromTokens (line, " ", "");
+            REQUIRE (words.size() == 2);
+
+            expected.seekTick = tickOf (words[1]);
+            REQUIRE (expected.seekTick.has_value());
+        }
+        else if (line.startsWith ("loop "))
+        {
+            INFO ("header line: " << line);
+            REQUIRE_FALSE (expected.loopStart.has_value());
+
+            const auto words = juce::StringArray::fromTokens (line, " ", "");
+            REQUIRE (words.size() == 3);
+
+            expected.loopStart = tickOf (words[1]);
+            expected.loopEnd = tickOf (words[2]);
+            REQUIRE (expected.loopStart.has_value());
+            REQUIRE (expected.loopEnd.has_value());
+            REQUIRE (*expected.loopStart < *expected.loopEnd);
         }
         else if (! line.startsWith ("#"))
         {
@@ -170,40 +215,112 @@ juce::String lineOf (const render::Renderer::Event& event, const render::Snapsho
     return line;
 }
 
-// What the project renders to over [start, end), one line per event, ended
-// as an export ends: with the off of every note that still sounds.
-juce::StringArray renderedLines (const model::ProjectModel& project, std::int64_t start, std::int64_t end)
+// A case while it is played: the tracker lives from one stretch of ticks to
+// the next, and every event that goes out becomes a line.
+struct Playback
 {
-    const render::Snapshot snapshot = render::SnapshotBuilder::build (project);
-    const auto destinations = render::SnapshotBuilder::destinationsWithoutHardware (project);
-    const std::vector<bool> allTracks (snapshot.trackPlans.size(), true);
-
-    render::NoteTracker tracker (destinations.count);
-    std::array<render::Renderer::Event, 256> buffer;
-    juce::StringArray lines;
-
-    render::Kernel::Position position { start, 0 };
-
-    for (bool isFinished = false; ! isFinished;)
+    explicit Playback (const model::ProjectModel& project)
+        : snapshot (render::SnapshotBuilder::build (project)),
+          destinations (render::SnapshotBuilder::destinationsWithoutHardware (project)),
+          allTracks (snapshot.trackPlans.size(), true),
+          tracker (destinations.count)
     {
-        const auto progress = render::Renderer::render (snapshot, allTracks, destinations.destinationOfTrack, tracker, position, end, buffer);
-
-        for (std::size_t index = 0; index < progress.eventCount; ++index)
-            lines.add (lineOf (buffer[index], snapshot));
-
-        position = progress.next;
-        isFinished = progress.isFinished;
     }
 
-    do
+    void addLines (std::size_t eventCount)
     {
-        const std::size_t offCount = render::Renderer::stop (tracker, end, buffer);
-
-        for (std::size_t index = 0; index < offCount; ++index)
+        for (std::size_t index = 0; index < eventCount; ++index)
             lines.add (lineOf (buffer[index], snapshot));
-    } while (tracker.soundingCount() > 0);
+    }
 
-    return lines;
+    // The ticks [start, end), in their order.
+    void render (std::int64_t start, std::int64_t end)
+    {
+        render::Kernel::Position position { start, 0 };
+
+        for (bool isFinished = false; ! isFinished;)
+        {
+            const auto progress = render::Renderer::render (snapshot, allTracks, destinations.destinationOfTrack, tracker, position, end, buffer);
+
+            addLines (progress.eventCount);
+            position = progress.next;
+            isFinished = progress.isFinished;
+        }
+    }
+
+    // Playback leaves one tick for another: a seek, or the wrap of the loop.
+    void seek (std::int64_t leftTick, std::int64_t targetTick)
+    {
+        render::Renderer::ChasePosition position;
+
+        for (bool isFinished = false; ! isFinished;)
+        {
+            const auto progress = render::Renderer::seek (snapshot, allTracks, destinations.destinationOfTrack, tracker, leftTick, targetTick, position, buffer);
+
+            addLines (progress.eventCount);
+            position = progress.next;
+            isFinished = progress.isFinished;
+        }
+    }
+
+    // The end, as an export ends: with the off of every note that still
+    // sounds.
+    void stop (std::int64_t stopTick)
+    {
+        do
+        {
+            addLines (render::Renderer::stop (tracker, stopTick, buffer));
+        } while (tracker.soundingCount() > 0);
+    }
+
+    const render::Snapshot snapshot;
+    const render::SnapshotBuilder::Destinations destinations;
+    const std::vector<bool> allTracks;
+    render::NoteTracker tracker;
+    std::array<render::Renderer::Event, 256> buffer;
+    juce::StringArray lines;
+};
+
+// What the project renders to when it is played as the header of its
+// expected file says, one line per event. `arrangementEnd` is where a case
+// without a range line ends.
+juce::StringArray renderedLines (const model::ProjectModel& project, const Expected& expected, std::int64_t arrangementEnd)
+{
+    const std::int64_t start = expected.seekTick.value_or (expected.rangeStart.value_or (0));
+    const std::int64_t end = expected.rangeEnd.value_or (arrangementEnd);
+
+    // A range line beside a seek line must not say another start.
+    if (expected.seekTick.has_value() && expected.rangeStart.has_value())
+        REQUIRE (*expected.rangeStart == *expected.seekTick);
+
+    REQUIRE (start <= end);
+
+    Playback playback (project);
+
+    // Nothing sounds yet, so the seek gives the chase alone.
+    if (expected.seekTick.has_value())
+        playback.seek (start, start);
+
+    if (expected.loopStart.has_value())
+    {
+        // One wrap: up to the loop's end, back to its start, and on to the
+        // end of the range.
+        REQUIRE (start < *expected.loopEnd);
+        REQUIRE (*expected.loopStart <= end);
+        REQUIRE (end <= *expected.loopEnd);
+
+        playback.render (start, *expected.loopEnd);
+        playback.seek (*expected.loopEnd, *expected.loopStart);
+        playback.render (*expected.loopStart, end);
+    }
+    else
+    {
+        playback.render (start, end);
+    }
+
+    playback.stop (end);
+
+    return playback.lines;
 }
 
 // Renders the fixture of a case and holds the result to its expected file,
@@ -227,7 +344,7 @@ void checkGoldenCase (const juce::String& caseName)
     // say its range.
     REQUIRE ((expected.rangeEnd.has_value() || arrangementEnd.has_value()));
 
-    const juce::StringArray rendered = renderedLines (project, expected.rangeStart.value_or (0), expected.rangeEnd.value_or (arrangementEnd.value_or (0)));
+    const juce::StringArray rendered = renderedLines (project, expected, arrangementEnd.value_or (0));
 
     if (isRegenerating())
     {
@@ -381,4 +498,29 @@ TEST_CASE ("golden: gate across the loop point into a different pitch", "[render
 TEST_CASE ("golden: gate across the loop point into the same pitch (retrigger, not merge)", "[render][golden]")
 {
     checkGoldenCase ("step_gate_across_loop_point_into_same_pitch");
+}
+
+TEST_CASE ("golden: chase at a seek target, value found in the current placement", "[render][golden]")
+{
+    checkGoldenCase ("chase_value_in_current_placement");
+}
+
+TEST_CASE ("golden: chase at a seek target, value found in an earlier iteration of the placement", "[render][golden]")
+{
+    checkGoldenCase ("chase_value_in_earlier_iteration");
+}
+
+TEST_CASE ("golden: chase at a seek target, value found in an earlier placement", "[render][golden]")
+{
+    checkGoldenCase ("chase_value_in_earlier_placement");
+}
+
+TEST_CASE ("golden: chase at a seek target, no value at all", "[render][golden]")
+{
+    checkGoldenCase ("chase_no_value_at_all");
+}
+
+TEST_CASE ("golden: transport loop wrap with a held note", "[render][golden]")
+{
+    checkGoldenCase ("transport_loop_wrap_with_held_note");
 }

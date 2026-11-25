@@ -1,0 +1,40 @@
+# Transport loop wrap with a held note (docs/RENDERING.md -> Transport loop:
+# at loopEnd pending note-offs are sent, then controllers are chased for
+# loopStart and playback continues there).
+#
+# One placement, 0 to 3840, of a clip of that length:
+#
+#   cc 7 = 100 at 0, cc 74 = 30 at 480, cc 74 = 90 at 2400
+#   note 62 at 480, 960 long   -> 480 to 1440
+#   note 60 at 1440, 1920 long -> 1440 to 3360
+#
+# The transport loop is 960 to 1920. Playback begins at 0, wraps once, and
+# the case ends when it comes to 1920 a second time.
+#
+# From 0 to the loop's end: cc 7; at 480 cc 74 and then note 62; at 1440 the
+# off of note 62, then note 60, which is held across the loop's end.
+#
+# The wrap at 1920:
+#
+#   note-off 60 at 1920   the held note is ended where playback leaves; its
+#                         own off at 3360 is never sent
+#   the chase for 960, at tick 960: cc 7 = 100 (of tick 0), cc 74 = 30 (of
+#                         480). The 90 of 2400 is never reached
+#   no note               note 62 would be sounding at 960 (480 to 1440): it
+#                         is not begun again
+#
+# From 960 again: at 1440 note 60 once more (the off of note 62 does not come
+# a second time: the note was not begun). At 1920 the case ends, and note 60
+# gets its off there.
+range 0 1920
+loop 960 1920
+0 0 1 cc 7 100
+480 0 1 cc 74 30
+480 0 1 noteOn 62 100
+1440 0 1 noteOff 62 64
+1440 0 1 noteOn 60 100
+1920 0 1 noteOff 60 64
+960 0 1 cc 7 100
+960 0 1 cc 74 30
+1440 0 1 noteOn 60 100
+1920 0 1 noteOff 60 64

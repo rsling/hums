@@ -1,0 +1,38 @@
+<!-- Golden case: chase at a seek target, the value found in the current placement. Playback begins at 960 by a seek; the clip has set a bank, a program and two controllers before that. -->
+<Project schemaVersion="1" name="Chase, value in the current placement" ppq="960">
+  <Routing>
+    <Player id="7b278a273ad9426a910a51be56fa0a93" name="Synth"/>
+    <PadMap/>
+  </Routing>
+  <Timeline>
+    <TempoEvent tick="0" bpm="120"/>
+    <TimeSigEvent tick="0" numerator="4" denominator="4"/>
+  </Timeline>
+  <ClipPool>
+    <Clip id="4adab55180634f569db13f2f196c6541" name="Patch and filter" kind="event" loopLength="1920">
+      <Events>
+        <Note tick="960" length="480" pitch="60"/>
+        <Event tick="0" kind="cc" a="74" b="10"/>
+        <Event tick="0" kind="cc" a="7" b="100"/>
+        <Event tick="0" kind="programChange" a="5"/>
+        <Event tick="0" kind="cc" a="32" b="2"/>
+        <Event tick="0" kind="cc" a="0" b="1"/>
+        <Event tick="480" kind="cc" a="74" b="50"/>
+        <Event tick="960" kind="cc" a="10" b="64"/>
+        <Event tick="1440" kind="cc" a="74" b="90"/>
+      </Events>
+    </Clip>
+  </ClipPool>
+  <Tracks>
+    <Track id="56127ac0abe2498a87c1c2f016d2a65c" name="Lead" playerId="7b278a273ad9426a910a51be56fa0a93" channel="1">
+      <Placements>
+        <Placement id="4f8382c8d6cc47008bd24a7d499e349d" clipId="4adab55180634f569db13f2f196c6541" start="0" length="1920"/>
+      </Placements>
+      <AutomationLanes/>
+      <Knobs/>
+      <Slots/>
+    </Track>
+  </Tracks>
+  <Session/>
+  <UiState/>
+</Project>

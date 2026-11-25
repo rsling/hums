@@ -120,6 +120,50 @@ bool areTheSame (const std::vector<Kernel::Event>& one, const std::vector<Kernel
     return true;
 }
 
+ClipTemplate::Event programChangeAt (std::int64_t tick, int program)
+{
+    ClipTemplate::Event event;
+    event.tick = tick;
+    event.kind = ClipTemplate::EventKind::programChange;
+    event.a = program;
+    return event;
+}
+
+// A template of events only, in tick order, with the chase tables that
+// SnapshotBuilder makes from them: the cc events by controller, in the
+// order of the controller numbers, and the program changes.
+ClipTemplate chasedTemplateWith (std::int64_t loopLength, std::vector<ClipTemplate::Event> events)
+{
+    ClipTemplate clipTemplate = templateWith (loopLength, {}, std::move (events));
+
+    for (int controller = 0; controller < 128; ++controller)
+    {
+        ClipTemplate::ControllerChase controllerChase;
+        controllerChase.controller = controller;
+
+        for (const auto& event : clipTemplate.events)
+            if (event.kind == ClipTemplate::EventKind::cc && event.a == controller)
+                controllerChase.points.push_back ({ event.tick, event.b });
+
+        if (! controllerChase.points.empty())
+            clipTemplate.controllerChases.push_back (controllerChase);
+    }
+
+    for (const auto& event : clipTemplate.events)
+        if (event.kind == ClipTemplate::EventKind::programChange)
+            clipTemplate.programChanges.push_back ({ event.tick, event.a });
+
+    return clipTemplate;
+}
+
+// What track 0 has last sent of a controller before a tick.
+int chasedController (const Snapshot& snapshot, int controller, std::int64_t tick)
+{
+    return Kernel::chase (snapshot, 0, tick).controllerValues[static_cast<std::size_t> (controller)];
+}
+
+const int none = Kernel::ChasedValues::none;
+
 // Two tracks, several placements, notes and events that share ticks: enough
 // for the ways of asking to differ if they could.
 Snapshot busySnapshot()
@@ -469,4 +513,157 @@ TEST_CASE ("The largest ticks a document can hold are played without overflow", 
     // The second pass begins loopLength ticks after the first tick 0, which
     // is past the placement's end: nothing more up to the last tick.
     CHECK (expandAll (snapshot, 5000, largestTick).empty());
+}
+
+TEST_CASE ("The chase gives the last value before the tick in the pass of the loop in hand", "[render][kernel][chase]")
+{
+    const auto snapshot = onePlacementOf (chasedTemplateWith (1920, { ccAt (0, 74, 10), ccAt (480, 74, 50), ccAt (1440, 74, 90) }), 0, 1920, 0);
+
+    CHECK (chasedController (snapshot, 74, 960) == 50);
+    CHECK (chasedController (snapshot, 74, 481) == 50);
+    CHECK (chasedController (snapshot, 74, 1441) == 90);
+
+    // What stands at the tick itself is not before it.
+    CHECK (chasedController (snapshot, 74, 480) == 10);
+    CHECK (chasedController (snapshot, 74, 0) == none);
+
+    // A controller the clip never sends.
+    CHECK (chasedController (snapshot, 7, 960) == none);
+    CHECK (Kernel::chase (snapshot, 0, 960).program == none);
+}
+
+TEST_CASE ("The chase is counted in the placement: from its start, not from tick 0", "[render][kernel][chase]")
+{
+    const auto snapshot = onePlacementOf (chasedTemplateWith (960, { ccAt (100, 74, 10) }), 5000, 960, 0);
+
+    CHECK (chasedController (snapshot, 74, 5000) == none);
+    CHECK (chasedController (snapshot, 74, 5100) == none);
+    CHECK (chasedController (snapshot, 74, 5101) == 10);
+}
+
+TEST_CASE ("Where the pass in hand has sent nothing yet, the chase gives the last value of the pass before", "[render][kernel][chase]")
+{
+    const auto snapshot = onePlacementOf (chasedTemplateWith (960, { ccAt (480, 74, 70), ccAt (720, 74, 30) }), 0, 3840, 0);
+
+    // 80 ticks into the third pass.
+    CHECK (chasedController (snapshot, 74, 2000) == 30);
+    // On the loop point itself.
+    CHECK (chasedController (snapshot, 74, 960) == 30);
+    // In the first pass there is no pass before.
+    CHECK (chasedController (snapshot, 74, 400) == none);
+    // And once the pass in hand has sent one, that one counts.
+    CHECK (chasedController (snapshot, 74, 2401) == 70);
+}
+
+TEST_CASE ("What stands before a placement's offset is not chased in its first pass", "[render][kernel][chase]")
+{
+    // The placement begins 300 ticks into the loop: tick t is tick 300 + t
+    // of the clip.
+    const auto snapshot = onePlacementOf (chasedTemplateWith (960, { ccAt (100, 74, 11), ccAt (500, 74, 55) }), 0, 1920, 300);
+
+    // Tick 400 of the clip: the value of tick 100 lies before it in the
+    // loop, and was never played.
+    CHECK (chasedController (snapshot, 74, 100) == none);
+    CHECK (chasedController (snapshot, 74, 200) == none);
+    CHECK (chasedController (snapshot, 74, 201) == 55);
+
+    // The second pass begins at 660 and plays the loop from its tick 0.
+    CHECK (chasedController (snapshot, 74, 660) == 55);
+    CHECK (chasedController (snapshot, 74, 760) == 55);
+    CHECK (chasedController (snapshot, 74, 761) == 11);
+}
+
+TEST_CASE ("A first pass that played none of a table gives the second pass nothing to fall back on", "[render][kernel][chase]")
+{
+    const auto snapshot = onePlacementOf (chasedTemplateWith (960, { ccAt (100, 74, 11) }), 0, 1920, 300);
+
+    CHECK (chasedController (snapshot, 74, 600) == none);
+    // The second pass begins at 660; its tick 100 comes at 760.
+    CHECK (chasedController (snapshot, 74, 660) == none);
+    CHECK (chasedController (snapshot, 74, 760) == none);
+    CHECK (chasedController (snapshot, 74, 761) == 11);
+}
+
+TEST_CASE ("What the end of a placement cuts off is not chased, however far behind it the tick lies", "[render][kernel][chase]")
+{
+    const auto snapshot = onePlacementOf (chasedTemplateWith (960, { ccAt (0, 74, 1), ccAt (800, 74, 99) }), 0, 500, 0);
+
+    CHECK (chasedController (snapshot, 74, 500) == 1);
+    CHECK (chasedController (snapshot, 74, 900) == 1);
+    CHECK (chasedController (snapshot, 74, 50000) == 1);
+}
+
+TEST_CASE ("A placement that has no value yet leaves the controller to the placement before it", "[render][kernel][chase]")
+{
+    // "Intro" from 0 to 960, a gap, "Verse" from 1920.
+    const auto snapshot = snapshotWith (
+        { chasedTemplateWith (960, { ccAt (0, 7, 90), ccAt (0, 74, 40), ccAt (480, 74, 80) }),
+          chasedTemplateWith (960, { ccAt (0, 9, 5), ccAt (720, 7, 60) }) },
+        { planWith (1, { { 0, 960, 0, 0 }, { 1920, 1920, 0, 1 } }) });
+
+    // In the gap, and on the tick at which the second placement begins.
+    CHECK (chasedController (snapshot, 7, 1500) == 90);
+    CHECK (chasedController (snapshot, 74, 1920) == 80);
+    CHECK (chasedController (snapshot, 9, 1920) == none);
+
+    // 80 ticks into "Verse": its own cc 9, and of "Intro" what "Verse" has
+    // not sent yet or never sends.
+    const auto early = Kernel::chase (snapshot, 0, 2000);
+    CHECK (early.controllerValues[9] == 5);
+    CHECK (early.controllerValues[7] == 90);
+    CHECK (early.controllerValues[74] == 80);
+
+    // Once "Verse" has sent its cc 7, that is the last one.
+    const auto late = Kernel::chase (snapshot, 0, 2641);
+    CHECK (late.controllerValues[7] == 60);
+    CHECK (late.controllerValues[74] == 80);
+}
+
+TEST_CASE ("Program changes are chased like a controller, and of two values at one tick the later one counts", "[render][kernel][chase]")
+{
+    const auto snapshot = onePlacementOf (
+        chasedTemplateWith (960, { programChangeAt (0, 3), programChangeAt (0, 8), ccAt (0, 7, 1), ccAt (0, 7, 2), programChangeAt (500, 12) }),
+        0,
+        1920,
+        0);
+
+    CHECK (Kernel::chase (snapshot, 0, 0).program == none);
+    CHECK (Kernel::chase (snapshot, 0, 1).program == 8);
+    CHECK (chasedController (snapshot, 7, 1) == 2);
+    CHECK (Kernel::chase (snapshot, 0, 501).program == 12);
+    CHECK (Kernel::chase (snapshot, 0, 961).program == 8);
+}
+
+TEST_CASE ("Each track is chased by itself, and a track without placements has no values", "[render][kernel][chase]")
+{
+    const auto snapshot = snapshotWith ({ chasedTemplateWith (960, { ccAt (0, 7, 100) }), chasedTemplateWith (960, { ccAt (0, 7, 50) }) },
+                                        { planWith (1, { { 0, 960, 0, 0 } }), planWith (2, { { 0, 960, 0, 1 } }), planWith (3, {}) });
+
+    CHECK (Kernel::chase (snapshot, 0, 500).controllerValues[7] == 100);
+    CHECK (Kernel::chase (snapshot, 1, 500).controllerValues[7] == 50);
+
+    const auto ofEmptyTrack = Kernel::chase (snapshot, 2, 500);
+    CHECK (ofEmptyTrack.program == none);
+    CHECK (std::all_of (ofEmptyTrack.controllerValues.begin(), ofEmptyTrack.controllerValues.end(), [] (int value) { return value == none; }));
+}
+
+TEST_CASE ("The largest ticks a document can hold are chased without overflow", "[render][kernel][chase]")
+{
+    // As in the test of expand: a loop nearly as long as time itself, an
+    // offset nearly as large, and a placement that ends at the largest tick.
+    const std::int64_t loopLength = largestTick - 10;
+    const std::int64_t placementStart = 1000;
+    const std::int64_t offset = loopLength - 5;
+
+    const auto snapshot = onePlacementOf (chasedTemplateWith (loopLength, { ccAt (0, 74, 10), ccAt (loopLength - 3, 74, 20) }),
+                                          placementStart,
+                                          largestTick - placementStart,
+                                          offset);
+
+    // Tick loopLength - 3 of the clip comes 2 ticks in, tick 0 after 5.
+    CHECK (chasedController (snapshot, 74, 1002) == none);
+    CHECK (chasedController (snapshot, 74, 1003) == 20);
+    CHECK (chasedController (snapshot, 74, 1005) == 20);
+    CHECK (chasedController (snapshot, 74, 1006) == 10);
+    CHECK (chasedController (snapshot, 74, largestTick) == 10);
 }

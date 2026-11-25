@@ -1,0 +1,33 @@
+<!-- Golden case: chase at a seek target, the value found in an earlier iteration of the placement. The seek lands early in the third pass of the loop, before anything of that pass. -->
+<Project schemaVersion="1" name="Chase, value in an earlier iteration" ppq="960">
+  <Routing>
+    <Player id="76f8005f68eb4ea390b2e87e5caf7e16" name="Synth"/>
+    <PadMap/>
+  </Routing>
+  <Timeline>
+    <TempoEvent tick="0" bpm="120"/>
+    <TimeSigEvent tick="0" numerator="4" denominator="4"/>
+  </Timeline>
+  <ClipPool>
+    <Clip id="a8401250d0b749179ac83355b7013ede" name="One beat" kind="event" loopLength="960">
+      <Events>
+        <Note tick="0" length="240" pitch="60"/>
+        <Event tick="240" kind="programChange" a="3"/>
+        <Event tick="480" kind="cc" a="74" b="70"/>
+        <Event tick="720" kind="cc" a="74" b="30"/>
+      </Events>
+    </Clip>
+  </ClipPool>
+  <Tracks>
+    <Track id="169b9623e8674690bf70f8ee1eb9da3e" name="Lead" playerId="76f8005f68eb4ea390b2e87e5caf7e16" channel="1">
+      <Placements>
+        <Placement id="a30b91c02cbe44a190cadf7350b0218d" clipId="a8401250d0b749179ac83355b7013ede" start="0" length="3840"/>
+      </Placements>
+      <AutomationLanes/>
+      <Knobs/>
+      <Slots/>
+    </Track>
+  </Tracks>
+  <Session/>
+  <UiState/>
+</Project>

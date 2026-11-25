@@ -252,7 +252,98 @@ namespace
         return true;
     }
 
+// The last value of a chase table that a placement has played before a tick,
+// or nothing when it has played none of them by then. The tick lies behind
+// the placement's start; when it lies behind its end too, the placement has
+// played all it ever plays.
+//
+// Counted without a sign, as in phaseAt.
+    std::optional<int> lastValuePlayedBefore (const std::vector<ClipTemplate::ChasePoint>& points,
+                                              const TrackPlan::Placement& placement,
+                                              std::int64_t loopLength,
+                                              std::int64_t tick) noexcept
+    {
+        if (points.empty())
+            return std::nullopt;
+
+        const auto ticksPlayed = static_cast<std::uint64_t> (std::min (tick, endOf (placement)) - placement.start);
+        const auto ticksIntoClip = static_cast<std::uint64_t> (placement.offset) + ticksPlayed;
+
+        // How often the placement has passed the loop point, and where in
+        // the loop it stands.
+        const std::uint64_t passesBefore = ticksIntoClip / static_cast<std::uint64_t> (loopLength);
+        const auto phase = static_cast<std::int64_t> (ticksIntoClip % static_cast<std::uint64_t> (loopLength));
+
+        // The first pass began at the offset, and what stands before it was
+        // not played then.
+        const auto wasPlayedInPass = [&placement] (const ClipTemplate::ChasePoint& point, std::uint64_t pass) {
+            return pass > 0 || point.tick >= placement.offset;
+        };
+
+        // In the pass in hand: the last point before the phase.
+        const auto firstPointNotBefore = std::lower_bound (points.begin(), points.end(), phase, [] (const ClipTemplate::ChasePoint& point, std::int64_t pointTick) {
+            return point.tick < pointTick;
+        });
+
+        if (firstPointNotBefore != points.begin())
+        {
+            const ClipTemplate::ChasePoint& lastBefore = *std::prev (firstPointNotBefore);
+
+            if (wasPlayedInPass (lastBefore, passesBefore))
+                return lastBefore.value;
+
+            // It stands before the offset, and so does every point before
+            // it: the first pass has played none so far, and there is no
+            // pass before the first.
+            return std::nullopt;
+        }
+
+        // The pass before went to the end of the loop, so its last point is
+        // the table's last.
+        if (passesBefore > 0 && wasPlayedInPass (points.back(), passesBefore - 1))
+            return points.back().value;
+
+        return std::nullopt;
+    }
+
 } // namespace
+
+Kernel::ChasedValues Kernel::chase (const Snapshot& snapshot, std::size_t trackIndex, std::int64_t tick) noexcept
+{
+    assert (trackIndex < snapshot.trackPlans.size());
+    assert (tick >= 0);
+
+    const TrackPlan& plan = snapshot.trackPlans[trackIndex];
+    ChasedValues values;
+
+    // The placements that begin before the tick, the latest first: only
+    // they have played anything by then.
+    const auto firstNotBegun = std::partition_point (plan.placements.begin(), plan.placements.end(), [tick] (const TrackPlan::Placement& placement) {
+        return placement.start < tick;
+    });
+
+    for (auto placement = firstNotBegun; placement != plan.placements.begin();)
+    {
+        --placement;
+
+        const ClipTemplate& clipTemplate = snapshot.clipTemplates[placement->templateIndex];
+
+        // The first value found for a controller is its last before the
+        // tick; an earlier placement no longer changes it.
+        for (const ClipTemplate::ControllerChase& controllerChase : clipTemplate.controllerChases)
+        {
+            int& value = values.controllerValues[static_cast<std::size_t> (controllerChase.controller)];
+
+            if (value == ChasedValues::none)
+                value = lastValuePlayedBefore (controllerChase.points, *placement, clipTemplate.loopLength, tick).value_or (ChasedValues::none);
+        }
+
+        if (values.program == ChasedValues::none)
+            values.program = lastValuePlayedBefore (clipTemplate.programChanges, *placement, clipTemplate.loopLength, tick).value_or (ChasedValues::none);
+    }
+
+    return values;
+}
 
 Kernel::Progress Kernel::expand (const Snapshot& snapshot,
                                  const std::vector<bool>& audibleTracks,

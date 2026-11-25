@@ -1,0 +1,30 @@
+# Chase at a seek target: the value found in an earlier iteration of the
+# placement (docs/RENDERING.md -> Chase).
+#
+# One placement, 0 to 3840, of a clip 960 long: four passes of the loop,
+# beginning at 0, 960, 1920 and 2880. In each pass: note 60 at 0 (240 long),
+# program change 3 at 240, cc 74 = 70 at 480, cc 74 = 30 at 720.
+#
+# Playback begins at 2000 by a seek: 80 ticks into the third pass. That pass
+# has sent neither a program change nor cc 74 yet, so the values are those
+# the pass before left behind, the last of the table of each:
+#
+#   program change 3    of 1200 (960 + 240)
+#   cc 74 = 30          of 1680 (960 + 720), not the 70 of 1440
+#
+# The program change goes out before the controller. The note of 1920 began
+# before the seek and is not brought in.
+#
+# Then the rest of the third pass (2160, 2400, 2640) and the fourth: note 60
+# at 2880; at 3120 its off, then the program change.
+seek 2000
+2000 0 1 programChange 3 0
+2000 0 1 cc 74 30
+2160 0 1 programChange 3 0
+2400 0 1 cc 74 70
+2640 0 1 cc 74 30
+2880 0 1 noteOn 60 100
+3120 0 1 noteOff 60 64
+3120 0 1 programChange 3 0
+3360 0 1 cc 74 70
+3600 0 1 cc 74 30

@@ -1,0 +1,33 @@
+<!-- Golden case: chase at a seek target, no value at all. The clip sets its only controller after the seek target; its pitch bend before the target is never chased. -->
+<Project schemaVersion="1" name="Chase, no value at all" ppq="960">
+  <Routing>
+    <Player id="583467ff90394e4994fc9877e55dd01a" name="Synth"/>
+    <PadMap/>
+  </Routing>
+  <Timeline>
+    <TempoEvent tick="0" bpm="120"/>
+    <TimeSigEvent tick="0" numerator="4" denominator="4"/>
+  </Timeline>
+  <ClipPool>
+    <Clip id="1a60c552a76a4a3a91c6565f9b3cc7fc" name="Late filter" kind="event" loopLength="1920">
+      <Events>
+        <Note tick="0" length="480" pitch="60"/>
+        <Note tick="960" length="480" pitch="64"/>
+        <Event tick="0" kind="pitchBend" a="10000"/>
+        <Event tick="1440" kind="cc" a="74" b="64"/>
+      </Events>
+    </Clip>
+  </ClipPool>
+  <Tracks>
+    <Track id="59bca23aeb9c4f819f0ae1aec7b224e0" name="Lead" playerId="583467ff90394e4994fc9877e55dd01a" channel="1">
+      <Placements>
+        <Placement id="c22f60abeeb141d3829b816bb6146c99" clipId="1a60c552a76a4a3a91c6565f9b3cc7fc" start="0" length="1920"/>
+      </Placements>
+      <AutomationLanes/>
+      <Knobs/>
+      <Slots/>
+    </Track>
+  </Tracks>
+  <Session/>
+  <UiState/>
+</Project>
