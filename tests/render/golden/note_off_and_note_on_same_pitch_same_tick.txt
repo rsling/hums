@@ -1,0 +1,24 @@
+# Note-off and note-on of one pitch at one tick (docs/RENDERING.md ->
+# Equal-tick order: note-offs falling due come before note-ons).
+#
+# The clip's loop is 960 long and holds two notes of pitch 60:
+#
+#   first   at 0,   480 long, velocity 100, off velocity 10
+#   second  at 480, 480 long, velocity 80,  off velocity 20
+#
+# Each ends on the tick at which the other begins, the second at the loop
+# point, where the first comes round again. The placement covers two passes,
+# 0 to 1920.
+#
+# At 480, 960 and 1440 the earlier note's off is due and goes out before the
+# note-on. It is the note's own off at its own tick, sent once: the note no
+# longer sounds when the next begins, so the same-pitch rule has nothing to
+# end. The last note ends at 1920, where the range ends.
+0 0 1 noteOn 60 100
+480 0 1 noteOff 60 10
+480 0 1 noteOn 60 80
+960 0 1 noteOff 60 20
+960 0 1 noteOn 60 100
+1440 0 1 noteOff 60 10
+1440 0 1 noteOn 60 80
+1920 0 1 noteOff 60 20

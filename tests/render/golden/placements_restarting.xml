@@ -1,0 +1,33 @@
+<!-- Golden case: two placements of one clip, the second restarting (offset 0). The first ends in the middle of the loop. -->
+<Project schemaVersion="1" name="Two placements, the second restarting" ppq="960">
+  <Routing>
+    <Player id="ca1900ce19144366aa2fba9c230c892b" name="Synth"/>
+    <PadMap/>
+  </Routing>
+  <Timeline>
+    <TempoEvent tick="0" bpm="120"/>
+    <TimeSigEvent tick="0" numerator="4" denominator="4"/>
+  </Timeline>
+  <ClipPool>
+    <Clip id="c901177fa6b9443f8e7805edaafcf577" name="Phrase" kind="event" loopLength="1920">
+      <Events>
+        <Note tick="0" length="480" pitch="60"/>
+        <Note tick="720" length="480" pitch="67"/>
+        <Note tick="1440" length="720" pitch="64"/>
+      </Events>
+    </Clip>
+  </ClipPool>
+  <Tracks>
+    <Track id="ad282acb90574e70b6925ccc43c313d9" name="Lead" playerId="ca1900ce19144366aa2fba9c230c892b" channel="1">
+      <Placements>
+        <Placement id="37201c8559c442c39f5da55a3192af5e" clipId="c901177fa6b9443f8e7805edaafcf577" start="0" length="2880"/>
+        <Placement id="feec12175c4a48bc984e58db1d60f55a" clipId="c901177fa6b9443f8e7805edaafcf577" start="2880" length="1920"/>
+      </Placements>
+      <AutomationLanes/>
+      <Knobs/>
+      <Slots/>
+    </Track>
+  </Tracks>
+  <Session/>
+  <UiState/>
+</Project>

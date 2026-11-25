@@ -1,0 +1,25 @@
+# Bank select -> program change -> note at one tick (docs/RENDERING.md ->
+# Equal-tick order).
+#
+# The clip, in child order: note 64 at 960 (480 long), note 60 at 0 (960
+# long), then four events at 960: cc 0 = 1 and cc 32 = 2 (bank select),
+# program change 5, cc 7 = 100.
+#
+# At tick 960 the order is: the note-off that falls due, then the events that
+# are no notes in child order, then the note-on.
+#
+#   note-off   note 60 began at 0 and ends at 960
+#   events     cc 0, cc 32, program change 5, cc 7: as the clip has them.
+#              Nothing is put in another order, neither by kind (cc 7 stays
+#              behind the program change) nor by number
+#   note-on    note 64, although it is the clip's first child
+#
+# Note 64 ends at 1440.
+0 0 1 noteOn 60 100
+960 0 1 noteOff 60 64
+960 0 1 cc 0 1
+960 0 1 cc 32 2
+960 0 1 programChange 5 0
+960 0 1 cc 7 100
+960 0 1 noteOn 64 100
+1440 0 1 noteOff 64 64

@@ -1,0 +1,33 @@
+<!-- Golden case: split during a held note. One placement (start 960, length 1920) split at 1920 and again at 2400, both inside the note. -->
+<Project schemaVersion="1" name="Split during a held note" ppq="960">
+  <Routing>
+    <Player id="e96b6805f3a84b91b18e3a613ebf77db" name="Synth"/>
+    <PadMap/>
+  </Routing>
+  <Timeline>
+    <TempoEvent tick="0" bpm="120"/>
+    <TimeSigEvent tick="0" numerator="4" denominator="4"/>
+  </Timeline>
+  <ClipPool>
+    <Clip id="aaa0dcb099c446559df285093d246ade" name="Held" kind="event" loopLength="1920">
+      <Events>
+        <Note tick="240" length="1440" pitch="60"/>
+        <Event tick="960" kind="cc" a="1" b="64"/>
+      </Events>
+    </Clip>
+  </ClipPool>
+  <Tracks>
+    <Track id="22a2c4bfbc094da2b98d4f8b13780677" name="Lead" playerId="e96b6805f3a84b91b18e3a613ebf77db" channel="1">
+      <Placements>
+        <Placement id="5620095092e7495fbdfe42fdb1af6411" clipId="aaa0dcb099c446559df285093d246ade" start="960" length="960"/>
+        <Placement id="dee3127605a040508021902717d4bfb6" clipId="aaa0dcb099c446559df285093d246ade" start="1920" length="480" offset="960"/>
+        <Placement id="8c22244c6cb44dc5943c20f6db3e4f8d" clipId="aaa0dcb099c446559df285093d246ade" start="2400" length="480" offset="1440"/>
+      </Placements>
+      <AutomationLanes/>
+      <Knobs/>
+      <Slots/>
+    </Track>
+  </Tracks>
+  <Session/>
+  <UiState/>
+</Project>

@@ -1,0 +1,35 @@
+<!-- Golden case: bank select, program change and a note at one tick. In child order the note stands first and a volume cc last. -->
+<Project schemaVersion="1" name="Bank select, program change and note at one tick" ppq="960">
+  <Routing>
+    <Player id="703570d603384c66927833015cdc0387" name="Synth"/>
+    <PadMap/>
+  </Routing>
+  <Timeline>
+    <TempoEvent tick="0" bpm="120"/>
+    <TimeSigEvent tick="0" numerator="4" denominator="4"/>
+  </Timeline>
+  <ClipPool>
+    <Clip id="a28e1bb75d42475bb3f9927382990b8e" name="Patch change" kind="event" loopLength="1920">
+      <Events>
+        <Note tick="960" length="480" pitch="64"/>
+        <Note tick="0" length="960" pitch="60"/>
+        <Event tick="960" kind="cc" a="0" b="1"/>
+        <Event tick="960" kind="cc" a="32" b="2"/>
+        <Event tick="960" kind="programChange" a="5"/>
+        <Event tick="960" kind="cc" a="7" b="100"/>
+      </Events>
+    </Clip>
+  </ClipPool>
+  <Tracks>
+    <Track id="b4ece9302a1f4e8dbf72e4188f5c7ed9" name="Lead" playerId="703570d603384c66927833015cdc0387" channel="1">
+      <Placements>
+        <Placement id="91ab93252bae43da8c47db33aeb27571" clipId="a28e1bb75d42475bb3f9927382990b8e" start="0" length="1920"/>
+      </Placements>
+      <AutomationLanes/>
+      <Knobs/>
+      <Slots/>
+    </Track>
+  </Tracks>
+  <Session/>
+  <UiState/>
+</Project>

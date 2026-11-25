@@ -1,0 +1,31 @@
+<!-- Golden case: note-off and note-on of one pitch at one tick. Two notes of pitch 60, each ending where the next begins, also across the loop point. -->
+<Project schemaVersion="1" name="Note-off and note-on of one pitch at one tick" ppq="960">
+  <Routing>
+    <Player id="ebfdd916e16b43f483246bcbd2444c8e" name="Synth"/>
+    <PadMap/>
+  </Routing>
+  <Timeline>
+    <TempoEvent tick="0" bpm="120"/>
+    <TimeSigEvent tick="0" numerator="4" denominator="4"/>
+  </Timeline>
+  <ClipPool>
+    <Clip id="9c8d3005037d49dfab0f108cb1596f1a" name="Repeated note" kind="event" loopLength="960">
+      <Events>
+        <Note tick="0" length="480" pitch="60" velocity="100" offVelocity="10"/>
+        <Note tick="480" length="480" pitch="60" velocity="80" offVelocity="20"/>
+      </Events>
+    </Clip>
+  </ClipPool>
+  <Tracks>
+    <Track id="36a8c800486c4a02875980329217b4d4" name="Lead" playerId="ebfdd916e16b43f483246bcbd2444c8e" channel="1">
+      <Placements>
+        <Placement id="bcd49a00445f4e5ba0a56a8d41df2fe6" clipId="9c8d3005037d49dfab0f108cb1596f1a" start="0" length="1920"/>
+      </Placements>
+      <AutomationLanes/>
+      <Knobs/>
+      <Slots/>
+    </Track>
+  </Tracks>
+  <Session/>
+  <UiState/>
+</Project>

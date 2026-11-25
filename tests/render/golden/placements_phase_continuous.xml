@@ -1,0 +1,33 @@
+<!-- Golden case: two placements of one clip, phase-continuous (merged). As placements_restarting, but the second placement has offset 960. -->
+<Project schemaVersion="1" name="Two placements, phase-continuous" ppq="960">
+  <Routing>
+    <Player id="47fe414e639d405a909c591b80b43816" name="Synth"/>
+    <PadMap/>
+  </Routing>
+  <Timeline>
+    <TempoEvent tick="0" bpm="120"/>
+    <TimeSigEvent tick="0" numerator="4" denominator="4"/>
+  </Timeline>
+  <ClipPool>
+    <Clip id="b71c6c7823584933a996bc9f809fd00c" name="Phrase" kind="event" loopLength="1920">
+      <Events>
+        <Note tick="0" length="480" pitch="60"/>
+        <Note tick="720" length="480" pitch="67"/>
+        <Note tick="1440" length="720" pitch="64"/>
+      </Events>
+    </Clip>
+  </ClipPool>
+  <Tracks>
+    <Track id="c975c44554654f8ba3c7e2f6859ba88b" name="Lead" playerId="47fe414e639d405a909c591b80b43816" channel="1">
+      <Placements>
+        <Placement id="001c2c123aa746d1bdff004dc10c755e" clipId="b71c6c7823584933a996bc9f809fd00c" start="0" length="2880"/>
+        <Placement id="0bdef871101a40c6a663a65dd9b7105a" clipId="b71c6c7823584933a996bc9f809fd00c" start="2880" length="1920" offset="960"/>
+      </Placements>
+      <AutomationLanes/>
+      <Knobs/>
+      <Slots/>
+    </Track>
+  </Tracks>
+  <Session/>
+  <UiState/>
+</Project>

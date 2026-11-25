@@ -1,0 +1,33 @@
+<!-- Golden case: same-pitch overlap on one track. A short note of pitch 60 inside a long one, and two notes of pitch 72 that begin on one tick. -->
+<Project schemaVersion="1" name="Same-pitch overlap on one track" ppq="960">
+  <Routing>
+    <Player id="6fc909c9a54e48709e098eb8a64ad048" name="Synth"/>
+    <PadMap/>
+  </Routing>
+  <Timeline>
+    <TempoEvent tick="0" bpm="120"/>
+    <TimeSigEvent tick="0" numerator="4" denominator="4"/>
+  </Timeline>
+  <ClipPool>
+    <Clip id="e2110e26e1c04971b26325601b5c47c3" name="Overlaps" kind="event" loopLength="1920">
+      <Events>
+        <Note tick="0" length="960" pitch="60" velocity="100" offVelocity="10"/>
+        <Note tick="480" length="240" pitch="60" velocity="80" offVelocity="20"/>
+        <Note tick="1200" length="100" pitch="72" velocity="100" offVelocity="30"/>
+        <Note tick="1200" length="300" pitch="72" velocity="90" offVelocity="40"/>
+      </Events>
+    </Clip>
+  </ClipPool>
+  <Tracks>
+    <Track id="8a83660282cf485bb303a93edc9d9b78" name="Lead" playerId="6fc909c9a54e48709e098eb8a64ad048" channel="1">
+      <Placements>
+        <Placement id="ae0d98f79de94cadb23e22c03b4657d2" clipId="e2110e26e1c04971b26325601b5c47c3" start="0" length="1920"/>
+      </Placements>
+      <AutomationLanes/>
+      <Knobs/>
+      <Slots/>
+    </Track>
+  </Tracks>
+  <Session/>
+  <UiState/>
+</Project>

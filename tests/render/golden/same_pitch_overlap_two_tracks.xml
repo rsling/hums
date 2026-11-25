@@ -1,0 +1,53 @@
+<!-- Golden case: same-pitch overlap across two tracks on one destination. Three tracks on one Player: two on channel 1, one on channel 2. -->
+<Project schemaVersion="1" name="Same-pitch overlap across two tracks" ppq="960">
+  <Routing>
+    <Player id="65c463548a9348699600654cba0d026f" name="Synth"/>
+    <PadMap/>
+  </Routing>
+  <Timeline>
+    <TempoEvent tick="0" bpm="120"/>
+    <TimeSigEvent tick="0" numerator="4" denominator="4"/>
+  </Timeline>
+  <ClipPool>
+    <Clip id="ed21fd96e9904d38baffed9bd8e88be9" name="Long" kind="event" loopLength="1920">
+      <Events>
+        <Note tick="0" length="960" pitch="60"/>
+        <Note tick="1200" length="200" pitch="64"/>
+      </Events>
+    </Clip>
+    <Clip id="f36c3a25fb88425290e789d9e8714aae" name="Short" kind="event" loopLength="1920">
+      <Events>
+        <Note tick="480" length="240" pitch="60"/>
+        <Note tick="1200" length="400" pitch="64"/>
+      </Events>
+    </Clip>
+  </ClipPool>
+  <Tracks>
+    <Track id="a688a19a095745639411fc36ea2b1854" name="First" playerId="65c463548a9348699600654cba0d026f" channel="1">
+      <Placements>
+        <Placement id="d2563d412d604e8098ad48b6548061e3" clipId="ed21fd96e9904d38baffed9bd8e88be9" start="0" length="1920"/>
+      </Placements>
+      <AutomationLanes/>
+      <Knobs/>
+      <Slots/>
+    </Track>
+    <Track id="41268659a2ba41b4b0e1519f28931502" name="Second" playerId="65c463548a9348699600654cba0d026f" channel="1">
+      <Placements>
+        <Placement id="e8cc14ebed0a4c6fac0f33dd0dcbef76" clipId="f36c3a25fb88425290e789d9e8714aae" start="0" length="1920"/>
+      </Placements>
+      <AutomationLanes/>
+      <Knobs/>
+      <Slots/>
+    </Track>
+    <Track id="e18da279197a482dafe081ee01d7ef4b" name="Other channel" playerId="65c463548a9348699600654cba0d026f" channel="2">
+      <Placements>
+        <Placement id="5571205174ee40ad8af7c84dd1c03257" clipId="ed21fd96e9904d38baffed9bd8e88be9" start="0" length="1920"/>
+      </Placements>
+      <AutomationLanes/>
+      <Knobs/>
+      <Slots/>
+    </Track>
+  </Tracks>
+  <Session/>
+  <UiState/>
+</Project>

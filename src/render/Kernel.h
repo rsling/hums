@@ -25,6 +25,11 @@ namespace render
 // - a note plays its full length, also across the loop point into the next
 //   pass, but not past the end of its placement: there it is cut.
 //
+// Placements of one clip that follow each other at once, each beginning at
+// the tick of the loop to which the one before has come, are played as the
+// one placement they add up to: a note sounds on across the seam, and is cut
+// only where the last of them ends. A split is therefore not heard.
+//
 // What comes out is in the order of the ticks. At one tick the tracks come in
 // their own order, and for each track first its events that are no notes,
 // then its notes, each group in the order the template has them.

@@ -34,7 +34,9 @@ struct TrackPlan
     int channel = 1;
 
     // The track's own placements in the order of their starts. No two share
-    // a tick, so one ends before or where the next begins.
+    // a tick, so one ends before or where the next begins. They stand here
+    // as the document has them: the Kernel plays those that continue each
+    // other without a break as one.
     std::vector<Placement> placements;
 };
 

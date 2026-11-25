@@ -1,0 +1,21 @@
+# Split during a held note (docs/RENDERING.md -> Per track; docs/SCHEMA.md ->
+# Placement: a split is audibly a no-op, held notes included).
+#
+# The clip's loop is 1920 long: note 60 at 240, 1440 long (240 to 1680), and
+# cc 1 at 960. One placement of it covered 960 to 2880. It was split at 1920
+# and again at 2400, which gives three placements of the same clip:
+#
+#   960 to 1920   offset 0
+#   1920 to 2400  offset (0 + 960) mod 1920 = 960
+#   2400 to 2880  offset (960 + 480) mod 1920 = 1440
+#
+# Each begins where the one before ends, at the tick of the loop that one has
+# come to, so the three are merged and played as the one placement they were:
+#
+#   note 60  960 + 240 = 1200 to 960 + 1680 = 2640. Both splits lie inside
+#            it: it is not cut at 1920 or at 2400, and it is not begun again
+#            there
+#   cc 1     960 + 960 = 1920, the first tick of the second placement
+1200 0 1 noteOn 60 100
+1920 0 1 cc 1 64
+2640 0 1 noteOff 60 64

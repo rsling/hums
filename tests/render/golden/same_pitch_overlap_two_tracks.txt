@@ -1,0 +1,36 @@
+# Same-pitch overlap across two tracks on one destination (docs/RENDERING.md
+# -> Same-pitch overlap; Equal-tick order: across tracks that share a
+# destination, tracks are processed in child order).
+#
+# All three tracks play into one Player. Tracks 0 and 1 are on channel 1 and
+# so share a destination and a channel; track 2 is on channel 2.
+#
+#   track 0 and track 2 (clip "Long")   note 60 at 0, 960 long; note 64 at
+#                                       1200, 200 long
+#   track 1 (clip "Short")              note 60 at 480, 240 long; note 64 at
+#                                       1200, 400 long
+#
+# Pitch 60 on channel 1: track 0's note sounds from 0. At 480 track 1 begins
+# the same pitch: track 0's off goes out immediately before track 1's on (the
+# off belongs to track 0, whose note it ends), and track 0's off at 960 is
+# cancelled. Track 1's note ends at 720.
+#
+# Pitch 64 on channel 1: both tracks begin it at 1200. The tracks come in
+# their own order, so track 0's note begins, is ended at once for track 1's,
+# and track 1's length counts: off at 1600, none at 1400.
+#
+# Track 2 plays the same notes on channel 2, which shares nothing with
+# channel 1: both its notes keep their own offs, at 960 and 1400. At ticks 0
+# and 1200 it comes last, after tracks 0 and 1.
+0 0 1 noteOn 60 100
+0 2 2 noteOn 60 100
+480 0 1 noteOff 60 64
+480 1 1 noteOn 60 100
+720 1 1 noteOff 60 64
+960 2 2 noteOff 60 64
+1200 0 1 noteOn 64 100
+1200 0 1 noteOff 64 64
+1200 1 1 noteOn 64 100
+1200 2 2 noteOn 64 100
+1400 2 2 noteOff 64 64
+1600 1 1 noteOff 64 64

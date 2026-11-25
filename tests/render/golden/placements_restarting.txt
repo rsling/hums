@@ -1,0 +1,38 @@
+# Two placements of one clip, the second restarting at offset 0
+# (docs/RENDERING.md -> Per track, Note windows).
+#
+# The clip's loop is 1920 long: note 60 at 0 (480 long), note 67 at 720 (480
+# long), note 64 at 1440 (720 long, across the loop point).
+#
+# The first placement covers 0 to 2880, one and a half passes, and ends at
+# tick 960 of the loop. The second follows at once, 2880 to 4800, with offset
+# 0. Its phase is not continuous with the first (that would be offset 960),
+# so the two are not merged: the first ends as any placement ends, and the
+# loop starts anew.
+#
+#   first placement, pass at 0     note 60 0 to 480, note 67 720 to 1200,
+#                                  note 64 1440 to 2160
+#   first placement, pass at 1920  note 60 1920 to 2400; note 67 at 2640
+#                                  would end at 3120 and is cut at 2880,
+#                                  where its placement ends
+#   second placement, pass at 2880 note 60 2880 to 3360, note 67 3600 to
+#                                  4080; note 64 at 4320 would end at 5040
+#                                  and is cut at 4800
+#
+# At 2880 the off of note 67 comes before the on of note 60.
+0 0 1 noteOn 60 100
+480 0 1 noteOff 60 64
+720 0 1 noteOn 67 100
+1200 0 1 noteOff 67 64
+1440 0 1 noteOn 64 100
+1920 0 1 noteOn 60 100
+2160 0 1 noteOff 64 64
+2400 0 1 noteOff 60 64
+2640 0 1 noteOn 67 100
+2880 0 1 noteOff 67 64
+2880 0 1 noteOn 60 100
+3360 0 1 noteOff 60 64
+3600 0 1 noteOn 67 100
+4080 0 1 noteOff 67 64
+4320 0 1 noteOn 64 100
+4800 0 1 noteOff 64 64

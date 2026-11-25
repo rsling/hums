@@ -1,0 +1,25 @@
+# Same-pitch overlap on one track (docs/RENDERING.md -> Same-pitch overlap).
+#
+# Pitch 60: a long note at 0 (960 long, off velocity 10) and a short one at
+# 480 inside it (240 long, velocity 80, off velocity 20).
+#
+#   0     the long note begins
+#   480   it still sounds: its off (off velocity 10) goes out immediately
+#         before the short note's on, and the off it would have had at 960
+#         is cancelled
+#   720   the short note ends with its own off (off velocity 20)
+#   960   nothing: no second off, no stuck note
+#
+# Pitch 72: two notes that begin on the very same tick, 1200. In child order
+# the first is 100 long (velocity 100, off velocity 30), the second 300 long
+# (velocity 90, off velocity 40). They fall under the rule like any others:
+# on, the first note's off, on, all at 1200, and the second note's length
+# counts: its off comes at 1500, and none at 1300.
+0 0 1 noteOn 60 100
+480 0 1 noteOff 60 10
+480 0 1 noteOn 60 80
+720 0 1 noteOff 60 20
+1200 0 1 noteOn 72 100
+1200 0 1 noteOff 72 30
+1200 0 1 noteOn 72 90
+1500 0 1 noteOff 72 40

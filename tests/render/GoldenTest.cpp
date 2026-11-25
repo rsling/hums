@@ -282,3 +282,38 @@ TEST_CASE ("golden: a track with no Player rendering normally", "[render][golden
 {
     checkGoldenCase ("track_without_player");
 }
+
+TEST_CASE ("golden: bank select, program change and note at one tick", "[render][golden]")
+{
+    checkGoldenCase ("bank_select_program_change_note");
+}
+
+TEST_CASE ("golden: note-off and note-on of one pitch at one tick", "[render][golden]")
+{
+    checkGoldenCase ("note_off_and_note_on_same_pitch_same_tick");
+}
+
+TEST_CASE ("golden: same-pitch overlap on one track", "[render][golden]")
+{
+    checkGoldenCase ("same_pitch_overlap_one_track");
+}
+
+TEST_CASE ("golden: same-pitch overlap across two tracks on one destination", "[render][golden]")
+{
+    checkGoldenCase ("same_pitch_overlap_two_tracks");
+}
+
+TEST_CASE ("golden: two placements of one clip, the second restarting", "[render][golden]")
+{
+    checkGoldenCase ("placements_restarting");
+}
+
+TEST_CASE ("golden: two placements of one clip, phase-continuous (merged)", "[render][golden]")
+{
+    checkGoldenCase ("placements_phase_continuous");
+}
+
+TEST_CASE ("golden: split during a held note", "[render][golden]")
+{
+    checkGoldenCase ("split_during_held_note");
+}

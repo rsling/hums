@@ -1,0 +1,37 @@
+# Two placements of one clip, phase-continuous: merged (docs/RENDERING.md ->
+# Per track).
+#
+# The clip and the first placement are those of placements_restarting: a loop
+# of 1920 with note 60 at 0 (480 long), note 67 at 720 (480 long), note 64 at
+# 1440 (720 long); the first placement covers 0 to 2880 and ends at tick
+# (0 + 2880) mod 1920 = 960 of the loop.
+#
+# Here the second placement, 2880 to 4800, has offset 960: it begins where
+# the first ends, and at the tick of the loop the first has come to. The two
+# are merged into one before rendering, so what is played is one placement
+# from 0 to 4800, with passes at 0, 1920 and 3840:
+#
+#   pass at 0     note 60 0 to 480, note 67 720 to 1200, note 64 1440 to 2160
+#   pass at 1920  note 60 1920 to 2400; note 67 2640 to 3120, straight
+#                 through 2880, where the first placement ends: not cut;
+#                 note 64 3360 to 4080
+#   pass at 3840  note 60 3840 to 4320; note 67 at 4560 would end at 5040 and
+#                 is cut at 4800, the end of the merged placement
+#
+# Nothing restarts at 2880: no note 60 there.
+0 0 1 noteOn 60 100
+480 0 1 noteOff 60 64
+720 0 1 noteOn 67 100
+1200 0 1 noteOff 67 64
+1440 0 1 noteOn 64 100
+1920 0 1 noteOn 60 100
+2160 0 1 noteOff 64 64
+2400 0 1 noteOff 60 64
+2640 0 1 noteOn 67 100
+3120 0 1 noteOff 67 64
+3360 0 1 noteOn 64 100
+3840 0 1 noteOn 60 100
+4080 0 1 noteOff 64 64
+4320 0 1 noteOff 60 64
+4560 0 1 noteOn 67 100
+4800 0 1 noteOff 67 64

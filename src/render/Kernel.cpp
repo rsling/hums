@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <iterator>
 #include <optional>
 
 namespace render
@@ -64,6 +65,44 @@ namespace
         const auto ticksIntoClip = static_cast<std::uint64_t> (placement.offset) + ticksIntoPlacement;
 
         return static_cast<std::int64_t> (ticksIntoClip % static_cast<std::uint64_t> (loopLength));
+    }
+
+// Whether a placement goes on where the one before it on its track ends: it
+// follows at once, has the same clip, and begins at the tick of the loop to
+// which the earlier one has come by its end. Two such placements are played
+// as one (docs/RENDERING.md -> Per track): that is what a split leaves.
+    bool continuesWithoutABreak (const TrackPlan::Placement& earlier, const TrackPlan::Placement& later, std::int64_t loopLength) noexcept
+    {
+        return later.templateIndex == earlier.templateIndex
+            && later.start == endOf (earlier)
+            && later.offset == phaseAt (earlier, loopLength, endOf (earlier));
+    }
+
+// How many ticks a note that begins at a tick in a placement may sound: its
+// length, or less when its placement ends first. A placement that is
+// continued without a break does not end for the note; the cut comes at the
+// end of the last placement that is one with this one.
+//
+// Only the placements the note reaches into are looked at, so a track cut
+// into many pieces costs a note no more than the pieces it spans.
+    std::int64_t lengthWithinMergedPlacements (const TrackPlan& plan,
+                                               std::vector<TrackPlan::Placement>::const_iterator placement,
+                                               std::int64_t loopLength,
+                                               std::int64_t tick,
+                                               std::int64_t noteLength) noexcept
+    {
+        auto last = placement;
+
+        for (auto next = std::next (last); next != plan.placements.end(); ++next)
+        {
+            if (endOf (*last) - tick >= noteLength || ! continuesWithoutABreak (*last, *next, loopLength))
+                break;
+
+            last = next;
+        }
+
+        // The tick lies inside the first of them, so at least one tick is left.
+        return std::min (noteLength, endOf (*last) - tick);
     }
 
 // How many ticks a loop that stands at `phase` has to go until the next of
@@ -194,10 +233,6 @@ namespace
             return note.tick < noteTick;
         });
 
-        // The placement's end cuts a note. The tick lies inside the placement,
-        // so at least one tick is left of it.
-        const std::int64_t ticksLeftOfPlacement = endOf (*placement) - tick;
-
         for (auto note = firstNote; note != clipTemplate.notes.end() && note->tick == phase; ++note)
         {
             Kernel::Event played;
@@ -207,7 +242,7 @@ namespace
             played.kind = Kernel::EventKind::noteOn;
             played.a = note->pitch;
             played.b = note->velocity;
-            played.offTick = tick + std::min (note->length, ticksLeftOfPlacement);
+            played.offTick = tick + lengthWithinMergedPlacements (plan, placement, clipTemplate.loopLength, tick, note->length);
             played.offVelocity = note->offVelocity;
 
             if (! output.take (played))

@@ -247,6 +247,99 @@ TEST_CASE ("The end of its placement cuts a note, also when the next placement f
     CHECK (events[1].offTick == 1300);
 }
 
+TEST_CASE ("A placement that goes on where the one before ends does not cut a note", "[render][kernel]")
+{
+    // The first placement ends at tick 500 of the loop, and the second
+    // begins there: what a split at 500 leaves.
+    const auto snapshot = snapshotWith ({ templateWith (960, { noteAt (400, 400, 60) }) },
+                                        { planWith (1, { { 0, 500, 0, 0 }, { 500, 960, 500, 0 } }) });
+    const auto events = expandAll (snapshot, 0, 10000);
+
+    // The note is not begun again at the seam, and the loop is not either.
+    REQUIRE (events.size() == 2);
+    CHECK (events[0].tick == 400);
+    CHECK (events[0].offTick == 800);
+    // The second pass of the loop begins at 960; the merged placement ends
+    // at 1460 and cuts its note.
+    CHECK (events[1].tick == 1360);
+    CHECK (events[1].offTick == 1460);
+}
+
+TEST_CASE ("A placement goes on at the tick of the loop to which an offset and several passes have brought the one before", "[render][kernel]")
+{
+    // The first placement begins 300 into a loop of 960 and is 1200 long: it
+    // ends at tick (300 + 1200) mod 960 = 540.
+    const auto snapshot = snapshotWith ({ templateWith (960, { noteAt (500, 200, 60) }) },
+                                        { planWith (1, { { 0, 1200, 300, 0 }, { 1200, 600, 540, 0 } }) });
+    const auto events = expandAll (snapshot, 0, 10000);
+
+    REQUIRE (events.size() == 2);
+    CHECK (events[0].tick == 200);
+    CHECK (events[0].offTick == 400);
+    // Across the seam at 1200.
+    CHECK (events[1].tick == 1160);
+    CHECK (events[1].offTick == 1360);
+}
+
+TEST_CASE ("A note sounds on through as many placements as continue each other, and is cut where the last ends", "[render][kernel]")
+{
+    const auto clipTemplate = templateWith (1920, { noteAt (0, 1500, 60) });
+
+    SECTION ("the note ends inside the third")
+    {
+        const auto events = expandAll (snapshotWith ({ clipTemplate }, { planWith (1, { { 0, 500, 0, 0 }, { 500, 500, 500, 0 }, { 1000, 700, 1000, 0 } }) }), 0, 10000);
+
+        REQUIRE (events.size() == 1);
+        CHECK (events[0].offTick == 1500);
+    }
+
+    SECTION ("the third ends before the note does")
+    {
+        const auto events = expandAll (snapshotWith ({ clipTemplate }, { planWith (1, { { 0, 500, 0, 0 }, { 500, 500, 500, 0 }, { 1000, 300, 1000, 0 } }) }), 0, 10000);
+
+        REQUIRE (events.size() == 1);
+        CHECK (events[0].offTick == 1300);
+    }
+
+    SECTION ("the third does not continue the second")
+    {
+        const auto events = expandAll (snapshotWith ({ clipTemplate }, { planWith (1, { { 0, 500, 0, 0 }, { 500, 500, 500, 0 }, { 1000, 700, 1100, 0 } }) }), 0, 10000);
+
+        REQUIRE (events.size() == 1);
+        CHECK (events[0].offTick == 1000);
+    }
+}
+
+TEST_CASE ("Placements are one only with the same clip, no gap and the phase continued", "[render][kernel]")
+{
+    // Two templates with the same content: two clips.
+    const auto clipTemplate = templateWith (960, { noteAt (400, 400, 60) });
+
+    SECTION ("another clip")
+    {
+        const auto events = expandAll (snapshotWith ({ clipTemplate, clipTemplate }, { planWith (1, { { 0, 500, 0, 0 }, { 500, 300, 500, 1 } }) }), 0, 10000);
+
+        REQUIRE (events.size() == 1);
+        CHECK (events[0].offTick == 500);
+    }
+
+    SECTION ("a gap of one tick")
+    {
+        const auto events = expandAll (snapshotWith ({ clipTemplate }, { planWith (1, { { 0, 500, 0, 0 }, { 501, 300, 500, 0 } }) }), 0, 10000);
+
+        REQUIRE (events.size() == 1);
+        CHECK (events[0].offTick == 500);
+    }
+
+    SECTION ("an offset one tick off")
+    {
+        const auto events = expandAll (snapshotWith ({ clipTemplate }, { planWith (1, { { 0, 500, 0, 0 }, { 500, 300, 501, 0 } }) }), 0, 10000);
+
+        REQUIRE (events.size() == 1);
+        CHECK (events[0].offTick == 500);
+    }
+}
+
 TEST_CASE ("At one tick a track's events come before its notes, each in the template's order, track after track", "[render][kernel]")
 {
     const auto snapshot = snapshotWith (
