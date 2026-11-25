@@ -1,0 +1,24 @@
+# Gate reaching into a skipped column (docs/RENDERING.md -> StepClip;
+# docs/SCHEMA.md -> Cell: note length is measured in audible time).
+#
+# Five columns of 240 ticks, column 3 skipped, one lane. The loop is four
+# columns long, 960 ticks:
+#
+#   column  begins   cell
+#   0       0        pitch 36, on, gate 0.5: 120 ticks, 0 to 120
+#   1       240      off
+#   2       480      pitch 43, on, gate 1.2: round (1.2 x 240) = 288 ticks,
+#                    480 to 768
+#   3       skipped: takes no time, its note (48) is not played
+#   4       720      pitch 41, on, gate 0.5: 120 ticks, 720 to 840
+#
+# The gate of column 2 reaches past the end of its column at 720. The
+# skipped column does not exist in time, so the 48 ticks beyond 720 are the
+# first 48 ticks of column 4: note 43 overlaps note 41 until 768. The skipped
+# column neither swallows the rest of the note nor makes it longer.
+0 0 1 noteOn 36 100
+120 0 1 noteOff 36 64
+480 0 1 noteOn 43 100
+720 0 1 noteOn 41 100
+768 0 1 noteOff 43 64
+840 0 1 noteOff 41 64

@@ -1,0 +1,41 @@
+<!-- Golden case: a step clip whose resetAt is shorter than its stepCount. The loop ends at resetAt; the cells from there on keep their data and are not played. -->
+<Project schemaVersion="1" name="Reset before the last column" ppq="960">
+  <Routing>
+    <Player id="471f6fcce4594fccabadc0099fb6f89f" name="Synth"/>
+    <PadMap/>
+  </Routing>
+  <Timeline>
+    <TempoEvent tick="0" bpm="120"/>
+    <TimeSigEvent tick="0" numerator="4" denominator="4"/>
+  </Timeline>
+  <ClipPool>
+    <Clip id="ab57105f9bd148d1aa84e771bf70a750" name="Three of eight" kind="step">
+      <Grid stepLength="480" stepCount="8" resetAt="3">
+        <Lane id="953c06691f9240a69a292d29c680e4e8">
+          <Cell pitch="48" on="1" velocity="110"/>
+          <Cell pitch="55" on="1" velocity="90"/>
+          <Cell pitch="51" on="1"/>
+          <Cell pitch="72" on="1">
+            <CcValue cc="74" value="127"/>
+          </Cell>
+          <Cell pitch="74" on="1"/>
+          <Cell/>
+          <Cell/>
+          <Cell/>
+        </Lane>
+      </Grid>
+    </Clip>
+  </ClipPool>
+  <Tracks>
+    <Track id="3114040e91604f22950e45ff8d751e8d" name="Bass" playerId="471f6fcce4594fccabadc0099fb6f89f" channel="1">
+      <Placements>
+        <Placement id="f93bc1eb262f46e0ac2f85bfcddca1cd" clipId="ab57105f9bd148d1aa84e771bf70a750" start="0" length="2880"/>
+      </Placements>
+      <AutomationLanes/>
+      <Knobs/>
+      <Slots/>
+    </Track>
+  </Tracks>
+  <Session/>
+  <UiState/>
+</Project>

@@ -1,0 +1,41 @@
+<!-- Golden case: a drum clip, two lanes with a fixed pitch. Every cell plays its lane's pitch, whatever pitch the cell holds. -->
+<Project schemaVersion="1" name="Fixed pitch" ppq="960">
+  <Routing>
+    <Player id="5823f67e46fb49d59a4da4f03ae5283e" name="Synth"/>
+    <PadMap/>
+  </Routing>
+  <Timeline>
+    <TempoEvent tick="0" bpm="120"/>
+    <TimeSigEvent tick="0" numerator="4" denominator="4"/>
+  </Timeline>
+  <ClipPool>
+    <Clip id="62e8142cc35d417896f99326f5c96977" name="Kick and hat" kind="step">
+      <Grid stepLength="240" stepCount="4">
+        <Lane id="5f1235a1d0804caeb104d0101c76336c" name="Kick" fixedPitch="36">
+          <Cell pitch="60" on="1"/>
+          <Cell/>
+          <Cell pitch="72" on="1"/>
+          <Cell/>
+        </Lane>
+        <Lane id="65dd01b7ba9c4203af67a4b3b3be3700" name="Hat" fixedPitch="42">
+          <Cell on="1" velocity="70"/>
+          <Cell pitch="61" on="1" velocity="70"/>
+          <Cell on="1" velocity="70"/>
+          <Cell on="1" velocity="70"/>
+        </Lane>
+      </Grid>
+    </Clip>
+  </ClipPool>
+  <Tracks>
+    <Track id="eae8a2c11f6c434dbbf8940c191de8a9" name="Drums" playerId="5823f67e46fb49d59a4da4f03ae5283e" channel="10">
+      <Placements>
+        <Placement id="5a54c225edfd48fd88c54ec8c453cc21" clipId="62e8142cc35d417896f99326f5c96977" start="0" length="960"/>
+      </Placements>
+      <AutomationLanes/>
+      <Knobs/>
+      <Slots/>
+    </Track>
+  </Tracks>
+  <Session/>
+  <UiState/>
+</Project>

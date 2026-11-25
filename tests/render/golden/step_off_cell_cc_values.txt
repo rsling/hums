@@ -1,0 +1,27 @@
+# Off-cell CC values (docs/RENDERING.md -> StepClip; docs/SCHEMA.md ->
+# CcValue).
+#
+# Four columns of 240 ticks, one lane:
+#
+#   column  begins  cell                       CC values
+#   0       0       on, pitch 60, gate 1       74 = 20
+#   1       240     off (pitch 67)             74 = 60, 71 = 5
+#   2       480     on, pitch 62, gate 0.5     none
+#   3       720     off (pitch 64)             74 = 100
+#
+# A cell's CC values are sent at the start of its column whether the cell is
+# on or off: a rest still moves the CV row. The off cells play no note.
+#
+# Tick 0: the CC value comes before the note-on of its column.
+# Tick 240: note 60 is 1 x 240 = 240 ticks long and ends here. Its note-off
+# falls due and comes first, then the CC values of column 1, in the order the
+# cell has them: 74 before 71, not in the order of their numbers.
+# Note 62 is 120 ticks long, 480 to 600.
+0 0 1 cc 74 20
+0 0 1 noteOn 60 100
+240 0 1 noteOff 60 64
+240 0 1 cc 74 60
+240 0 1 cc 71 5
+480 0 1 noteOn 62 100
+600 0 1 noteOff 62 64
+720 0 1 cc 74 100

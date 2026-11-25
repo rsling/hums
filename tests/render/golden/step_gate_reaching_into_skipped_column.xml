@@ -1,0 +1,36 @@
+<!-- Golden case: a step-clip gate above 1 before a skipped column. The skipped column does not exist in time, so the note reaches into the column after it. -->
+<Project schemaVersion="1" name="Gate reaching into a skipped column" ppq="960">
+  <Routing>
+    <Player id="08f364c444b341a983e46a843ad9878f" name="Synth"/>
+    <PadMap/>
+  </Routing>
+  <Timeline>
+    <TempoEvent tick="0" bpm="120"/>
+    <TimeSigEvent tick="0" numerator="4" denominator="4"/>
+  </Timeline>
+  <ClipPool>
+    <Clip id="77fa3ff4562f4f08badd6049c4718b62" name="Across the gap" kind="step">
+      <Grid stepLength="240" stepCount="5" skipMask="00010">
+        <Lane id="491a5896f31740a4a440fade28da961d">
+          <Cell pitch="36" on="1"/>
+          <Cell pitch="38"/>
+          <Cell pitch="43" on="1" gate="1.2"/>
+          <Cell pitch="48" on="1"/>
+          <Cell pitch="41" on="1"/>
+        </Lane>
+      </Grid>
+    </Clip>
+  </ClipPool>
+  <Tracks>
+    <Track id="025357e55c754245aceb446a05897c9b" name="Bass" playerId="08f364c444b341a983e46a843ad9878f" channel="1">
+      <Placements>
+        <Placement id="4f15d1b64fcf49309de6d09f90418db7" clipId="77fa3ff4562f4f08badd6049c4718b62" start="0" length="960"/>
+      </Placements>
+      <AutomationLanes/>
+      <Knobs/>
+      <Slots/>
+    </Track>
+  </Tracks>
+  <Session/>
+  <UiState/>
+</Project>

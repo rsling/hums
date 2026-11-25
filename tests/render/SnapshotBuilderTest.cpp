@@ -52,6 +52,18 @@ ClipTemplate templateOfEventClip (const juce::String& loopLength, const juce::St
     return SnapshotBuilder::templateOf (model::ProjectModel (project).getClipPool().getClips().front());
 }
 
+// The template of one step clip, given the properties of its Grid and its
+// lanes.
+ClipTemplate templateOfStepClip (const juce::String& gridProperties, const juce::String& lanes)
+{
+    const auto project = projectWith (
+        oneTempo,
+        R"(<Clip id="11111111111141118111111111111111" kind="step"><Grid )" + gridProperties + ">" + lanes + "</Grid></Clip>",
+        "");
+
+    return SnapshotBuilder::templateOf (model::ProjectModel (project).getClipPool().getClips().front());
+}
+
 } // namespace
 
 TEST_CASE ("An event clip's template holds its notes with their stored values", "[render][SnapshotBuilder]")
@@ -353,6 +365,243 @@ TEST_CASE ("A step clip's template has the loop length that follows from its gri
     const auto clipTemplate = SnapshotBuilder::templateOf (model::ProjectModel (project).getClipPool().getClips().front());
 
     CHECK (clipTemplate.loopLength == 1200);
+}
+
+TEST_CASE ("A step clip's on cells are notes at the starts of their columns, its off cells are rests", "[render][SnapshotBuilder]")
+{
+    const auto clipTemplate = templateOfStepClip (R"(stepLength="240" stepCount="4")", R"(
+        <Lane id="22222222222242228222222222222222">
+          <Cell pitch="48" on="1" velocity="110"/>
+          <Cell pitch="50"/>
+          <Cell on="1"/>
+          <Cell pitch="55" on="1" velocity="1" gate="0.25"/>
+        </Lane>)");
+
+    CHECK (clipTemplate.loopLength == 960);
+    REQUIRE (clipTemplate.notes.size() == 3);
+
+    // The default gate is half a step.
+    CHECK (clipTemplate.notes[0].tick == 0);
+    CHECK (clipTemplate.notes[0].length == 120);
+    CHECK (clipTemplate.notes[0].pitch == 48);
+    CHECK (clipTemplate.notes[0].velocity == 110);
+    // A cell stores no off velocity.
+    CHECK (clipTemplate.notes[0].offVelocity == 64);
+
+    // The defaults of the schema: pitch 60, velocity 100.
+    CHECK (clipTemplate.notes[1].tick == 480);
+    CHECK (clipTemplate.notes[1].length == 120);
+    CHECK (clipTemplate.notes[1].pitch == 60);
+    CHECK (clipTemplate.notes[1].velocity == 100);
+
+    CHECK (clipTemplate.notes[2].tick == 720);
+    CHECK (clipTemplate.notes[2].length == 60);
+    CHECK (clipTemplate.notes[2].pitch == 55);
+    CHECK (clipTemplate.notes[2].velocity == 1);
+
+    CHECK (clipTemplate.events.empty());
+    CHECK (clipTemplate.sysexBytes.empty());
+}
+
+TEST_CASE ("A skipped column takes no time, and what stands in it is not played", "[render][SnapshotBuilder]")
+{
+    const auto clipTemplate = templateOfStepClip (R"(stepLength="240" stepCount="5" skipMask="01100")", R"(
+        <Lane id="22222222222242228222222222222222">
+          <Cell pitch="60" on="1"/>
+          <Cell pitch="61" on="1"><CcValue cc="74" value="1"/></Cell>
+          <Cell pitch="62" on="1"/>
+          <Cell pitch="63" on="1"/>
+          <Cell pitch="64" on="1"/>
+        </Lane>)");
+
+    CHECK (clipTemplate.loopLength == 720);
+    REQUIRE (clipTemplate.notes.size() == 3);
+
+    CHECK (clipTemplate.notes[0].tick == 0);
+    CHECK (clipTemplate.notes[0].pitch == 60);
+    CHECK (clipTemplate.notes[1].tick == 240);
+    CHECK (clipTemplate.notes[1].pitch == 63);
+    CHECK (clipTemplate.notes[2].tick == 480);
+    CHECK (clipTemplate.notes[2].pitch == 64);
+
+    CHECK (clipTemplate.events.empty());
+}
+
+TEST_CASE ("A step clip's loop ends at resetAt, and the cells from there on are not played", "[render][SnapshotBuilder]")
+{
+    const auto clipTemplate = templateOfStepClip (R"(stepLength="240" stepCount="4" resetAt="2")", R"(
+        <Lane id="22222222222242228222222222222222">
+          <Cell pitch="60" on="1"/>
+          <Cell pitch="61" on="1"/>
+          <Cell pitch="62" on="1"><CcValue cc="74" value="1"/></Cell>
+          <Cell pitch="63" on="1"/>
+        </Lane>)");
+
+    CHECK (clipTemplate.loopLength == 480);
+    REQUIRE (clipTemplate.notes.size() == 2);
+
+    CHECK (clipTemplate.notes[0].tick == 0);
+    CHECK (clipTemplate.notes[0].pitch == 60);
+    CHECK (clipTemplate.notes[1].tick == 240);
+    CHECK (clipTemplate.notes[1].pitch == 61);
+
+    CHECK (clipTemplate.events.empty());
+}
+
+TEST_CASE ("A lane with a fixed pitch plays it in every cell, whatever pitch the cell holds", "[render][SnapshotBuilder]")
+{
+    const auto clipTemplate = templateOfStepClip (R"(stepLength="240" stepCount="2")", R"(
+        <Lane id="22222222222242228222222222222222" fixedPitch="36">
+          <Cell pitch="72" on="1"/>
+          <Cell on="1"/>
+        </Lane>
+        <Lane id="33333333333343338333333333333333">
+          <Cell pitch="72" on="1"/>
+          <Cell/>
+        </Lane>)");
+
+    REQUIRE (clipTemplate.notes.size() == 3);
+
+    CHECK (clipTemplate.notes[0].tick == 0);
+    CHECK (clipTemplate.notes[0].pitch == 36);
+    // The lane without a fixed pitch plays the cell's own.
+    CHECK (clipTemplate.notes[1].tick == 0);
+    CHECK (clipTemplate.notes[1].pitch == 72);
+    CHECK (clipTemplate.notes[2].tick == 240);
+    CHECK (clipTemplate.notes[2].pitch == 36);
+}
+
+TEST_CASE ("A cell's CC values are cc events at the start of its column, of an off cell as of an on cell", "[render][SnapshotBuilder]")
+{
+    const auto clipTemplate = templateOfStepClip (R"(stepLength="240" stepCount="3")", R"(
+        <Lane id="22222222222242228222222222222222">
+          <Cell on="1"><CcValue cc="74" value="20"/></Cell>
+          <Cell><CcValue cc="74" value="60"/><CcValue cc="71" value="5"/></Cell>
+          <Cell on="1"/>
+        </Lane>)");
+
+    CHECK (clipTemplate.notes.size() == 2);
+    REQUIRE (clipTemplate.events.size() == 3);
+
+    CHECK (clipTemplate.events[0].tick == 0);
+    CHECK (clipTemplate.events[0].kind == ClipTemplate::EventKind::cc);
+    CHECK (clipTemplate.events[0].a == 74);
+    CHECK (clipTemplate.events[0].b == 20);
+    CHECK (clipTemplate.events[0].dataLength == 0);
+
+    // The off cell's values, in the order the cell has them, not in that of
+    // their controller numbers.
+    CHECK (clipTemplate.events[1].tick == 240);
+    CHECK (clipTemplate.events[1].kind == ClipTemplate::EventKind::cc);
+    CHECK (clipTemplate.events[1].a == 74);
+    CHECK (clipTemplate.events[1].b == 60);
+    CHECK (clipTemplate.events[2].tick == 240);
+    CHECK (clipTemplate.events[2].kind == ClipTemplate::EventKind::cc);
+    CHECK (clipTemplate.events[2].a == 71);
+    CHECK (clipTemplate.events[2].b == 5);
+}
+
+TEST_CASE ("What a step clip's lanes play at one tick is in the order of the lanes", "[render][SnapshotBuilder]")
+{
+    const auto clipTemplate = templateOfStepClip (R"(stepLength="240" stepCount="2")", R"(
+        <Lane id="22222222222242228222222222222222">
+          <Cell pitch="70" on="1"><CcValue cc="1" value="11"/></Cell>
+          <Cell pitch="71" on="1"><CcValue cc="1" value="12"/></Cell>
+        </Lane>
+        <Lane id="33333333333343338333333333333333">
+          <Cell pitch="50" on="1"><CcValue cc="1" value="21"/></Cell>
+          <Cell pitch="51" on="1"><CcValue cc="1" value="22"/></Cell>
+        </Lane>)");
+
+    std::vector<int> pitches;
+    std::vector<std::int64_t> noteTicks;
+
+    for (const auto& note : clipTemplate.notes)
+    {
+        pitches.push_back (note.pitch);
+        noteTicks.push_back (note.tick);
+    }
+
+    CHECK (noteTicks == std::vector<std::int64_t> { 0, 0, 240, 240 });
+    CHECK (pitches == std::vector<int> { 70, 50, 71, 51 });
+
+    std::vector<int> values;
+    std::vector<std::int64_t> eventTicks;
+
+    for (const auto& event : clipTemplate.events)
+    {
+        values.push_back (event.b);
+        eventTicks.push_back (event.tick);
+    }
+
+    // Two lanes may send one controller at one tick: both values go out, the
+    // lower lane's last.
+    CHECK (eventTicks == std::vector<std::int64_t> { 0, 0, 240, 240 });
+    CHECK (values == std::vector<int> { 11, 21, 12, 22 });
+}
+
+TEST_CASE ("A step note's length is its gate times the step length, rounded, and 1 tick at least", "[render][SnapshotBuilder]")
+{
+    const auto lengthOf = [] (const juce::String& stepLength, const juce::String& gate) {
+        const auto clipTemplate = templateOfStepClip (
+            R"(stepLength=")" + stepLength + R"(" stepCount="1")",
+            R"(<Lane id="22222222222242228222222222222222"><Cell on="1" gate=")" + gate + R"("/></Lane>)");
+
+        REQUIRE (clipTemplate.notes.size() == 1);
+        return clipTemplate.notes[0].length;
+    };
+
+    CHECK (lengthOf ("240", "0.5") == 120);
+    CHECK (lengthOf ("240", "1") == 240);
+    CHECK (lengthOf ("240", "0.6") == 144);
+    // 79.99992 and 80.00016.
+    CHECK (lengthOf ("240", "0.333333") == 80);
+    CHECK (lengthOf ("240", "0.333334") == 80);
+    // 100.8 and 100.32.
+    CHECK (lengthOf ("240", "0.42") == 101);
+    CHECK (lengthOf ("240", "0.418") == 100);
+    // An exact half goes up: 1.5 and 2.5.
+    CHECK (lengthOf ("3", "0.5") == 2);
+    CHECK (lengthOf ("5", "0.5") == 3);
+    // 0.25 would round to no tick at all.
+    CHECK (lengthOf ("1", "0.25") == 1);
+    CHECK (lengthOf ("240", "0.001") == 1);
+    // The longest note there is.
+    CHECK (lengthOf ("3840", "4") == 15360);
+}
+
+TEST_CASE ("A gate above 1 reaches into the audible columns that follow, and past the loop's end", "[render][SnapshotBuilder]")
+{
+    // Column 1 is skipped, so the note of column 0 runs on into column 2,
+    // which begins at tick 240.
+    const auto clipTemplate = templateOfStepClip (R"(stepLength="240" stepCount="3" skipMask="010")", R"(
+        <Lane id="22222222222242228222222222222222">
+          <Cell pitch="60" on="1" gate="1.5"/>
+          <Cell pitch="61" on="1"/>
+          <Cell pitch="62" on="1" gate="3"/>
+        </Lane>)");
+
+    CHECK (clipTemplate.loopLength == 480);
+    REQUIRE (clipTemplate.notes.size() == 2);
+
+    CHECK (clipTemplate.notes[0].tick == 0);
+    CHECK (clipTemplate.notes[0].length == 360);
+    CHECK (clipTemplate.notes[0].pitch == 60);
+
+    // 240 + 720 lies past the loop length: the note plays on into the next
+    // pass of the loop.
+    CHECK (clipTemplate.notes[1].tick == 240);
+    CHECK (clipTemplate.notes[1].length == 720);
+    CHECK (clipTemplate.notes[1].pitch == 62);
+}
+
+TEST_CASE ("A step clip without a lane plays nothing", "[render][SnapshotBuilder]")
+{
+    const auto clipTemplate = templateOfStepClip (R"(stepLength="240" stepCount="4")", "");
+
+    CHECK (clipTemplate.loopLength == 960);
+    CHECK (clipTemplate.notes.empty());
+    CHECK (clipTemplate.events.empty());
 }
 
 TEST_CASE ("The Timeline's tempos become segments in tick order, in whole microseconds", "[render][SnapshotBuilder]")

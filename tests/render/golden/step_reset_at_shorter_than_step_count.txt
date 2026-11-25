@@ -1,0 +1,26 @@
+# resetAt shorter than stepCount (docs/RENDERING.md -> StepClip;
+# docs/SCHEMA.md -> Step clip: Grid).
+#
+# Eight columns of 480 ticks, resetAt = 3: the loop ends before column 3.
+# Columns 0, 1 and 2 are played and the loop is 3 x 480 = 1440 ticks long.
+# Columns 3 and 4 hold on cells (pitches 72 and 74) and column 3 a CC value
+# (74 = 127): they keep their data and none of it is played.
+#
+#   column  cell                     begins at   note (gate 0.5 = 240 ticks)
+#   0       pitch 48, velocity 110   0           0 to 240
+#   1       pitch 55, velocity 90    480         480 to 720
+#   2       pitch 51, velocity 100   960         960 to 1200
+#
+# The placement is 2880 long: two passes of the loop, the second from 1440.
+0 0 1 noteOn 48 110
+240 0 1 noteOff 48 64
+480 0 1 noteOn 55 90
+720 0 1 noteOff 55 64
+960 0 1 noteOn 51 100
+1200 0 1 noteOff 51 64
+1440 0 1 noteOn 48 110
+1680 0 1 noteOff 48 64
+1920 0 1 noteOn 55 90
+2160 0 1 noteOff 55 64
+2400 0 1 noteOn 51 100
+2640 0 1 noteOff 51 64

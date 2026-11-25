@@ -1,0 +1,24 @@
+# gate > 1.0 into a different pitch (docs/RENDERING.md -> StepClip).
+#
+# Five columns of 240 ticks, one lane. Note length = round (gate x 240):
+#
+#   column  begins  cell                  note
+#   0       0       pitch 60, gate 1.5    360 ticks: 0 to 360
+#   1       240     pitch 64, gate 0.25   60 ticks: 240 to 300
+#   2       480     pitch 62, gate 2      480 ticks: 480 to 960
+#   3       720     pitch 65, gate 0.5    120 ticks: 720 to 840
+#   4       960     off
+#
+# Overlap between different pitches is plain overlap: nothing is cut and
+# nothing is tied. Note 60 sounds 120 ticks into column 1, where note 64
+# begins at 240 and has ended (300) before note 60 does (360). Note 62 sounds
+# through the whole of column 3 and ends where column 4 begins; note 65
+# begins and ends under it.
+0 0 1 noteOn 60 100
+240 0 1 noteOn 64 100
+300 0 1 noteOff 64 64
+360 0 1 noteOff 60 64
+480 0 1 noteOn 62 100
+720 0 1 noteOn 65 100
+840 0 1 noteOff 65 64
+960 0 1 noteOff 62 64

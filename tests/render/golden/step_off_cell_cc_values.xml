@@ -1,0 +1,42 @@
+<!-- Golden case: the CC values of a step clip's cells. They are sent at the column start, for an off cell as for an on cell, and before the column's note-on. -->
+<Project schemaVersion="1" name="Off-cell CC values" ppq="960">
+  <Routing>
+    <Player id="514ba4ac6def4fa7ba2031ae4efe9cfa" name="Synth"/>
+    <PadMap/>
+  </Routing>
+  <Timeline>
+    <TempoEvent tick="0" bpm="120"/>
+    <TimeSigEvent tick="0" numerator="4" denominator="4"/>
+  </Timeline>
+  <ClipPool>
+    <Clip id="730b886b0a17494daa27d7e03dfec7bd" name="Second row" kind="step">
+      <Grid stepLength="240" stepCount="4">
+        <Lane id="b2055729554e48a6ae1263121578c003">
+          <Cell pitch="60" on="1" gate="1">
+            <CcValue cc="74" value="20"/>
+          </Cell>
+          <Cell pitch="67">
+            <CcValue cc="74" value="60"/>
+            <CcValue cc="71" value="5"/>
+          </Cell>
+          <Cell pitch="62" on="1"/>
+          <Cell pitch="64">
+            <CcValue cc="74" value="100"/>
+          </Cell>
+        </Lane>
+      </Grid>
+    </Clip>
+  </ClipPool>
+  <Tracks>
+    <Track id="72b9350e9bae46b2a947893ff2b6eb0b" name="Lead" playerId="514ba4ac6def4fa7ba2031ae4efe9cfa" channel="1">
+      <Placements>
+        <Placement id="6c334276a87c47f2a5e6f09135d6974d" clipId="730b886b0a17494daa27d7e03dfec7bd" start="0" length="960"/>
+      </Placements>
+      <AutomationLanes/>
+      <Knobs/>
+      <Slots/>
+    </Track>
+  </Tracks>
+  <Session/>
+  <UiState/>
+</Project>

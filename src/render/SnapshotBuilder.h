@@ -39,8 +39,23 @@ public:
     // position for the order within the template and for every later rule.
     // An event is never quantised.
     //
-    // A step clip: its loop length only. Expanding the Grid into notes and
-    // events is not written yet.
+    // A step clip (docs/RENDERING.md -> StepClip): its Grid in time. The
+    // columns before resetAt that are not skipped follow each other, each one
+    // step length long; a skipped column takes no time, and what stands in
+    // it or from resetAt on is not played. Every cell of such a column gives
+    // its CC values as cc events at the column's start, an off cell as an on
+    // cell, and an on cell a note there: the lane's fixed pitch, or the
+    // cell's own where the lane has none, and round (gate x stepLength) ticks
+    // long, an exact half going up, 1 tick at least. That length is counted
+    // on from the column's start, so a gate above 1 reaches into the audible
+    // columns that follow, and past the last of them into the next pass of
+    // the loop. The note-off has velocity 64: a cell stores none. What
+    // shares a tick is in the order of the lanes, and within a cell in the
+    // order of its CC values; the Kernel plays a tick's events before its
+    // notes, so a column's CC values come before its note-ons.
+    //
+    // Not written yet: cells of one pitch that follow each other in a lane
+    // are not tied into one note, each is a note of its own.
     static ClipTemplate templateOf (const model::ClipModel& clip);
 
     // The Timeline's tempos in tick order, each as the whole microseconds

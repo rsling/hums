@@ -1,0 +1,36 @@
+<!-- Golden case: step-clip gates above 1 that reach into following cells of another pitch. Plain overlap: the earlier note sounds on under the later one. -->
+<Project schemaVersion="1" name="Gate above 1 into a different pitch" ppq="960">
+  <Routing>
+    <Player id="8d923313b9654b0d93d13fcd6dee83f1" name="Synth"/>
+    <PadMap/>
+  </Routing>
+  <Timeline>
+    <TempoEvent tick="0" bpm="120"/>
+    <TimeSigEvent tick="0" numerator="4" denominator="4"/>
+  </Timeline>
+  <ClipPool>
+    <Clip id="9aae251643b7469193a9f4001f258e4f" name="Legato" kind="step">
+      <Grid stepLength="240" stepCount="5">
+        <Lane id="aba8fe8e13e542f29c0c17fb3836a84c">
+          <Cell pitch="60" on="1" gate="1.5"/>
+          <Cell pitch="64" on="1" gate="0.25"/>
+          <Cell pitch="62" on="1" gate="2"/>
+          <Cell pitch="65" on="1"/>
+          <Cell/>
+        </Lane>
+      </Grid>
+    </Clip>
+  </ClipPool>
+  <Tracks>
+    <Track id="9e1ca61125b243bbb1e60b356de57f43" name="Lead" playerId="8d923313b9654b0d93d13fcd6dee83f1" channel="1">
+      <Placements>
+        <Placement id="eff96db18b514537aa8c27b143184a1e" clipId="9aae251643b7469193a9f4001f258e4f" start="0" length="1200"/>
+      </Placements>
+      <AutomationLanes/>
+      <Knobs/>
+      <Slots/>
+    </Track>
+  </Tracks>
+  <Session/>
+  <UiState/>
+</Project>

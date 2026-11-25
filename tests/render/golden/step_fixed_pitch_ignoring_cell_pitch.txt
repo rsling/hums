@@ -1,0 +1,30 @@
+# fixedPitch lane ignoring cell pitch (docs/RENDERING.md -> StepClip;
+# docs/SCHEMA.md -> Step clip: Grid).
+#
+# Four columns of 240 ticks, two lanes, on channel 10:
+#
+#   lane   fixedPitch   column 0      column 1      column 2      column 3
+#   Kick   36           on, pitch 60  off           on, pitch 72  off
+#   Hat    42           on            on, pitch 61  on            on
+#
+# A lane with a fixed pitch plays it in every cell. The pitches the Kick's
+# cells hold (60, 72) and the one a Hat cell holds (61) are kept and not
+# played; a Hat cell without a stored pitch (default 60) plays 42 as well.
+# The Kick has velocity 100, the Hat 70. Every gate is the default 0.5: 120
+# ticks.
+#
+# At a tick where both lanes play, the note-ons are in the order of the
+# lanes, Kick first. Their note-offs fall due together 120 ticks later and
+# go out in the order in which the notes began.
+0 0 10 noteOn 36 100
+0 0 10 noteOn 42 70
+120 0 10 noteOff 36 64
+120 0 10 noteOff 42 64
+240 0 10 noteOn 42 70
+360 0 10 noteOff 42 64
+480 0 10 noteOn 36 100
+480 0 10 noteOn 42 70
+600 0 10 noteOff 36 64
+600 0 10 noteOff 42 64
+720 0 10 noteOn 42 70
+840 0 10 noteOff 42 64

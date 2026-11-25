@@ -1,6 +1,9 @@
 #include "render/SnapshotBuilder.h"
 
+#include "model/CellModel.h"
 #include "model/EventModel.h"
+#include "model/GridModel.h"
+#include "model/LaneModel.h"
 #include "model/NoteModel.h"
 #include "model/PlacementModel.h"
 #include "model/Quantise.h"
@@ -9,6 +12,7 @@
 #include <juce_core/juce_core.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <map>
@@ -110,6 +114,132 @@ namespace
         return plan;
     }
 
+// The notes and events of an event clip, in child order: what is enabled
+// and begins inside the loop, a note at its quantised onset.
+    void addContentOfEventClip (ClipTemplate& clipTemplate, const model::ClipModel& clip)
+    {
+        const std::int64_t quantiseGrid = clip.getQuantiseGrid();
+
+        for (const auto& note : clip.getNotes())
+        {
+            if (! note.isEnabled() || note.getTick() >= clipTemplate.loopLength)
+                continue;
+
+            // From here on the quantised onset is the note's position; the
+            // stored tick is editing data. The length is kept.
+            const std::int64_t onset = model::Quantise::onsetOf (note.getTick(), quantiseGrid, clipTemplate.loopLength);
+
+            clipTemplate.notes.push_back ({ onset, note.getLength(), note.getPitch(), note.getVelocity(), note.getOffVelocity() });
+        }
+
+        for (const auto& event : clip.getEvents())
+        {
+            if (! event.isEnabled() || event.getTick() >= clipTemplate.loopLength)
+                continue;
+
+            ClipTemplate::Event templateEvent;
+            templateEvent.tick = event.getTick();
+            templateEvent.kind = kindOf (event.getKind());
+            templateEvent.a = event.getA();
+            templateEvent.b = event.getB();
+
+            if (templateEvent.kind == ClipTemplate::EventKind::sysex)
+            {
+                templateEvent.dataStart = clipTemplate.sysexBytes.size();
+                appendBytesOfHex (clipTemplate.sysexBytes, event.getData());
+                templateEvent.dataLength = clipTemplate.sysexBytes.size() - templateEvent.dataStart;
+            }
+
+            clipTemplate.events.push_back (templateEvent);
+        }
+    }
+
+// A column of a Grid that takes time, and the tick of the loop at which it
+// begins.
+    struct AudibleColumn
+    {
+        int column = 0;
+        std::int64_t startTick = 0;
+    };
+
+// The columns of a Grid that are played in one pass of the loop, in order:
+// those before resetAt that are not skipped. A skipped column takes no time,
+// so each audible column begins where the audible one before it ends.
+    std::vector<AudibleColumn> audibleColumnsOf (const model::GridModel& grid)
+    {
+        const std::int64_t stepLength = grid.getStepLength();
+        const int resetAt = grid.getResetAt();
+
+        std::vector<AudibleColumn> audibleColumns;
+
+        for (int column = 0; column < resetAt; ++column)
+        {
+            if (grid.isColumnSkipped (column))
+                continue;
+
+            audibleColumns.push_back ({ column, stepLength * static_cast<std::int64_t> (audibleColumns.size()) });
+        }
+
+        return audibleColumns;
+    }
+
+// How long the note of a cell sounds: round (gate x stepLength) ticks, an
+// exact half going up, and 1 tick at least. In audible time: the ticks are
+// counted on from the cell's start, and a skipped column is not among them.
+    std::int64_t noteLengthOf (double gate, std::int64_t stepLength)
+    {
+        return std::max<std::int64_t> (1, std::llround (gate * static_cast<double> (stepLength)));
+    }
+
+// A cell has no off velocity; its note-off goes out with the one a Note has
+// when none is stored (docs/SCHEMA.md -> Note).
+    constexpr int offVelocityOfStepNote = 64;
+
+// The notes and events of a step clip (docs/RENDERING.md -> StepClip), lane
+// by lane: for every audible column the cell's CC values at the column's
+// start, of an off cell as of an on cell, and the note of an on cell.
+    void addContentOfStepClip (ClipTemplate& clipTemplate, const model::GridModel& grid)
+    {
+        const std::int64_t stepLength = grid.getStepLength();
+        const auto audibleColumns = audibleColumnsOf (grid);
+
+        for (const auto& lane : grid.getLanes())
+        {
+            const auto cells = lane.getCells();
+            const auto fixedPitch = lane.getFixedPitch();
+
+            // Invariant 2: every lane has a cell for every column.
+            jassert (static_cast<int> (cells.size()) == grid.getStepCount());
+
+            for (const auto& audibleColumn : audibleColumns)
+            {
+                const auto& cell = cells[static_cast<std::size_t> (audibleColumn.column)];
+
+                for (const auto& ccValue : cell.getCcValues())
+                {
+                    ClipTemplate::Event templateEvent;
+                    templateEvent.tick = audibleColumn.startTick;
+                    templateEvent.kind = ClipTemplate::EventKind::cc;
+                    templateEvent.a = ccValue.getCc();
+                    templateEvent.b = ccValue.getValue();
+
+                    clipTemplate.events.push_back (templateEvent);
+                }
+
+                if (! cell.isOn())
+                    continue;
+
+                // A lane with a fixed pitch plays it in every cell; the
+                // cell's own pitch is kept and not played.
+                clipTemplate.notes.push_back ({ audibleColumn.startTick,
+                                                noteLengthOf (cell.getGate(), stepLength),
+                                                fixedPitch.value_or (cell.getPitch()),
+                                                cell.getVelocity(),
+                                                offVelocityOfStepNote });
+            }
+        }
+    }
+
 } // namespace
 
 Snapshot SnapshotBuilder::build (const model::ProjectModel& project)
@@ -146,46 +276,15 @@ ClipTemplate SnapshotBuilder::templateOf (const model::ClipModel& clip)
     jassert (clipTemplate.loopLength > 0);
 
     if (clip.getKind() == model::ClipModel::Kind::step)
-        return clipTemplate;
+        addContentOfStepClip (clipTemplate, clip.getGrid());
+    else
+        addContentOfEventClip (clipTemplate, clip);
 
-    const std::int64_t quantiseGrid = clip.getQuantiseGrid();
-
-    for (const auto& note : clip.getNotes())
-    {
-        if (! note.isEnabled() || note.getTick() >= clipTemplate.loopLength)
-            continue;
-
-        // From here on the quantised onset is the note's position; the
-        // stored tick is editing data. The length is kept.
-        const std::int64_t onset = model::Quantise::onsetOf (note.getTick(), quantiseGrid, clipTemplate.loopLength);
-
-        clipTemplate.notes.push_back ({ onset, note.getLength(), note.getPitch(), note.getVelocity(), note.getOffVelocity() });
-    }
-
-    for (const auto& event : clip.getEvents())
-    {
-        if (! event.isEnabled() || event.getTick() >= clipTemplate.loopLength)
-            continue;
-
-        ClipTemplate::Event templateEvent;
-        templateEvent.tick = event.getTick();
-        templateEvent.kind = kindOf (event.getKind());
-        templateEvent.a = event.getA();
-        templateEvent.b = event.getB();
-
-        if (templateEvent.kind == ClipTemplate::EventKind::sysex)
-        {
-            templateEvent.dataStart = clipTemplate.sysexBytes.size();
-            appendBytesOfHex (clipTemplate.sysexBytes, event.getData());
-            templateEvent.dataLength = clipTemplate.sysexBytes.size() - templateEvent.dataStart;
-        }
-
-        clipTemplate.events.push_back (templateEvent);
-    }
-
-    // A stable sort: what shares a tick stays in child order, which is the
-    // tie-breaker at equal ticks, also for notes that quantising has put on
-    // one tick. The document itself is never sorted.
+    // A stable sort: what shares a tick stays in the order it was added in,
+    // which is the tie-breaker at equal ticks. For an event clip that is
+    // child order, also for notes that quantising has put on one tick; for a
+    // step clip it is the order of the lanes, and of the CC values within a
+    // cell. The document itself is never sorted.
     std::stable_sort (clipTemplate.notes.begin(), clipTemplate.notes.end(), [] (const ClipTemplate::Note& earlier, const ClipTemplate::Note& later) {
         return earlier.tick < later.tick;
     });

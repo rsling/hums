@@ -1,0 +1,37 @@
+<!-- Golden case: a step clip with a skipped column. The column takes no time, and neither its note nor its CC value is played. -->
+<Project schemaVersion="1" name="Skipped column" ppq="960">
+  <Routing>
+    <Player id="b7c32d67c42348d0b013dbc67b0166e4" name="Synth"/>
+    <PadMap/>
+  </Routing>
+  <Timeline>
+    <TempoEvent tick="0" bpm="120"/>
+    <TimeSigEvent tick="0" numerator="4" denominator="4"/>
+  </Timeline>
+  <ClipPool>
+    <Clip id="7e5ecc0096d24278b6afc33f8208aac0" name="Three of four" kind="step">
+      <Grid stepLength="240" stepCount="4" skipMask="0100">
+        <Lane id="512e1d34b8844774bec88f83c83e4a86">
+          <Cell pitch="60" on="1"/>
+          <Cell pitch="62" on="1">
+            <CcValue cc="74" value="99"/>
+          </Cell>
+          <Cell pitch="64" on="1"/>
+          <Cell pitch="65" on="1"/>
+        </Lane>
+      </Grid>
+    </Clip>
+  </ClipPool>
+  <Tracks>
+    <Track id="bf874cba0114469ab489ddbb72d815ec" name="Bass" playerId="b7c32d67c42348d0b013dbc67b0166e4" channel="1">
+      <Placements>
+        <Placement id="c88df311cf72410f89fe28f58bab1ea1" clipId="7e5ecc0096d24278b6afc33f8208aac0" start="0" length="1440"/>
+      </Placements>
+      <AutomationLanes/>
+      <Knobs/>
+      <Slots/>
+    </Track>
+  </Tracks>
+  <Session/>
+  <UiState/>
+</Project>

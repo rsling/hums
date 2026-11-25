@@ -337,3 +337,33 @@ TEST_CASE ("golden: two notes of one pitch quantised onto one tick", "[render][g
 {
     checkGoldenCase ("quantise_two_notes_one_pitch_one_tick");
 }
+
+TEST_CASE ("golden: skipped column", "[render][golden]")
+{
+    checkGoldenCase ("step_skipped_column");
+}
+
+TEST_CASE ("golden: resetAt shorter than stepCount", "[render][golden]")
+{
+    checkGoldenCase ("step_reset_at_shorter_than_step_count");
+}
+
+TEST_CASE ("golden: fixedPitch lane ignoring cell pitch", "[render][golden]")
+{
+    checkGoldenCase ("step_fixed_pitch_ignoring_cell_pitch");
+}
+
+TEST_CASE ("golden: off-cell CC values", "[render][golden]")
+{
+    checkGoldenCase ("step_off_cell_cc_values");
+}
+
+TEST_CASE ("golden: gate > 1.0 into a different pitch", "[render][golden]")
+{
+    checkGoldenCase ("step_gate_over_one_into_different_pitch");
+}
+
+TEST_CASE ("golden: gate reaching into a skipped column", "[render][golden]")
+{
+    checkGoldenCase ("step_gate_reaching_into_skipped_column");
+}

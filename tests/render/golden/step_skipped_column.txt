@@ -1,0 +1,29 @@
+# Skipped column (docs/RENDERING.md -> StepClip; docs/SCHEMA.md -> Step
+# clip: Grid).
+#
+# Four columns of 240 ticks, the second (column 1) skipped. A skipped column
+# takes no time, so the columns that are played follow each other at once:
+#
+#   column  cell             begins at
+#   0       pitch 60, on     0
+#   1       skipped: neither its note (62) nor its CC value (74 = 99) is played
+#   2       pitch 64, on     240
+#   3       pitch 65, on     480
+#
+# The loop is three columns long, 720 ticks, not 960. Every gate is the
+# default 0.5: a note is 120 ticks long.
+#
+# The placement is 1440 long, so the loop is played twice; the second pass
+# begins at 720, where a clip of four columns would still be in its last.
+0 0 1 noteOn 60 100
+120 0 1 noteOff 60 64
+240 0 1 noteOn 64 100
+360 0 1 noteOff 64 64
+480 0 1 noteOn 65 100
+600 0 1 noteOff 65 64
+720 0 1 noteOn 60 100
+840 0 1 noteOff 60 64
+960 0 1 noteOn 64 100
+1080 0 1 noteOff 64 64
+1200 0 1 noteOn 65 100
+1320 0 1 noteOff 65 64
