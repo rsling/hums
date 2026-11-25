@@ -209,4 +209,36 @@ std::vector<TempoMap::Segment> SnapshotBuilder::tempoSegmentsOf (const model::Ti
     return segments;
 }
 
+SnapshotBuilder::Destinations SnapshotBuilder::destinationsWithoutHardware (const model::ProjectModel& project)
+{
+    Destinations destinations;
+    std::map<juce::String, std::size_t> destinationOfPlayerId;
+
+    for (const auto& track : project.getTracks().getTracks())
+    {
+        const auto playerId = track.getPlayerId();
+
+        if (playerId.isEmpty())
+        {
+            destinations.destinationOfTrack.push_back (destinations.count);
+            ++destinations.count;
+            continue;
+        }
+
+        const auto known = destinationOfPlayerId.find (playerId);
+
+        if (known != destinationOfPlayerId.end())
+        {
+            destinations.destinationOfTrack.push_back (known->second);
+            continue;
+        }
+
+        destinationOfPlayerId[playerId] = destinations.count;
+        destinations.destinationOfTrack.push_back (destinations.count);
+        ++destinations.count;
+    }
+
+    return destinations;
+}
+
 } // namespace render

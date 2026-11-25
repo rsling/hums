@@ -1,0 +1,21 @@
+# A track with no Player rendering normally (docs/RENDERING.md -> Per track:
+# rendering ignores playerId; Same-pitch overlap -> Without hardware).
+#
+# The project has no Player at all. Both tracks are unassigned, both on
+# channel 3, and both render as any track does:
+#
+#   track 0  note 60 at 0, 960 long   -> 0 to 960
+#   track 1  program change 5 at 0; note 60 at 480, 960 long -> 480 to 1440
+#
+# The two notes have one pitch and one channel and overlap from 480 to 960.
+# Every track without a Player is a destination of its own, so the same-pitch
+# rule does not apply between them: track 0's note is not ended at 480, and
+# each note keeps its own off.
+#
+# At tick 0 the tracks come in their own order, each with all it has there:
+# track 0's note-on before track 1's program change.
+0 0 3 noteOn 60 100
+0 1 3 programChange 5 0
+480 1 3 noteOn 60 100
+960 0 3 noteOff 60 64
+1440 1 3 noteOff 60 64

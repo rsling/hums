@@ -1,0 +1,34 @@
+<!-- Golden case: content past loopLength silent. A clip whose loop is one beat, with a note and a controller at the loop length and a note behind it. -->
+<Project schemaVersion="1" name="Content past the loop length" ppq="960">
+  <Routing>
+    <Player id="ef3b82c6be7a4608b4cab9b528467f9e" name="Synth"/>
+    <PadMap/>
+  </Routing>
+  <Timeline>
+    <TempoEvent tick="0" bpm="120"/>
+    <TimeSigEvent tick="0" numerator="4" denominator="4"/>
+  </Timeline>
+  <ClipPool>
+    <Clip id="2e6045545a9f47e492460ab6a36052f6" name="Beat" kind="event" loopLength="960">
+      <Events>
+        <Note tick="0" length="240" pitch="60"/>
+        <Event tick="480" kind="cc" a="7" b="100"/>
+        <Note tick="960" length="240" pitch="62"/>
+        <Event tick="960" kind="cc" a="7" b="0"/>
+        <Note tick="1440" length="240" pitch="64"/>
+      </Events>
+    </Clip>
+  </ClipPool>
+  <Tracks>
+    <Track id="a12b73ef96ef4fc0b7c8dd03abd30a48" name="Lead" playerId="ef3b82c6be7a4608b4cab9b528467f9e" channel="1">
+      <Placements>
+        <Placement id="87bf92a85c6b4f34a6c47b4aa0857c49" clipId="2e6045545a9f47e492460ab6a36052f6" start="0" length="1920"/>
+      </Placements>
+      <AutomationLanes/>
+      <Knobs/>
+      <Slots/>
+    </Track>
+  </Tracks>
+  <Session/>
+  <UiState/>
+</Project>

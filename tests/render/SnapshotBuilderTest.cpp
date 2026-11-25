@@ -15,6 +15,7 @@
 
 #include <juce_data_structures/juce_data_structures.h>
 
+#include <cstddef>
 #include <cstdint>
 #include <vector>
 
@@ -398,4 +399,47 @@ TEST_CASE ("A plan's placements are in the order of their starts and name their 
     CHECK (placements[2].length == 500);
     CHECK (placements[2].offset == 0);
     CHECK (placements[2].templateIndex == 1);
+}
+
+TEST_CASE ("Without hardware the tracks of one Player share a destination, and a track without a Player has its own", "[render][SnapshotBuilder]")
+{
+    const juce::String players = R"(
+        <Player id="aaaaaaaaaaaa4aaa8aaaaaaaaaaaaaaa" name="One"/>
+        <Player id="bbbbbbbbbbbb4bbb8bbbbbbbbbbbbbbb" name="Two"/>
+        <Player id="cccccccccccc4ccc8ccccccccccccccc" name="Unused"/>)";
+
+    const auto track = [] (const juce::String& id, const juce::String& playerId, int channel) {
+        return R"(<Track id=")" + id + R"(" playerId=")" + playerId + R"(" channel=")" + juce::String (channel)
+             + R"("><Placements/><AutomationLanes/><Knobs/><Slots/></Track>)";
+    };
+
+    const auto project = juce::ValueTree::fromXml (
+        R"(<Project schemaVersion="1" ppq="960"><Routing>)" + players + R"(<PadMap/></Routing><Timeline>)" + oneTempo
+        + "</Timeline><ClipPool/><Tracks>"
+        + track ("11111111111141118111111111111111", "", 1)
+        + track ("22222222222242228222222222222222", "bbbbbbbbbbbb4bbb8bbbbbbbbbbbbbbb", 1)
+        + track ("33333333333343338333333333333333", "aaaaaaaaaaaa4aaa8aaaaaaaaaaaaaaa", 1)
+        + track ("44444444444444448444444444444444", "", 1)
+        // The channel plays no role: the tracker keeps the channels of a
+        // destination apart itself.
+        + track ("55555555555545558555555555555555", "bbbbbbbbbbbb4bbb8bbbbbbbbbbbbbbb", 2)
+        + "</Tracks><Session/><UiState/></Project>");
+
+    REQUIRE (project.isValid());
+    REQUIRE (model::Validator::validate (project).empty());
+
+    const auto destinations = SnapshotBuilder::destinationsWithoutHardware (model::ProjectModel (project));
+
+    // Numbered in the order in which the tracks come to them; a Player no
+    // track uses has none.
+    CHECK (destinations.destinationOfTrack == std::vector<std::size_t> { 0, 1, 2, 3, 1 });
+    CHECK (destinations.count == 4);
+}
+
+TEST_CASE ("A document without tracks has no destinations", "[render][SnapshotBuilder]")
+{
+    const auto destinations = SnapshotBuilder::destinationsWithoutHardware (model::ProjectModel (projectWith (oneTempo, "", "")));
+
+    CHECK (destinations.destinationOfTrack.empty());
+    CHECK (destinations.count == 0);
 }

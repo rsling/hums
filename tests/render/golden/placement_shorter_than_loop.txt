@@ -1,0 +1,17 @@
+# Placement shorter than the clip loop (docs/RENDERING.md -> Per track, Note
+# windows).
+#
+# The clip's loop is 3840 long with a note of 480 on each beat (60, 62, 64,
+# 65). The placement covers 0 to 2160 only.
+#
+#   note 60 at 0    -> 0 to 480
+#   note 62 at 960  -> 960 to 1440
+#   note 64 at 1920 -> 1920, and would end at 2400: the placement ends at 2160
+#                      and cuts it there
+#   note 65 at 2880 -> lies past the placement's end, never played
+0 0 1 noteOn 60 100
+480 0 1 noteOff 60 64
+960 0 1 noteOn 62 100
+1440 0 1 noteOff 62 64
+1920 0 1 noteOn 64 100
+2160 0 1 noteOff 64 64

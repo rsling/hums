@@ -1,0 +1,33 @@
+<!-- Golden case: placement shorter than the clip loop. A clip of one bar, placed for 2160 ticks. -->
+<Project schemaVersion="1" name="Placement shorter than the loop" ppq="960">
+  <Routing>
+    <Player id="ca3ea2d76dc24be0a994160cc57c624e" name="Synth"/>
+    <PadMap/>
+  </Routing>
+  <Timeline>
+    <TempoEvent tick="0" bpm="120"/>
+    <TimeSigEvent tick="0" numerator="4" denominator="4"/>
+  </Timeline>
+  <ClipPool>
+    <Clip id="6fa5ac9c4692461b9bda8d9ac6d2328c" name="Bar" kind="event" loopLength="3840">
+      <Events>
+        <Note tick="0" length="480" pitch="60"/>
+        <Note tick="960" length="480" pitch="62"/>
+        <Note tick="1920" length="480" pitch="64"/>
+        <Note tick="2880" length="480" pitch="65"/>
+      </Events>
+    </Clip>
+  </ClipPool>
+  <Tracks>
+    <Track id="5edd0fc816bf4588b5ff4011f0a91cca" name="Lead" playerId="ca3ea2d76dc24be0a994160cc57c624e" channel="1">
+      <Placements>
+        <Placement id="6fc7ebc2ada643c187f129f79d3b1a0d" clipId="6fa5ac9c4692461b9bda8d9ac6d2328c" start="0" length="2160"/>
+      </Placements>
+      <AutomationLanes/>
+      <Knobs/>
+      <Slots/>
+    </Track>
+  </Tracks>
+  <Session/>
+  <UiState/>
+</Project>

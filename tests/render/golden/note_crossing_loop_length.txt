@@ -1,0 +1,25 @@
+# Event-clip note crossing loopLength (docs/RENDERING.md -> Note windows).
+#
+# The clip's loop is 960 long: note 72 at 0 (120 long) and note 60 at 720,
+# 480 long, so it ends 240 ticks into the next pass. A note plays its full
+# length across the loop point. The placement covers 0 to 2880, three passes.
+#
+#   first pass   note 72 0 to 120; note 60 720 to 1200
+#   second pass  note 72 960 to 1080; note 60 1680 to 2160
+#   third pass   note 72 1920 to 2040; note 60 2640, and would end at 3120:
+#                the placement ends at 2880 and cuts it there
+#
+# Note 60 of one pass still sounds while note 72 of the next begins: the off
+# at 1200 comes after the on and the off of note 72 at 960 and 1080.
+0 0 1 noteOn 72 100
+120 0 1 noteOff 72 64
+720 0 1 noteOn 60 100
+960 0 1 noteOn 72 100
+1080 0 1 noteOff 72 64
+1200 0 1 noteOff 60 64
+1680 0 1 noteOn 60 100
+1920 0 1 noteOn 72 100
+2040 0 1 noteOff 72 64
+2160 0 1 noteOff 60 64
+2640 0 1 noteOn 60 100
+2880 0 1 noteOff 60 64

@@ -7,6 +7,7 @@
 #include "render/snapshot/ClipTemplate.h"
 #include "render/snapshot/Snapshot.h"
 
+#include <cstddef>
 #include <vector>
 
 namespace render
@@ -43,6 +44,24 @@ public:
     // per quarter note it is played and exported as [D13]: what a TempoMap
     // is made from, and what SMF export writes into the conductor track.
     static std::vector<TempoMap::Segment> tempoSegmentsOf (const model::TimelineModel& timeline);
+
+    // Into which destination each Track plays, as render::NoteTracker numbers
+    // them.
+    struct Destinations
+    {
+        // One per Track, in track order: 0 to count - 1.
+        std::vector<std::size_t> destinationOfTrack;
+        std::size_t count = 0;
+    };
+
+    // The destinations where there is no hardware: for SMF export and the
+    // golden tests (docs/RENDERING.md -> Same-pitch overlap, decided 25 Nov
+    // 2026). The tracks of one Player share a destination, whether or not the
+    // Player is bound to a port, and every track without a Player has one of
+    // its own. The tracker keeps the channels of a destination apart itself.
+    //
+    // Live, the engine numbers its physical ports instead; this is not asked.
+    static Destinations destinationsWithoutHardware (const model::ProjectModel& project);
 };
 
 } // namespace render

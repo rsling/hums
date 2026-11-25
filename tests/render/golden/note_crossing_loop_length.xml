@@ -1,0 +1,31 @@
+<!-- Golden case: event-clip note crossing loopLength. A note that begins late in a loop of one beat and ends in the next pass. -->
+<Project schemaVersion="1" name="Note crossing the loop point" ppq="960">
+  <Routing>
+    <Player id="16f88eccc0ac4fe58a42ec046b72df27" name="Synth"/>
+    <PadMap/>
+  </Routing>
+  <Timeline>
+    <TempoEvent tick="0" bpm="120"/>
+    <TimeSigEvent tick="0" numerator="4" denominator="4"/>
+  </Timeline>
+  <ClipPool>
+    <Clip id="373a37e4979c4b3fac80f4bc41709493" name="Beat" kind="event" loopLength="960">
+      <Events>
+        <Note tick="0" length="120" pitch="72"/>
+        <Note tick="720" length="480" pitch="60"/>
+      </Events>
+    </Clip>
+  </ClipPool>
+  <Tracks>
+    <Track id="6f1b3fedb45545b38796b5d86699c0f5" name="Lead" playerId="16f88eccc0ac4fe58a42ec046b72df27" channel="1">
+      <Placements>
+        <Placement id="2beea7a60407462a93a0307c214c386c" clipId="373a37e4979c4b3fac80f4bc41709493" start="0" length="2880"/>
+      </Placements>
+      <AutomationLanes/>
+      <Knobs/>
+      <Slots/>
+    </Track>
+  </Tracks>
+  <Session/>
+  <UiState/>
+</Project>

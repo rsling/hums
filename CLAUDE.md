@@ -78,7 +78,7 @@ Fill in as the build system lands. Expected shape:
 - ASan + UBSan: `cmake -B build-asan -G Ninja -DCMAKE_BUILD_TYPE=Debug -DHUMS_SANITIZE=address`, `cmake --build build-asan`, `ctest --test-dir build-asan --output-on-failure`
 - TSan: the same with `build-tsan` and `-DHUMS_SANITIZE=thread`; test run `ctest --test-dir build-tsan -R "engine|canary" --output-on-failure`
 - Full gate: `tools/gate.sh` (plain, then ASan + UBSan, then TSan; stops at the first failure)
-- Regenerate render golden files: `cmake --build build-ninja --target regenerate_golden` (sets `HUMS_REGENERATE_GOLDEN=1` and runs the render test binary) — then read the diff before committing it. CTest does not forward arguments to tests; never rely on `ctest -- flag`.
+- Regenerate render golden files: `cmake --build build-ninja --target regenerate_golden` (sets `HUMS_REGENERATE_GOLDEN=1` and runs the golden test binary, `render_golden_tests`) — then read the diff before committing it. CTest does not forward arguments to tests; never rely on `ctest -- flag`.
 - Timing build: `cmake -B build-release -G Ninja -DCMAKE_BUILD_TYPE=Release`, `cmake --build build-release --target miditiming`
 - Timing diagnostic: `build-release/tools/miditiming/miditiming --out "<port>" --in "<port>" --minutes 5` (plain Release build only; `--list` shows ports, `--help`-style usage on a bad argument)
 - Timing check against the app (M3+): `build-release/tools/miditiming/miditiming --listen --in "<port>" --reference <export.mid>`
@@ -157,8 +157,11 @@ src/
     TempoMap           the one tick ↔ time authority — std only
     Kernel             expands a Snapshot over a tick window into an event stream, allocation-free — std only
     NoteTracker        active-note bookkeeping per physical destination, allocation-free — std only
-                       (the four std-only entries above are the "render core")
-    SnapshotBuilder    model → Snapshot, including TempoMap data and chase tables; message thread
+    Renderer           Kernel + NoteTracker over a tick window: the events as they go out, note-offs included;
+                       the one such loop, for engine, export and golden tests, allocation-free — std only
+                       (the five std-only entries above are the "render core")
+    SnapshotBuilder    model → Snapshot, including TempoMap data and chase tables, and which destination each track
+                       plays into where there is no hardware; message thread
   engine/              Transport, Clock, Scheduler, MidiRouter, command/event FIFOs, snapshot handoff
   views/
     routing/
@@ -173,7 +176,8 @@ tests/
   io/
     fixtures/          valid projects (incl. the schema example with real UUIDs), old-version files; under refused/ the files
                        the load path must refuse (malformed, too new, one or more per invariant)
-  render/              render_core_tests (the render core; links no JUCE) and render_tests (SnapshotBuilder; links the model layer and JUCE)
+  render/              render_core_tests (the render core; links no JUCE), render_tests (SnapshotBuilder; links the model layer and JUCE)
+                       and render_golden_tests (the golden files; links io/ too, for the real load path)
     golden/            fixture project + expected event list, one pair per rendering case
   engine/
   platform/            the pure parts of the platform/mac/ backends (no MIDI hardware needed)
@@ -206,7 +210,8 @@ Use these words exactly, in code, comments, tests, and conversation.
 - **Take** — the result of one recording pass: one EventClip per source track.
 - **Snapshot** — immutable plain-data rendering of the document: one ClipTemplate per referenced clip, per-track placement plans, the TempoMap and the chase tables. Carries no mute/solo and no transport-loop state; those reach the engine as live commands. Rebuilt on the message thread after edits. Not a flat event list.
 - **Kernel** — the function that expands a Snapshot over a tick window into events. The engine runs it per look-ahead window; SMF export runs it over the export range. One implementation.
-- **Render core** — `render/snapshot/`, `TempoMap`, `Kernel`, `NoteTracker`: the part of `render/` that includes only std and each other, so the engine can include it without ever seeing `model/` or JUCE.
+- **Renderer** — `render/Renderer`: the Kernel's output put through the NoteTracker, over a tick window, into the events as they go out. The engine, SMF export and the golden tests all call it, so none of them orders events or handles note-offs on its own (decided 25 Nov 2026).
+- **Render core** — `render/snapshot/`, `TempoMap`, `Kernel`, `NoteTracker`, `Renderer`: the part of `render/` that includes only std and each other, so the engine can include it without ever seeing `model/` or JUCE.
 - **Chase table** — per ClipTemplate, per CC number and for program change: the clip's enabled events of that kind as a sorted (tick, value) list over one loop period. What seek, loop wrap and automation exit read to find "the last value before here" without scanning events.
 - **Transform** — a per-track function from event stream to event stream, sitting between Kernel output and NoteTracker. Reserved name for later modulators (arpeggiator, chord player); none exist in v1. Not "effect", not "modulator" in code.
 - **Guardrail** — an automated check that fails the test run when a structural rule of this document is broken. Not a style preference; a rule with teeth.
@@ -233,7 +238,7 @@ Six source layers, a std-only core inside `render/`, and a std-only interface se
 | `platform/mac/` | `platform/`, CoreMIDI / CoreFoundation / mach / Cocoa, JUCE, std — the only directory where OS headers appear |
 | `model/` | `model/`, JUCE, std |
 | `io/` | `io/`, `model/`, `render/`, JUCE, std |
-| `render/` | `render/`, `model/`, JUCE, std — except the **render core** (`render/snapshot/`, `TempoMap`, `Kernel`, `NoteTracker`, headers and sources alike), which includes only std and other render-core files |
+| `render/` | `render/`, `model/`, JUCE, std — except the **render core** (`render/snapshot/`, `TempoMap`, `Kernel`, `NoteTracker`, `Renderer`, headers and sources alike), which includes only std and other render-core files |
 | `engine/` | `engine/`, the render core, the `platform/` interfaces, JUCE, std — never `model/`, never any other `render/` file, never `platform/mac/` |
 | `views/` | `views/`, `model/`, `app/TransportFacade.h`, JUCE, std |
 | `app/` | anything |

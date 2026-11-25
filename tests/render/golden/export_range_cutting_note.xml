@@ -1,0 +1,32 @@
+<!-- Golden case: export range cutting a note. The range of the case ends at 1200, in the middle of a note. -->
+<Project schemaVersion="1" name="Export range cutting a note" ppq="960">
+  <Routing>
+    <Player id="1932b1b0fb4a44e2bb4757c6012ec41c" name="Synth"/>
+    <PadMap/>
+  </Routing>
+  <Timeline>
+    <TempoEvent tick="0" bpm="120"/>
+    <TimeSigEvent tick="0" numerator="4" denominator="4"/>
+  </Timeline>
+  <ClipPool>
+    <Clip id="56e13f3cd3184b70b741d77b6940b543" name="Two beats" kind="event" loopLength="1920">
+      <Events>
+        <Note tick="0" length="480" pitch="60"/>
+        <Note tick="960" length="960" pitch="64"/>
+        <Note tick="1200" length="120" pitch="67"/>
+      </Events>
+    </Clip>
+  </ClipPool>
+  <Tracks>
+    <Track id="376055bd567b48fb8579c1cf94c8d1ab" name="Lead" playerId="1932b1b0fb4a44e2bb4757c6012ec41c" channel="1">
+      <Placements>
+        <Placement id="2e5bace60b58473b93499f8a3e1c643a" clipId="56e13f3cd3184b70b741d77b6940b543" start="0" length="1920"/>
+      </Placements>
+      <AutomationLanes/>
+      <Knobs/>
+      <Slots/>
+    </Track>
+  </Tracks>
+  <Session/>
+  <UiState/>
+</Project>

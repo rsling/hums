@@ -1,12 +1,16 @@
 # render/ is two layers.
 #
-# The render core (render/snapshot/, TempoMap, Kernel, NoteTracker) is std
-# only: no JUCE, no model/. The engine links it, and render-core tests link
+# The render core (render/snapshot/, TempoMap, Kernel, NoteTracker, Renderer)
+# is std only: no JUCE, no model/. The engine links it, and render-core tests link
 # nothing else.
 hums_add_layer(hums_render_core
     SOURCES
+        Kernel.cpp
+        Kernel.h
         NoteTracker.cpp
         NoteTracker.h
+        Renderer.cpp
+        Renderer.h
         TempoMap.cpp
         TempoMap.h
         snapshot/ClipTemplate.h

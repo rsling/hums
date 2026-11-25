@@ -85,7 +85,7 @@ APP = "app/"
 # The render core: render/snapshot/ and these files directly in render/,
 # headers and sources alike (CLAUDE.md -> Repository layout).
 RENDER_CORE_DIRECTORY = "render/snapshot/"
-RENDER_CORE_FILE_STEMS = {"TempoMap", "Kernel", "NoteTracker"}
+RENDER_CORE_FILE_STEMS = {"TempoMap", "Kernel", "NoteTracker", "Renderer"}
 
 # The one app/ header views/ may include, and the header whose transitive
 # includes must stay clear of engine/.

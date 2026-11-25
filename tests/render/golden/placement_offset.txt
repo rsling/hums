@@ -1,0 +1,23 @@
+# Placement offset (docs/RENDERING.md -> Per track, Note windows).
+#
+# The placement covers 3840 to 5760 and begins 480 ticks into the clip's loop
+# of 1920. A clip tick k from 480 on is played at 3840 + (k - 480); a clip
+# tick before 480 only when the loop has come round, at 3840 + (1920 - 480) + k.
+#
+#   cc 74 at clip tick 480   -> 3840
+#   note 64 at 960, 240 long -> 4320 to 4560 (velocity 90, off velocity 30)
+#   note 60 at 0, 240 long   -> 5280 to 5520
+#   note 67 at 240, 480 long -> 5520, and would end at 6000: the placement
+#                               ends at 5760 and cuts it there
+#
+# Note 67 sounds from 240 to 720 of the loop, so the placement begins in the
+# middle of it. It is not brought in at 3840: a note whose onset lies before
+# the offset is not chased. At 5520 the off of note 60 comes before the on of
+# note 67: offs that fall due come first at a tick.
+3840 0 1 cc 74 10
+4320 0 1 noteOn 64 90
+4560 0 1 noteOff 64 30
+5280 0 1 noteOn 60 100
+5520 0 1 noteOff 60 64
+5520 0 1 noteOn 67 100
+5760 0 1 noteOff 67 64

@@ -1,0 +1,15 @@
+# Export range cutting a note (docs/RENDERING.md -> SMF export: notes
+# crossing the end get their note-off at the end).
+#
+# The placement covers 0 to 1920; only 0 to 1200 is rendered.
+#
+#   note 60 at 0, 480 long    -> 0 to 480
+#   note 64 at 960, 960 long  -> 960, and would end at 1920: the range ends
+#                                at 1200 and the note gets its off there
+#   note 67 at 1200           -> begins where the range ends, which is no
+#                                longer part of it: not played
+range 0 1200
+0 0 1 noteOn 60 100
+480 0 1 noteOff 60 64
+960 0 1 noteOn 64 100
+1200 0 1 noteOff 64 64

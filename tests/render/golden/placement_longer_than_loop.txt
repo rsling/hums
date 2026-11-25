@@ -1,0 +1,22 @@
+# Placement longer than the clip loop (docs/RENDERING.md -> Per track).
+#
+# The clip's loop is 960 long: note 60 at 0 (240 long), cc 1 at 480, note 62
+# at 720 (120 long). The placement covers 960 to 3360, which is two and a half
+# passes of the loop; the passes begin at 960, 1920 and 2880.
+#
+#   first pass   note 60 960 to 1200, cc 1440, note 62 1680 to 1800
+#   second pass  note 60 1920 to 2160, cc 2400, note 62 2640 to 2760
+#   third pass   note 60 2880 to 3120; the cc would come at 3360, which is
+#                where the placement ends and is no longer part of it
+960 0 1 noteOn 60 100
+1200 0 1 noteOff 60 64
+1440 0 1 cc 1 64
+1680 0 1 noteOn 62 100
+1800 0 1 noteOff 62 64
+1920 0 1 noteOn 60 100
+2160 0 1 noteOff 60 64
+2400 0 1 cc 1 64
+2640 0 1 noteOn 62 100
+2760 0 1 noteOff 62 64
+2880 0 1 noteOn 60 100
+3120 0 1 noteOff 60 64

@@ -1,0 +1,33 @@
+<!-- Golden case: placement offset. One clip of two beats, placed once, beginning 480 ticks into its loop. -->
+<Project schemaVersion="1" name="Placement offset" ppq="960">
+  <Routing>
+    <Player id="016a51bf28184e49bbf26678bd80738e" name="Synth"/>
+    <PadMap/>
+  </Routing>
+  <Timeline>
+    <TempoEvent tick="0" bpm="120"/>
+    <TimeSigEvent tick="0" numerator="4" denominator="4"/>
+  </Timeline>
+  <ClipPool>
+    <Clip id="b1c4da61522046e0b1a5dcbf2b8624d1" name="Riff" kind="event" loopLength="1920">
+      <Events>
+        <Note tick="0" length="240" pitch="60"/>
+        <Note tick="240" length="480" pitch="67"/>
+        <Event tick="480" kind="cc" a="74" b="10"/>
+        <Note tick="960" length="240" pitch="64" velocity="90" offVelocity="30"/>
+      </Events>
+    </Clip>
+  </ClipPool>
+  <Tracks>
+    <Track id="4be885aace43447db4354970b45801fb" name="Lead" playerId="016a51bf28184e49bbf26678bd80738e" channel="1">
+      <Placements>
+        <Placement id="6e53d2844333416daf1feda65efade53" clipId="b1c4da61522046e0b1a5dcbf2b8624d1" start="3840" length="1920" offset="480"/>
+      </Placements>
+      <AutomationLanes/>
+      <Knobs/>
+      <Slots/>
+    </Track>
+  </Tracks>
+  <Session/>
+  <UiState/>
+</Project>

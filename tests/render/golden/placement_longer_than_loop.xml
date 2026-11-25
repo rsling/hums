@@ -1,0 +1,32 @@
+<!-- Golden case: placement longer than the clip loop. A clip of one beat, placed for two and a half beats. -->
+<Project schemaVersion="1" name="Placement longer than the loop" ppq="960">
+  <Routing>
+    <Player id="b9dfaeff312d4ad5bc50aae9eaf4aa7a" name="Synth"/>
+    <PadMap/>
+  </Routing>
+  <Timeline>
+    <TempoEvent tick="0" bpm="120"/>
+    <TimeSigEvent tick="0" numerator="4" denominator="4"/>
+  </Timeline>
+  <ClipPool>
+    <Clip id="97dad5f36fa945bb80f3f6912f01c995" name="Beat" kind="event" loopLength="960">
+      <Events>
+        <Note tick="0" length="240" pitch="60"/>
+        <Event tick="480" kind="cc" a="1" b="64"/>
+        <Note tick="720" length="120" pitch="62"/>
+      </Events>
+    </Clip>
+  </ClipPool>
+  <Tracks>
+    <Track id="317a65ba19a84851b43b57049f350a7a" name="Lead" playerId="b9dfaeff312d4ad5bc50aae9eaf4aa7a" channel="1">
+      <Placements>
+        <Placement id="94f75b882b9f434281aa52d27cd39974" clipId="97dad5f36fa945bb80f3f6912f01c995" start="960" length="2400"/>
+      </Placements>
+      <AutomationLanes/>
+      <Knobs/>
+      <Slots/>
+    </Track>
+  </Tracks>
+  <Session/>
+  <UiState/>
+</Project>

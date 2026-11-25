@@ -1,0 +1,43 @@
+<!-- Golden case: a track with no Player rendering normally. No Player exists; both tracks are unassigned and on channel 3. -->
+<Project schemaVersion="1" name="Tracks without a Player" ppq="960">
+  <Routing>
+    <PadMap/>
+  </Routing>
+  <Timeline>
+    <TempoEvent tick="0" bpm="120"/>
+    <TimeSigEvent tick="0" numerator="4" denominator="4"/>
+  </Timeline>
+  <ClipPool>
+    <Clip id="cc2b1c0d528046a3985744236fa09714" name="Long" kind="event" loopLength="1920">
+      <Events>
+        <Note tick="0" length="960" pitch="60"/>
+      </Events>
+    </Clip>
+    <Clip id="f406f9e099f84bb08320c0dabe867950" name="Late" kind="event" loopLength="1920">
+      <Events>
+        <Note tick="480" length="960" pitch="60"/>
+        <Event tick="0" kind="programChange" a="5"/>
+      </Events>
+    </Clip>
+  </ClipPool>
+  <Tracks>
+    <Track id="dc714a13b85d4e25ba621c609eb911d4" name="First" channel="3">
+      <Placements>
+        <Placement id="467297cb34624c0eaed49324daf7949a" clipId="cc2b1c0d528046a3985744236fa09714" start="0" length="1920"/>
+      </Placements>
+      <AutomationLanes/>
+      <Knobs/>
+      <Slots/>
+    </Track>
+    <Track id="7043c6c69e3c4129ab9b0e12da990eb4" name="Second" channel="3">
+      <Placements>
+        <Placement id="7d6236dd7e8c415998c14987543be677" clipId="f406f9e099f84bb08320c0dabe867950" start="0" length="1920"/>
+      </Placements>
+      <AutomationLanes/>
+      <Knobs/>
+      <Slots/>
+    </Track>
+  </Tracks>
+  <Session/>
+  <UiState/>
+</Project>
