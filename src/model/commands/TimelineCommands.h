@@ -24,9 +24,8 @@ namespace model::commands
 // Sets the tempo from this tick on: changes the TempoEvent at the tick, or
 // adds one when there is none. The tempo is stored with six significant
 // digits, three decimals up to 999.999 [D14] (model/CanonicalDouble).
-// Refused when the tick is negative, when the tempo is not a finite number
-// greater than 0, and when it is one so small that its saved text reads back
-// as 0.
+// Refused when the tick is negative and when the tempo, as it would be
+// stored, is not one of 3.57628 to 999.999 bpm [D23] (model/TempoRange).
 CommandResult setTempo (juce::ValueTree project, std::int64_t tick, double bpm, juce::UndoManager& undoManager);
 
 // Refused at tick 0, where a Timeline always has a tempo, and when there is

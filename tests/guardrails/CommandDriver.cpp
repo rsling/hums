@@ -269,19 +269,22 @@ std::int64_t CommandDriver::negativeTick()
 double CommandDriver::tempo()
 {
     if (random.chance (30))
-        return random.oneOf (std::vector<double> { 60.0, 118.0, 120.0, 174.5, 999.9996, 0.000099, 1.0 / 3.0 });
+        return random.oneOf (std::vector<double> { 60.0, 118.0, 120.0, 174.5, 3.57628, 3.576279, 999.999, 999.9994, 100.0 / 3.0 });
 
     if (random.chance (90))
-        return static_cast<double> (random.between (20000000, 999999999)) / 1000000.0;
+        return static_cast<double> (random.between (20000000, 999999000)) / 1000000.0;
 
-    return random.oneOf (std::vector<double> { 1e-300, 1e-7, 123456.789, 1e20, std::numeric_limits<double>::max() });
+    // The slow end of the range [D23].
+    return static_cast<double> (random.between (3576280, 20000000)) / 1000000.0;
 }
 
 double CommandDriver::noTempo()
 {
     return random.oneOf (std::vector<double> { 0.0, -0.0, -120.0, std::numeric_limits<double>::infinity(), -std::numeric_limits<double>::infinity(), std::numeric_limits<double>::quiet_NaN(),
                                                  // Greater than 0, but its saved text reads back as 0.
-                                               std::numeric_limits<double>::denorm_min() });
+                                               std::numeric_limits<double>::denorm_min(),
+                                                 // Outside 3.57628 to 999.999 bpm [D23]; 999.9996 would be saved as 1000.
+                                               3.57627, 1.0 / 3.0, 0.000099, 1e-300, 999.9996, 1000.0, 123456.789, 1e20, std::numeric_limits<double>::max() });
 }
 
 int CommandDriver::notAPitch()

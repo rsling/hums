@@ -85,18 +85,50 @@ TEST_CASE ("setTempo stores a tempo with six significant digits, as the text tha
     CHECK (stored.isString());
     CHECK (stored.toString() == "118.123");
     CHECK (juce::exactlyEqual (timelineOf (fixture).getTempoEvents()[0].getBpm(), 118.123));
+}
 
-    // A tempo of 1000 or more keeps fewer decimals.
-    REQUIRE (commands::setTempo (fixture.project, 0, 1234.5678, fixture.undoManager).wasApplied());
-    CHECK (fixture.isValid());
-    CHECK (juce::exactlyEqual (timelineOf (fixture).getTempoEvents()[0].getBpm(), 1234.57));
+TEST_CASE ("setTempo takes the slowest and the fastest tempo of the range [D23]", "[model][commands][TimelineCommands]")
+{
+    CommandFixture fixture;
 
-    // The ends of what a double holds are still tempos, as far as the
-    // document goes.
-    REQUIRE (commands::setTempo (fixture.project, 0, std::numeric_limits<double>::max(), fixture.undoManager).wasApplied());
+    REQUIRE (commands::setTempo (fixture.project, 0, 3.57628, fixture.undoManager).wasApplied());
     CHECK (fixture.isValid());
-    REQUIRE (commands::setTempo (fixture.project, 0, 1e-300, fixture.undoManager).wasApplied());
+    CHECK (fixture.timeline().getChildWithName (ids::TempoEvent)[ids::bpm].toString() == "3.57628");
+
+    REQUIRE (commands::setTempo (fixture.project, 0, 999.999, fixture.undoManager).wasApplied());
     CHECK (fixture.isValid());
+    CHECK (fixture.timeline().getChildWithName (ids::TempoEvent)[ids::bpm].toString() == "999.999");
+
+    // In the range once the digits past the sixth are dropped.
+    REQUIRE (commands::setTempo (fixture.project, 0, 3.576279, fixture.undoManager).wasApplied());
+    CHECK (fixture.isValid());
+    CHECK (fixture.timeline().getChildWithName (ids::TempoEvent)[ids::bpm].toString() == "3.57628");
+
+    REQUIRE (commands::setTempo (fixture.project, 0, 999.9994, fixture.undoManager).wasApplied());
+    CHECK (fixture.isValid());
+    CHECK (fixture.timeline().getChildWithName (ids::TempoEvent)[ids::bpm].toString() == "999.999");
+}
+
+TEST_CASE ("setTempo refuses a tempo outside 3.57628 to 999.999 bpm [D23]", "[model][commands][TimelineCommands]")
+{
+    CommandFixture fixture;
+    const auto before = fixture.xml();
+
+    // Slower than a Standard MIDI File can hold.
+    CHECK (! commands::setTempo (fixture.project, 0, 3.57627, fixture.undoManager).wasApplied());
+    CHECK (! commands::setTempo (fixture.project, 0, 1.0, fixture.undoManager).wasApplied());
+    CHECK (! commands::setTempo (fixture.project, 0, 1e-300, fixture.undoManager).wasApplied());
+
+    CHECK (! commands::setTempo (fixture.project, 0, 1000.0, fixture.undoManager).wasApplied());
+    CHECK (! commands::setTempo (fixture.project, 0, 1234.5678, fixture.undoManager).wasApplied());
+    CHECK (! commands::setTempo (fixture.project, 0, std::numeric_limits<double>::max(), fixture.undoManager).wasApplied());
+    // It would be saved as 1000.
+    CHECK (! commands::setTempo (fixture.project, 0, 999.9996, fixture.undoManager).wasApplied());
+
+    const auto refusal = commands::setTempo (fixture.project, 0, 2000.0, fixture.undoManager);
+    CHECK (refusal.refusal == "A tempo is 3.57628 to 999.999 bpm.");
+
+    CHECK (fixture.isUntouchedSince (before));
 }
 
 TEST_CASE ("setTempo to the tempo that is there leaves nothing to undo", "[model][commands][TimelineCommands]")

@@ -1,0 +1,78 @@
+<!-- Refused: invariant 10. The bpm is faster than 999.999; it is not clamped. -->
+<Project schemaVersion="1" name="All node types" ppq="960">
+  <Routing>
+    <Player id="9b1d6f3a2c4e4f708192a3b4c5d6e7f8" name="Minimoog" sendClock="1"/>
+    <Performer id="3f2c9a1e5b7d4c80a6e1f0b2d4c6e8a1" name="Keyboard"/>
+    <PadMap>
+      <Pad index="0" inputPitch="36" pitch="36" label="Kick"/>
+      <Pad index="1" inputPitch="37" pitch="42"/>
+    </PadMap>
+  </Routing>
+  <Timeline>
+    <TempoEvent tick="0" bpm="1000"/>
+    <TimeSigEvent tick="0" numerator="4" denominator="4"/>
+    <Marker tick="7680" name="B"/>
+  </Timeline>
+  <ClipPool>
+    <Clip id="5a0c7e1b3d2f4a6988b7c6d5e4f3a2b1" name="Bass 5-step" kind="step">
+      <Grid stepLength="240" stepCount="8" resetAt="6" skipMask="00010000">
+        <Lane id="1e4b7a0d3c6f49528b5e8a1d4c7f0a3b">
+          <Cell pitch="36" on="1"/>
+          <Cell pitch="36" on="1"/>
+          <Cell pitch="43" on="1"/>
+          <Cell pitch="48"/>
+          <Cell pitch="41" on="1" velocity="95" gate="1.2">
+            <CcValue cc="74" value="90"/>
+            <CcValue cc="71" value="10"/>
+          </Cell>
+          <Cell pitch="39" on="1"/>
+          <Cell pitch="36" on="1"/>
+          <Cell pitch="35" on="1"/>
+        </Lane>
+      </Grid>
+    </Clip>
+    <Clip id="6b1d8f2c4e3a4b7a99c8d7e6f5a4b3c2" name="Sweep" kind="event" loopLength="1920">
+      <Events>
+        <Event tick="0" kind="cc" a="74" b="20"/>
+        <Event tick="960" kind="cc" a="74" b="90"/>
+      </Events>
+    </Clip>
+    <Clip id="a4c6e8b0d2f44a1c8e0b2d4f6a8c0e2b" name="Lead" kind="event" loopLength="3840" quantise="1/8T" colour="#FF336699">
+      <Events>
+        <Note tick="0" length="480" pitch="60"/>
+        <Note tick="470" length="240" pitch="64" velocity="90" offVelocity="0" enabled="0"/>
+        <Event tick="0" kind="cc" a="0" b="1"/>
+        <Event tick="0" kind="programChange" a="5"/>
+        <Event tick="0" kind="pitchBend" a="16383"/>
+        <Event tick="240" kind="channelPressure" a="127"/>
+        <Event tick="240" kind="polyPressure" a="60" b="127" enabled="0"/>
+        <Event tick="960" kind="sysex" data="7e7F0901"/>
+      </Events>
+    </Clip>
+  </ClipPool>
+  <Tracks>
+    <Track id="4c6e8a0c2e4f4b1d8a6c4e2a0c1e3f5b" name="Bass" playerId="9b1d6f3a2c4e4f708192a3b4c5d6e7f8" channel="16" performerId="3f2c9a1e5b7d4c80a6e1f0b2d4c6e8a1" solo="1">
+      <Placements>
+        <Placement id="1a3c5e7a9b0d4f2e8c6a4e2c0b1d3f5a" clipId="5a0c7e1b3d2f4a6988b7c6d5e4f3a2b1" start="0" length="7680"/>
+        <Placement id="2b4d6f8b0c1e4a3f9d7b5f3d1c2e4a6b" clipId="5a0c7e1b3d2f4a6988b7c6d5e4f3a2b1" start="7680" length="7680" offset="480"/>
+      </Placements>
+      <AutomationLanes>
+        <AutomationLane id="8d2f4b6a0c1e4a3b9d7f5c3e1a0b2d4f" name="Cutoff">
+          <Placement id="3c5e7a9c1d2f4b4a8e6c4a2e0d1f3b5c" clipId="6b1d8f2c4e3a4b7a99c8d7e6f5a4b3c2" start="3840" length="1920"/>
+        </AutomationLane>
+      </AutomationLanes>
+      <Knobs>
+        <Knob cc="74" label="Cutoff"/>
+        <Knob cc="71"/>
+      </Knobs>
+      <Slots>
+        <Slot scene="0" clipId="a4c6e8b0d2f44a1c8e0b2d4f6a8c0e2b"/>
+      </Slots>
+    </Track>
+  </Tracks>
+  <Session launchQuantise="0">
+    <Scene index="0" name="A"/>
+    <Scene index="3"/>
+  </Session>
+  <UiState activeTab="stepseq" sharedEditPolicy="makeUnique" loopEnd="7680" loopEnabled="1" exportLength="15360"/>
+</Project>

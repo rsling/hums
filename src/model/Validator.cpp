@@ -3,6 +3,7 @@
 #include "model/ColourText.h"
 #include "model/Ids.h"
 #include "model/PropertyReader.h"
+#include "model/TempoRange.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -959,8 +960,8 @@ namespace
             if (! bpm.has_value())
                 continue;
 
-            if (*bpm <= 0.0)
-                addViolation (violations, tempoEvent, ids::bpm, "is " + juce::String (*bpm) + "; a tempo is greater than 0");
+            if (! TempoRange::contains (*bpm))
+                addViolation (violations, tempoEvent, ids::bpm, "is " + juce::String (*bpm) + "; a tempo is " + TempoRange::inWords());
             else
                 checkSixDigits (tempoEvent, ids::bpm, *bpm, violations);
         }

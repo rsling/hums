@@ -62,6 +62,8 @@ hums_add_layer(hums_model
         TempoEventModel.h
         TimeSigEventModel.cpp
         TimeSigEventModel.h
+        TempoRange.cpp
+        TempoRange.h
         TimelineModel.cpp
         TimelineModel.h
         TrackModel.cpp

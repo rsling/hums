@@ -356,12 +356,12 @@ namespace
             if (random.chance (40))
                 return random.oneOf (std::vector<double> { 60.0, 118.0, 120.0, 174.5 });
 
-            // Three decimals up to 999.999; a tempo of 1000 or more keeps
-            // fewer.
+            // Three decimals, up to the fastest tempo there is [D23].
             if (random.chance (90))
                 return static_cast<double> (random.between (20000, 999999)) / 1000.0;
 
-            return static_cast<double> (random.between (1000000, 9999999)) / 1000.0;
+            // The slow end, five decimals, down to the slowest there is.
+            return static_cast<double> (random.between (357628, 2000000)) / 100000.0;
         }
 
         juce::ValueTree timeline()

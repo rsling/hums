@@ -49,6 +49,7 @@ hums_add_test_executable(model_tests
     StepClipCommandsTest.cpp
     TempoEventModelTest.cpp
     TimeSigEventModelTest.cpp
+    TempoRangeTest.cpp
     TimelineCommandsTest.cpp
     TimelineModelTest.cpp
     TrackCommandsTest.cpp

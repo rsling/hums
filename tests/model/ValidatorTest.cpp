@@ -1647,14 +1647,19 @@ TEST_CASE ("Invariant 10: a gate is greater than 0 and at most 4", "[model][Vali
     requireRefused (cell, ids::gate, "half", cellWithCcValues);
 }
 
-TEST_CASE ("Invariant 10: a bpm is there, finite and greater than 0", "[model][Validator]")
+TEST_CASE ("Invariant 10: a bpm is there and is 3.57628 to 999.999 [D23]", "[model][Validator]")
 {
     const auto project = validDocument();
     const auto tempoEvent = timelineOf (project).getChildWithName (ids::TempoEvent);
     const auto* path = "Project/Timeline/TempoEvent[0]";
 
-    requireAccepted (tempoEvent, ids::bpm, "0.001");
+    requireAccepted (tempoEvent, ids::bpm, "3.57628");
     requireAccepted (tempoEvent, ids::bpm, "999.999");
+    // One step of the sixth digit past either end.
+    requireRefused (tempoEvent, ids::bpm, "3.57627", path);
+    requireRefused (tempoEvent, ids::bpm, "1000", path);
+    requireRefused (tempoEvent, ids::bpm, "0.001", path);
+    requireRefused (tempoEvent, ids::bpm, "1234.57", path);
     requireRefused (tempoEvent, ids::bpm, "0", path);
     requireRefused (tempoEvent, ids::bpm, "-118", path);
     requireRefused (tempoEvent, ids::bpm, "1e999", path);

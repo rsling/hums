@@ -3,6 +3,7 @@
 #include "model/CanonicalDouble.h"
 #include "model/Ids.h"
 #include "model/MarkerModel.h"
+#include "model/TempoRange.h"
 #include "model/commands/NodeLookup.h"
 
 #include <cmath>
@@ -77,18 +78,18 @@ CommandResult setTempo (juce::ValueTree project, std::int64_t tick, double bpm, 
     if (tick < 0)
         return negativeTick (tick);
 
-    if (! std::isfinite (bpm) || bpm <= 0.0)
-        return CommandResult::refused ("A tempo is a number greater than 0.");
+    const auto outOfRange = [] { return CommandResult::refused ("A tempo is " + TempoRange::inWords() + "."); };
+
+    if (! std::isfinite (bpm))
+        return outOfRange();
 
     // What is stored is the text that is saved, six significant digits and
-    // no more [D14]. The check is on the value that text reads back as.
+    // no more [D14]. The check is on the value that text reads back as, so
+    // 999.9996, which would be saved as 1000, is refused [D23].
     const auto text = CanonicalDouble::textOf (bpm);
-    const auto roundedBpm = CanonicalDouble::rounded (bpm);
 
-    // The smallest numbers a double can hold have a text that reads back as
-    // 0: such a tempo could not be saved.
-    if (! std::isfinite (roundedBpm) || roundedBpm <= 0.0)
-        return CommandResult::refused ("This tempo is too small or too large to be stored.");
+    if (! TempoRange::contains (CanonicalDouble::rounded (bpm)))
+        return outOfRange();
 
     auto tempoEvent = NodeLookup::childWithNumber (timeline, ids::TempoEvent, ids::tick, tick);
 
