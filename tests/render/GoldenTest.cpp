@@ -367,3 +367,18 @@ TEST_CASE ("golden: gate reaching into a skipped column", "[render][golden]")
 {
     checkGoldenCase ("step_gate_reaching_into_skipped_column");
 }
+
+TEST_CASE ("golden: gate > 1.0 into the same pitch (merge)", "[render][golden]")
+{
+    checkGoldenCase ("step_gate_over_one_into_same_pitch");
+}
+
+TEST_CASE ("golden: gate across the loop point into a different pitch", "[render][golden]")
+{
+    checkGoldenCase ("step_gate_across_loop_point_into_different_pitch");
+}
+
+TEST_CASE ("golden: gate across the loop point into the same pitch (retrigger, not merge)", "[render][golden]")
+{
+    checkGoldenCase ("step_gate_across_loop_point_into_same_pitch");
+}

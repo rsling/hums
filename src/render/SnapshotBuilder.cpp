@@ -16,6 +16,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <map>
+#include <optional>
 #include <set>
 
 namespace render
@@ -198,6 +199,14 @@ namespace
 // The notes and events of a step clip (docs/RENDERING.md -> StepClip), lane
 // by lane: for every audible column the cell's CC values at the column's
 // start, of an off cell as of an on cell, and the note of an on cell.
+//
+// The tie: an on cell whose audible column follows directly on that of an
+// on cell of the same pitch, and which the earlier note reaches, begins no
+// note of its own. The earlier note is made to end where this cell's would
+// have ended. A note reaches the next column when it is a step long or
+// longer (decided 25 Nov 2026: a gate of exactly 1 ties). The columns are
+// those of one pass of the loop, so the last one is never tied to the first
+// [D3].
     void addContentOfStepClip (ClipTemplate& clipTemplate, const model::GridModel& grid)
     {
         const std::int64_t stepLength = grid.getStepLength();
@@ -210,6 +219,11 @@ namespace
 
             // Invariant 2: every lane has a cell for every column.
             jassert (static_cast<int> (cells.size()) == grid.getStepCount());
+
+            // Where in clipTemplate.notes the note of the lane's cell in the
+            // audible column before this one stands; none when that cell is
+            // off, and in the first column.
+            std::optional<std::size_t> noteOfColumnBefore;
 
             for (const auto& audibleColumn : audibleColumns)
             {
@@ -227,15 +241,33 @@ namespace
                 }
 
                 if (! cell.isOn())
+                {
+                    noteOfColumnBefore.reset();
                     continue;
+                }
 
                 // A lane with a fixed pitch plays it in every cell; the
                 // cell's own pitch is kept and not played.
-                clipTemplate.notes.push_back ({ audibleColumn.startTick,
-                                                noteLengthOf (cell.getGate(), stepLength),
-                                                fixedPitch.value_or (cell.getPitch()),
-                                                cell.getVelocity(),
-                                                offVelocityOfStepNote });
+                const int pitch = fixedPitch.value_or (cell.getPitch());
+                const std::int64_t length = noteLengthOf (cell.getGate(), stepLength);
+
+                if (noteOfColumnBefore.has_value())
+                {
+                    auto& noteBefore = clipTemplate.notes[*noteOfColumnBefore];
+
+                    if (noteBefore.pitch == pitch && noteBefore.tick + noteBefore.length >= audibleColumn.startTick)
+                    {
+                        // Tied: one note-on, the earlier cell's, so this
+                        // cell's velocity is not heard; its gate says where
+                        // the note ends, also when that is earlier than the
+                        // note would have ended without it.
+                        noteBefore.length = audibleColumn.startTick + length - noteBefore.tick;
+                        continue;
+                    }
+                }
+
+                noteOfColumnBefore = clipTemplate.notes.size();
+                clipTemplate.notes.push_back ({ audibleColumn.startTick, length, pitch, cell.getVelocity(), offVelocityOfStepNote });
             }
         }
     }

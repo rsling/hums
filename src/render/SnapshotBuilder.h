@@ -54,8 +54,16 @@ public:
     // order of its CC values; the Kernel plays a tick's events before its
     // notes, so a column's CC values come before its note-ons.
     //
-    // Not written yet: cells of one pitch that follow each other in a lane
-    // are not tied into one note, each is a note of its own.
+    // The tie: where on cells of one pitch stand in audible columns that
+    // follow each other in a lane, and the earlier one's note is a step long
+    // or longer, so that it reaches the later column's start, the two are one
+    // note. It begins with the earlier cell and its velocity, and ends where
+    // the later cell's note would have ended. A third cell is tied on in the
+    // same way. A note shorter than a step does not reach, and the next cell
+    // begins a note of its own; so does a cell after an off cell. Nothing is
+    // tied across the loop point [D3]: the last column's note plays on into
+    // the next pass like any note that is longer than the rest of the loop,
+    // and the first column begins its own note there.
     static ClipTemplate templateOf (const model::ClipModel& clip);
 
     // The Timeline's tempos in tick order, each as the whole microseconds

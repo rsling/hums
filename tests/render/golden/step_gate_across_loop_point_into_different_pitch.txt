@@ -1,0 +1,27 @@
+# Gate across the loop point into a different pitch (docs/RENDERING.md ->
+# StepClip, Note windows).
+#
+# Four columns of 240 ticks, one lane: the loop is 960 long. The placement
+# covers 0 to 1920, two passes.
+#
+#   column  begins  cell
+#   0       0       pitch 60, gate 0.25: 60 ticks
+#   1       240     off
+#   2       480     off
+#   3       720     pitch 67, gate 1.5: 360 ticks, 240 of them in its own
+#                   column and 120 past the loop point
+#
+#   first pass   note 60 0 to 60; note 67 begins at 720
+#   second pass  begins at 960: note 60 960 to 1020, while note 67 of the
+#                first pass sounds on until 1080. Different pitches: plain
+#                overlap, nothing is cut. Note 67 begins again at 1680
+#   1920         the placement ends and truncates: note 67 would have ended
+#                at 2040 and gets its off here
+0 0 1 noteOn 60 100
+60 0 1 noteOff 60 64
+720 0 1 noteOn 67 100
+960 0 1 noteOn 60 100
+1020 0 1 noteOff 60 64
+1080 0 1 noteOff 67 64
+1680 0 1 noteOn 67 100
+1920 0 1 noteOff 67 64

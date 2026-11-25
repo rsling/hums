@@ -1,0 +1,33 @@
+# gate > 1.0 into the same pitch: the tie (docs/RENDERING.md -> StepClip).
+#
+# Six columns of 240 ticks, one lane; the placement is one pass of the loop,
+# 0 to 1440. On its own, the note of a cell would be round (gate x 240) long:
+#
+#   column  begins  cell                             on its own
+#   0       0       pitch 60, gate 2                 0 to 480
+#   1       240     pitch 60, gate 0.5, velocity 90  240 to 360
+#   2       480     pitch 60, gate 0.5               480 to 600
+#   3       720     pitch 62, gate 1                 720 to 960
+#   4       960     pitch 62, gate 1, velocity 80    960 to 1200
+#   5       1200    pitch 62, gate 0.5               1200 to 1320
+#
+# Columns 0 and 1: the same pitch, and the note of column 0 reaches the start
+# of column 1. They are one note: it begins at 0 with the velocity of column
+# 0 (100; the 90 of column 1 is not heard, there is no second note-on), and
+# it ends where the note of column 1 would have ended, at 360. That is
+# earlier than column 0 alone would have ended (480): the later cell's gate
+# says where the tied note ends.
+#
+# Column 2: the same pitch again, but the tied note ended at 360 and does not
+# reach 480. A note of its own, 480 to 600 (retrigger).
+#
+# Columns 3, 4 and 5: a gate of exactly 1 ends on the tick where the next
+# column begins, and that reaches it (decided 25 Nov 2026). Column 4 is tied
+# to column 3, the note then ends at 1200; that reaches column 5, which is
+# tied on as well. One note, 720 to 1320, velocity 100.
+0 0 1 noteOn 60 100
+360 0 1 noteOff 60 64
+480 0 1 noteOn 60 100
+600 0 1 noteOff 60 64
+720 0 1 noteOn 62 100
+1320 0 1 noteOff 62 64

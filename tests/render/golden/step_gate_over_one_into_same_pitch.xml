@@ -1,0 +1,37 @@
+<!-- Golden case: step-clip cells of one pitch that follow each other. A note that reaches the next cell's start is tied to it: one note, ending where the later cell's note would have ended. A note that does not reach retriggers. -->
+<Project schemaVersion="1" name="Gate above 1 into the same pitch" ppq="960">
+  <Routing>
+    <Player id="50f20a242e1b479dbf706626f868315f" name="Synth"/>
+    <PadMap/>
+  </Routing>
+  <Timeline>
+    <TempoEvent tick="0" bpm="120"/>
+    <TimeSigEvent tick="0" numerator="4" denominator="4"/>
+  </Timeline>
+  <ClipPool>
+    <Clip id="c883a1091c2449c78a86f5cba3c6ee18" name="Ties" kind="step">
+      <Grid stepLength="240" stepCount="6">
+        <Lane id="faedb894060645808149068c20b72068">
+          <Cell on="1" gate="2"/>
+          <Cell on="1" velocity="90"/>
+          <Cell on="1"/>
+          <Cell pitch="62" on="1" gate="1"/>
+          <Cell pitch="62" on="1" velocity="80" gate="1"/>
+          <Cell pitch="62" on="1"/>
+        </Lane>
+      </Grid>
+    </Clip>
+  </ClipPool>
+  <Tracks>
+    <Track id="d9efa2e4d1ee4437a267b4b95da35d03" name="Lead" playerId="50f20a242e1b479dbf706626f868315f" channel="1">
+      <Placements>
+        <Placement id="eb0bdfdb9beb4dee99348f1501d14925" clipId="c883a1091c2449c78a86f5cba3c6ee18" start="0" length="1440"/>
+      </Placements>
+      <AutomationLanes/>
+      <Knobs/>
+      <Slots/>
+    </Track>
+  </Tracks>
+  <Session/>
+  <UiState/>
+</Project>

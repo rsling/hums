@@ -1,0 +1,35 @@
+<!-- Golden case: a step-clip gate in the last column that reaches past the loop point, where the first column has the same pitch. Never tied across the loop point [D3]: the first column retriggers. -->
+<Project schemaVersion="1" name="Gate across the loop point into the same pitch" ppq="960">
+  <Routing>
+    <Player id="ebba33ddd3ef4e68a0e260f3652bf198" name="Synth"/>
+    <PadMap/>
+  </Routing>
+  <Timeline>
+    <TempoEvent tick="0" bpm="120"/>
+    <TimeSigEvent tick="0" numerator="4" denominator="4"/>
+  </Timeline>
+  <ClipPool>
+    <Clip id="899d1582e4d3463993a7ad28a51c21d1" name="Across the loop" kind="step">
+      <Grid stepLength="240" stepCount="4">
+        <Lane id="71f2c669f8234cc2b48d8ae055253222">
+          <Cell on="1" gate="0.25"/>
+          <Cell/>
+          <Cell on="1" gate="1"/>
+          <Cell on="1" gate="1.5"/>
+        </Lane>
+      </Grid>
+    </Clip>
+  </ClipPool>
+  <Tracks>
+    <Track id="5eed86f9938e49b282f3e424bee962fb" name="Lead" playerId="ebba33ddd3ef4e68a0e260f3652bf198" channel="1">
+      <Placements>
+        <Placement id="75b9c23c8583492c8210dbf79133e09b" clipId="899d1582e4d3463993a7ad28a51c21d1" start="0" length="1920"/>
+      </Placements>
+      <AutomationLanes/>
+      <Knobs/>
+      <Slots/>
+    </Track>
+  </Tracks>
+  <Session/>
+  <UiState/>
+</Project>

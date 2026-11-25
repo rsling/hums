@@ -1,0 +1,35 @@
+<!-- Golden case: a step-clip gate in the last column that reaches past the loop point, where the first column has another pitch. Plain overlap into the next pass of the loop. -->
+<Project schemaVersion="1" name="Gate across the loop point into a different pitch" ppq="960">
+  <Routing>
+    <Player id="d46577d5b0e84445bca48ef17a35f7a8" name="Synth"/>
+    <PadMap/>
+  </Routing>
+  <Timeline>
+    <TempoEvent tick="0" bpm="120"/>
+    <TimeSigEvent tick="0" numerator="4" denominator="4"/>
+  </Timeline>
+  <ClipPool>
+    <Clip id="21281950ee364e33a88c78866b6d43db" name="Across the loop" kind="step">
+      <Grid stepLength="240" stepCount="4">
+        <Lane id="65e022c00f164fc7b4a96b7812969625">
+          <Cell on="1" gate="0.25"/>
+          <Cell/>
+          <Cell/>
+          <Cell pitch="67" on="1" gate="1.5"/>
+        </Lane>
+      </Grid>
+    </Clip>
+  </ClipPool>
+  <Tracks>
+    <Track id="9cdeb2b8432f405698b42798bfa796c4" name="Lead" playerId="d46577d5b0e84445bca48ef17a35f7a8" channel="1">
+      <Placements>
+        <Placement id="3c16e11bbba64944a526d26dd72b6afe" clipId="21281950ee364e33a88c78866b6d43db" start="0" length="1920"/>
+      </Placements>
+      <AutomationLanes/>
+      <Knobs/>
+      <Slots/>
+    </Track>
+  </Tracks>
+  <Session/>
+  <UiState/>
+</Project>

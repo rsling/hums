@@ -595,6 +595,212 @@ TEST_CASE ("A gate above 1 reaches into the audible columns that follow, and pas
     CHECK (clipTemplate.notes[1].pitch == 62);
 }
 
+TEST_CASE ("Cells of one pitch that follow each other are tied into one note when the earlier reaches the later", "[render][SnapshotBuilder]")
+{
+    const auto clipTemplate = templateOfStepClip (R"(stepLength="240" stepCount="3")", R"(
+        <Lane id="22222222222242228222222222222222">
+          <Cell pitch="60" on="1" velocity="110" gate="1.5"/>
+          <Cell pitch="60" on="1" velocity="70" gate="0.75"/>
+          <Cell pitch="62" on="1"/>
+        </Lane>)");
+
+    REQUIRE (clipTemplate.notes.size() == 2);
+
+    // One note with the first cell's velocity; it ends where the second
+    // cell's note would have ended: 240 + 180.
+    CHECK (clipTemplate.notes[0].tick == 0);
+    CHECK (clipTemplate.notes[0].length == 420);
+    CHECK (clipTemplate.notes[0].pitch == 60);
+    CHECK (clipTemplate.notes[0].velocity == 110);
+    CHECK (clipTemplate.notes[0].offVelocity == 64);
+
+    CHECK (clipTemplate.notes[1].tick == 480);
+    CHECK (clipTemplate.notes[1].pitch == 62);
+}
+
+TEST_CASE ("A note of exactly one step reaches the next cell and is tied; one tick less is not", "[render][SnapshotBuilder]")
+{
+    const auto notesWithGate = [] (const juce::String& gate) {
+        return templateOfStepClip (R"(stepLength="240" stepCount="2")",
+                                   R"(<Lane id="22222222222242228222222222222222"><Cell on="1" gate=")" + gate
+                                       + R"("/><Cell on="1"/></Lane>)")
+            .notes;
+    };
+
+    const auto tied = notesWithGate ("1");
+    REQUIRE (tied.size() == 1);
+    CHECK (tied[0].tick == 0);
+    CHECK (tied[0].length == 360);
+
+    // 239.76 ticks round to 240: what counts is the length in ticks, not the
+    // gate as a number.
+    CHECK (notesWithGate ("0.999").size() == 1);
+
+    // 239 ticks: the note ends one tick before the next cell begins.
+    const auto apart = notesWithGate ("0.995833");
+    REQUIRE (apart.size() == 2);
+    CHECK (apart[0].tick == 0);
+    CHECK (apart[0].length == 239);
+    CHECK (apart[1].tick == 240);
+    CHECK (apart[1].length == 120);
+}
+
+TEST_CASE ("A tied note ends where the later cell's note would have ended, also when that is earlier", "[render][SnapshotBuilder]")
+{
+    // The first cell alone would sound until 720. The second cell's gate
+    // ends the tied note at 360, so the third cell is not reached and begins
+    // a note of its own.
+    const auto clipTemplate = templateOfStepClip (R"(stepLength="240" stepCount="3")", R"(
+        <Lane id="22222222222242228222222222222222">
+          <Cell on="1" gate="3"/>
+          <Cell on="1"/>
+          <Cell on="1"/>
+        </Lane>)");
+
+    REQUIRE (clipTemplate.notes.size() == 2);
+
+    CHECK (clipTemplate.notes[0].tick == 0);
+    CHECK (clipTemplate.notes[0].length == 360);
+    CHECK (clipTemplate.notes[1].tick == 480);
+    CHECK (clipTemplate.notes[1].length == 120);
+}
+
+TEST_CASE ("Any number of cells are tied one after the other", "[render][SnapshotBuilder]")
+{
+    const auto clipTemplate = templateOfStepClip (R"(stepLength="240" stepCount="4")", R"(
+        <Lane id="22222222222242228222222222222222">
+          <Cell on="1" gate="1"/>
+          <Cell on="1" gate="1.25"/>
+          <Cell on="1" gate="1"/>
+          <Cell on="1" gate="0.25"/>
+        </Lane>)");
+
+    REQUIRE (clipTemplate.notes.size() == 1);
+
+    CHECK (clipTemplate.notes[0].tick == 0);
+    CHECK (clipTemplate.notes[0].length == 780);
+}
+
+TEST_CASE ("Nothing is tied across an off cell or into another pitch", "[render][SnapshotBuilder]")
+{
+    const auto clipTemplate = templateOfStepClip (R"(stepLength="240" stepCount="5")", R"(
+        <Lane id="22222222222242228222222222222222">
+          <Cell on="1" gate="2.5"/>
+          <Cell gate="2"/>
+          <Cell on="1"/>
+          <Cell pitch="62" on="1" gate="2"/>
+          <Cell on="1"/>
+        </Lane>)");
+
+    // The first note reaches over the off cell into the third cell, which has
+    // its pitch: the two are not neighbours, and both stay notes. That they
+    // overlap is the same-pitch rule's business when they are played. The
+    // off cell's own gate does nothing.
+    REQUIRE (clipTemplate.notes.size() == 4);
+
+    CHECK (clipTemplate.notes[0].tick == 0);
+    CHECK (clipTemplate.notes[0].length == 600);
+    CHECK (clipTemplate.notes[1].tick == 480);
+    CHECK (clipTemplate.notes[1].length == 120);
+
+    // Pitch 62 reaches into the last cell, which has pitch 60: plain overlap.
+    CHECK (clipTemplate.notes[2].tick == 720);
+    CHECK (clipTemplate.notes[2].length == 480);
+    CHECK (clipTemplate.notes[2].pitch == 62);
+    CHECK (clipTemplate.notes[3].tick == 960);
+    CHECK (clipTemplate.notes[3].pitch == 60);
+}
+
+TEST_CASE ("Cells on either side of a skipped column are neighbours and are tied", "[render][SnapshotBuilder]")
+{
+    const auto clipTemplate = templateOfStepClip (R"(stepLength="240" stepCount="3" skipMask="010")", R"(
+        <Lane id="22222222222242228222222222222222">
+          <Cell on="1" gate="1"/>
+          <Cell pitch="72" on="1"/>
+          <Cell on="1"/>
+        </Lane>)");
+
+    // The skipped column does not exist in time: the third cell begins at
+    // 240, where the first cell's note ends.
+    REQUIRE (clipTemplate.notes.size() == 1);
+
+    CHECK (clipTemplate.notes[0].tick == 0);
+    CHECK (clipTemplate.notes[0].length == 360);
+    CHECK (clipTemplate.notes[0].pitch == 60);
+}
+
+TEST_CASE ("Cells are tied by the pitch they play: the fixed pitch of their lane, and never across lanes", "[render][SnapshotBuilder]")
+{
+    const auto clipTemplate = templateOfStepClip (R"(stepLength="240" stepCount="2")", R"(
+        <Lane id="22222222222242228222222222222222" fixedPitch="36">
+          <Cell pitch="50" on="1" gate="1"/>
+          <Cell pitch="51" on="1"/>
+        </Lane>
+        <Lane id="33333333333343338333333333333333">
+          <Cell pitch="36" gate="1"/>
+          <Cell pitch="36" on="1"/>
+        </Lane>
+        <Lane id="44444444444444448444444444444444">
+          <Cell pitch="36" on="1" gate="1"/>
+          <Cell pitch="38" on="1"/>
+        </Lane>)");
+
+    // Lane 1: the cells hold different pitches and play the same one: tied.
+    // Lane 2: its note at 240 follows an off cell of its own lane; the notes
+    // of the other lanes that reach it do not tie it. Lane 3: no tie.
+    REQUIRE (clipTemplate.notes.size() == 4);
+
+    CHECK (clipTemplate.notes[0].tick == 0);
+    CHECK (clipTemplate.notes[0].length == 360);
+    CHECK (clipTemplate.notes[0].pitch == 36);
+
+    CHECK (clipTemplate.notes[1].tick == 0);
+    CHECK (clipTemplate.notes[1].length == 240);
+    CHECK (clipTemplate.notes[1].pitch == 36);
+
+    CHECK (clipTemplate.notes[2].tick == 240);
+    CHECK (clipTemplate.notes[2].length == 120);
+    CHECK (clipTemplate.notes[2].pitch == 36);
+
+    CHECK (clipTemplate.notes[3].tick == 240);
+    CHECK (clipTemplate.notes[3].pitch == 38);
+}
+
+TEST_CASE ("The last column is never tied to the first: its note plays on past the loop's end", "[render][SnapshotBuilder]")
+{
+    const auto clipTemplate = templateOfStepClip (R"(stepLength="240" stepCount="2")", R"(
+        <Lane id="22222222222242228222222222222222">
+          <Cell on="1"/>
+          <Cell on="1" gate="1.5"/>
+        </Lane>)");
+
+    CHECK (clipTemplate.loopLength == 480);
+    REQUIRE (clipTemplate.notes.size() == 2);
+
+    // [D3]: the first column keeps its own note, and the last column's note
+    // is 120 ticks longer than the rest of the loop.
+    CHECK (clipTemplate.notes[0].tick == 0);
+    CHECK (clipTemplate.notes[0].length == 120);
+    CHECK (clipTemplate.notes[1].tick == 240);
+    CHECK (clipTemplate.notes[1].length == 360);
+}
+
+TEST_CASE ("A tied cell still sends its CC values at the start of its column", "[render][SnapshotBuilder]")
+{
+    const auto clipTemplate = templateOfStepClip (R"(stepLength="240" stepCount="2")", R"(
+        <Lane id="22222222222242228222222222222222">
+          <Cell on="1" gate="1"/>
+          <Cell on="1"><CcValue cc="74" value="33"/></Cell>
+        </Lane>)");
+
+    CHECK (clipTemplate.notes.size() == 1);
+    REQUIRE (clipTemplate.events.size() == 1);
+
+    CHECK (clipTemplate.events[0].tick == 240);
+    CHECK (clipTemplate.events[0].a == 74);
+    CHECK (clipTemplate.events[0].b == 33);
+}
+
 TEST_CASE ("A step clip without a lane plays nothing", "[render][SnapshotBuilder]")
 {
     const auto clipTemplate = templateOfStepClip (R"(stepLength="240" stepCount="4")", "");

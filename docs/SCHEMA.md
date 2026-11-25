@@ -219,7 +219,7 @@ A 960-style sequencer clip is a `Grid` with exactly one lane and no `fixedPitch`
 | `velocity` | int | 100 | 1–127 |
 | `gate` | double | 0.5 | fraction of `stepLength`, finite, `0 < gate ≤ 4`; > 1.0 reaches into the following cells. Six significant digits **[D14]** |
 
-Note length = `round(gate × stepLength)` ticks, at least 1, measured in audible time (skipped columns don't exist in time). Overlap with the following cells is just overlap; same-pitch handling is in `docs/RENDERING.md → StepClip` (consecutive same-pitch cells with `gate > 1` merge into one note).
+Note length = `round(gate × stepLength)` ticks, at least 1, measured in audible time (skipped columns don't exist in time). Overlap with the following cells is just overlap; same-pitch handling is in `docs/RENDERING.md → StepClip` (consecutive same-pitch cells with `gate ≥ 1` merge into one note).
 
 **CcValue** — per-cell CC output (the 960's second and third rows). Zero or more per cell, one per controller number. Sent at the cell's start tick, **also for off cells** — a rest still moves the CV row on the real thing (confirmed 3 Oct 2026).
 
