@@ -5,6 +5,8 @@
 # nothing else.
 hums_add_layer(hums_render_core
     SOURCES
+        TempoMap.cpp
+        TempoMap.h
     LAYERS)
 
 # The rest of render/ (SnapshotBuilder): document -> Snapshot, message thread.
