@@ -88,30 +88,50 @@ namespace
         return clipIds;
     }
 
-    TrackPlan planOf (const model::TrackModel& track, const std::map<juce::String, std::size_t>& templateIndexOfClipId)
+// A track's own placements, or those of one of its AutomationLanes, as a
+// plan holds them: in the order of their starts.
+    std::vector<TrackPlan::Placement> placementsInOrder (const std::vector<model::PlacementModel>& placements,
+                                                         const std::map<juce::String, std::size_t>& templateIndexOfClipId)
     {
-        TrackPlan plan;
-        plan.channel = track.getChannel();
+        std::vector<TrackPlan::Placement> inOrder;
 
-        for (const auto& placement : track.getPlacements())
+        for (const auto& placement : placements)
         {
             const auto templateIndex = templateIndexOfClipId.find (placement.getClipId());
 
-        // Invariant 1: every clipId resolves to a clip.
+            // Invariant 1: every clipId resolves to a clip.
             jassert (templateIndex != templateIndexOfClipId.end());
 
             if (templateIndex == templateIndexOfClipId.end())
                 continue;
 
-            plan.placements.push_back ({ placement.getStart(), placement.getLength(), placement.getOffset(), templateIndex->second });
+            inOrder.push_back ({ placement.getStart(), placement.getLength(), placement.getOffset(), templateIndex->second });
         }
 
-    // The document keeps placements in the order they were made. No two of
-    // one track share a tick (invariant 3), so their starts all differ.
-        std::sort (plan.placements.begin(), plan.placements.end(), [] (const TrackPlan::Placement& earlier, const TrackPlan::Placement& later) {
+        // The document keeps placements in the order they were made. No two
+        // of one track or lane share a tick (invariant 3), so their starts
+        // all differ.
+        std::sort (inOrder.begin(), inOrder.end(), [] (const TrackPlan::Placement& earlier, const TrackPlan::Placement& later) {
             return earlier.start < later.start;
         });
 
+        inOrder.shrink_to_fit();
+        return inOrder;
+    }
+
+    TrackPlan planOf (const model::TrackModel& track, const std::map<juce::String, std::size_t>& templateIndexOfClipId)
+    {
+        TrackPlan plan;
+        plan.channel = track.getChannel();
+        plan.placements = placementsInOrder (track.getPlacements(), templateIndexOfClipId);
+
+        // In the order of the lanes, which says who wins (docs/RENDERING.md
+        // -> AutomationLane merge). A lane without placements keeps its
+        // place: it owns nothing.
+        for (const auto& lane : track.getAutomationLanes())
+            plan.automationLanes.push_back ({ placementsInOrder (lane.getPlacements(), templateIndexOfClipId) });
+
+        plan.automationLanes.shrink_to_fit();
         return plan;
     }
 
@@ -275,7 +295,9 @@ namespace
 // The chase tables of a template (docs/RENDERING.md -> Chase), from its
 // events as they stand: in tick order, and in child order at one tick. Each
 // table is therefore in that order too, and of two values at one tick the
-// later child's is the later one.
+// later child's is the later one. With them the set of the controllers that
+// have a table, which is what a placement of the clip on an AutomationLane
+// owns: the controllers of its enabled cc events inside the loop.
     void addChaseTables (ClipTemplate& clipTemplate)
     {
         std::map<int, std::vector<ClipTemplate::ChasePoint>> pointsOfController;
@@ -283,7 +305,10 @@ namespace
         for (const auto& event : clipTemplate.events)
         {
             if (event.kind == ClipTemplate::EventKind::cc)
+            {
                 pointsOfController[event.a].push_back ({ event.tick, event.b });
+                clipTemplate.controllers.set (static_cast<std::size_t> (event.a));
+            }
             else if (event.kind == ClipTemplate::EventKind::programChange)
                 clipTemplate.programChanges.push_back ({ event.tick, event.a });
         }

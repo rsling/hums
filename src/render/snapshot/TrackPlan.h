@@ -8,8 +8,9 @@ namespace render
 {
 
 // What one Track plays in the arrangement, as plain data (docs/RENDERING.md
-// -> Per track): its MIDI channel and its placements. A Snapshot holds one
-// plan per Track, in track order.
+// -> Per track, AutomationLane merge): its MIDI channel, its placements and
+// those of its AutomationLanes. A Snapshot holds one plan per Track, in track
+// order.
 //
 // A plan says nothing about the track's Player: rendering is independent of
 // routing. It holds no mute and no solo either; those reach the engine as
@@ -38,6 +39,19 @@ struct TrackPlan
     // as the document has them: the Kernel plays those that continue each
     // other without a break as one.
     std::vector<Placement> placements;
+
+    // One AutomationLane of the track: its placements in the order of their
+    // starts, none sharing a tick with another. Each names the template of a
+    // clip that holds cc events only; the template's `controllers` are what
+    // the placement owns.
+    struct AutomationLane
+    {
+        std::vector<Placement> placements;
+    };
+
+    // The track's AutomationLanes in their own order, which says who wins:
+    // where two own a controller at one tick, the later lane has it.
+    std::vector<AutomationLane> automationLanes;
 };
 
 } // namespace render

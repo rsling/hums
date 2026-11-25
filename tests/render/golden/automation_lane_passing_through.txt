@@ -1,0 +1,28 @@
+# An AutomationLane passing through (docs/RENDERING.md -> AutomationLane
+# merge): a lane owns the controllers its clip sends and nothing else.
+#
+# The track's clip is 960 long and placed from 0 to 1920, two passes. In each
+# pass: cc 74 = 20 and cc 71 = 50 at 0, pitch bend 9000 at 240, cc 74 = 30
+# and cc 71 = 60 at 480.
+#
+# The lane's clip is 960 long and sends one event, cc 74 = 100 at 240. Its
+# placement lies from 960 to 1920, over the second pass. It owns cc 74 there,
+# and only cc 74.
+#
+# First pass, before the lane placement: everything of the clip passes, in
+# child order at each tick.
+#
+# Second pass: the clip's cc 74 is held back (the 20 of 960 and the 30 of
+# 1440). Its cc 71 passes at 960 and 1440, and so does the pitch bend at
+# 1200, which is no controller. At 1200 the lane's own cc 74 = 100 goes out
+# too, behind the clip's pitch bend: the track's clip comes first at a tick,
+# then the lanes.
+0 0 1 cc 74 20
+0 0 1 cc 71 50
+240 0 1 pitchBend 9000 0
+480 0 1 cc 74 30
+480 0 1 cc 71 60
+960 0 1 cc 71 50
+1200 0 1 pitchBend 9000 0
+1200 0 1 cc 74 100
+1440 0 1 cc 71 60

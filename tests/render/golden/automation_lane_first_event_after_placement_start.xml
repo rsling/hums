@@ -1,0 +1,40 @@
+<!-- Golden case: an AutomationLane whose first event comes after its placement start. The lane owns cc 74 from 480 on and sends it first at 1680. -->
+<Project schemaVersion="1" name="AutomationLane, first event after placement start" ppq="960">
+  <Routing>
+    <Player id="5ad99e80701b4caeaa8361656326c98c" name="Synth"/>
+    <PadMap/>
+  </Routing>
+  <Timeline>
+    <TempoEvent tick="0" bpm="120"/>
+    <TimeSigEvent tick="0" numerator="4" denominator="4"/>
+  </Timeline>
+  <ClipPool>
+    <Clip id="3fbb52cfa34d4c7fbd4f72705f4b3ce0" name="One beat of filter" kind="event" loopLength="960">
+      <Events>
+        <Event tick="0" kind="cc" a="74" b="20"/>
+        <Event tick="480" kind="cc" a="74" b="30"/>
+      </Events>
+    </Clip>
+    <Clip id="35f73f522d2246d2956bd3c71c57d08f" name="Late filter" kind="event" loopLength="1920">
+      <Events>
+        <Event tick="1200" kind="cc" a="74" b="100"/>
+      </Events>
+    </Clip>
+  </ClipPool>
+  <Tracks>
+    <Track id="e4012977941a4322925dea82807cd8e0" name="Lead" playerId="5ad99e80701b4caeaa8361656326c98c" channel="1">
+      <Placements>
+        <Placement id="673ac7301722476281df6be456dc3604" clipId="3fbb52cfa34d4c7fbd4f72705f4b3ce0" start="0" length="2880"/>
+      </Placements>
+      <AutomationLanes>
+        <AutomationLane id="0140328f4c0048a88d9d06bb8a91a0cc" name="Filter">
+          <Placement id="bce221870d714daf9c86ec78e7358787" clipId="35f73f522d2246d2956bd3c71c57d08f" start="480" length="2160"/>
+        </AutomationLane>
+      </AutomationLanes>
+      <Knobs/>
+      <Slots/>
+    </Track>
+  </Tracks>
+  <Session/>
+  <UiState/>
+</Project>

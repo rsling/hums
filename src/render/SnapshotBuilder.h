@@ -24,8 +24,9 @@ class SnapshotBuilder
 public:
     // The whole document: the Timeline's tempos, a template for every clip
     // that a placement (of a track or of an AutomationLane) or a slot
-    // references, and a plan for every Track. A clip nothing references gets
-    // no template.
+    // references, and a plan for every Track: its own placements and those
+    // of each of its AutomationLanes, in the order of the lanes. A clip
+    // nothing references gets no template.
     static Snapshot build (const model::ProjectModel& project);
 
     // What a clip plays in one pass of its loop.
@@ -69,6 +70,11 @@ public:
     // template's events, so they hold what is played and nothing else: the
     // cc events by controller and the program changes, of an event clip, and
     // of a step clip the CC values of its cells.
+    //
+    // The template's `controllers` are those it has a chase table for. Where
+    // the clip is on an AutomationLane they are what its placements own
+    // (docs/RENDERING.md -> AutomationLane merge): the controllers of its
+    // enabled cc events with tick < loopLength, and no others.
     static ClipTemplate templateOf (const model::ClipModel& clip);
 
     // The Timeline's tempos in tick order, each as the whole microseconds

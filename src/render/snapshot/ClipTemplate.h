@@ -1,5 +1,6 @@
 #pragma once
 
+#include <bitset>
 #include <cstddef>
 #include <cstdint>
 #include <vector>
@@ -94,6 +95,13 @@ struct ClipTemplate
     // empty when the clip has none. They hold nothing that `events` does not.
     std::vector<ControllerChase> controllerChases;
     std::vector<ChasePoint> programChanges;
+
+    // By controller number: whether `events` holds a cc event for it, so
+    // whether controllerChases has a table for it. For a clip on an
+    // AutomationLane this is the ownership set: what each of its placements
+    // owns from its start to its end (docs/RENDERING.md -> AutomationLane
+    // merge).
+    std::bitset<128> controllers;
 };
 
 } // namespace render

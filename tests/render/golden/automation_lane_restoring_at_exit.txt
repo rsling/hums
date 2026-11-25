@@ -1,0 +1,37 @@
+# An AutomationLane restoring the underlying value at exit (docs/RENDERING.md
+# -> AutomationLane merge).
+#
+# The track's clip is 3840 long and placed once, from 0 to 3840: cc 74 = 20
+# and cc 71 = 50 at 0, cc 74 = 30 at 1440, cc 71 = 60 at 1920, cc 74 = 40 at
+# 2880. It never sends cc 1.
+#
+# The lane's clip is 960 long: cc 74 = 100, cc 71 = 110 and cc 1 = 120 at 0,
+# cc 74 = 105 at 480. Its placement lies from 960 to 1920 and owns cc 1, cc
+# 71 and cc 74 there.
+#
+# 0: the clip's two values, in child order.
+# 960: the lane's three values, in the child order of its clip.
+# 1440: the clip's cc 74 = 30 is held back; the lane's 105 goes out.
+#
+# 1920: the lane placement ends, and each controller it owned goes back to
+# the track's clip, whose last value before 1920 is sent, by controller
+# number:
+#
+#   cc 1    the clip has sent none: nothing goes out, the synth keeps 120
+#   cc 71   50, of tick 0, from before the lane placement
+#   cc 74   30, of tick 1440, held back under the lane placement
+#
+# Then what the clip plays at 1920 itself, cc 71 = 60: a restored value
+# comes before the events of its tick, so the 60 has the last word.
+#
+# 2880: the clip's cc 74 = 40 passes, nothing owns it any more.
+0 0 1 cc 74 20
+0 0 1 cc 71 50
+960 0 1 cc 74 100
+960 0 1 cc 71 110
+960 0 1 cc 1 120
+1440 0 1 cc 74 105
+1920 0 1 cc 71 50
+1920 0 1 cc 74 30
+1920 0 1 cc 71 60
+2880 0 1 cc 74 40

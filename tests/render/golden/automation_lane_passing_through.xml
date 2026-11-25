@@ -1,0 +1,43 @@
+<!-- Golden case: an AutomationLane passing through. The lane owns cc 74 only; cc 71 and a pitch bend of the track's clip pass under it, and before it everything passes. -->
+<Project schemaVersion="1" name="AutomationLane passing through" ppq="960">
+  <Routing>
+    <Player id="353cc9ea2f1045ed89d4788b85593b10" name="Synth"/>
+    <PadMap/>
+  </Routing>
+  <Timeline>
+    <TempoEvent tick="0" bpm="120"/>
+    <TimeSigEvent tick="0" numerator="4" denominator="4"/>
+  </Timeline>
+  <ClipPool>
+    <Clip id="8a7265da00c246e29efcb355093a23d3" name="One beat of controllers" kind="event" loopLength="960">
+      <Events>
+        <Event tick="0" kind="cc" a="74" b="20"/>
+        <Event tick="0" kind="cc" a="71" b="50"/>
+        <Event tick="240" kind="pitchBend" a="9000"/>
+        <Event tick="480" kind="cc" a="74" b="30"/>
+        <Event tick="480" kind="cc" a="71" b="60"/>
+      </Events>
+    </Clip>
+    <Clip id="39082a28602248e08004f0f839be55e8" name="Filter" kind="event" loopLength="960">
+      <Events>
+        <Event tick="240" kind="cc" a="74" b="100"/>
+      </Events>
+    </Clip>
+  </ClipPool>
+  <Tracks>
+    <Track id="be74695ad6e043e8adf677cf33f1c1e3" name="Lead" playerId="353cc9ea2f1045ed89d4788b85593b10" channel="1">
+      <Placements>
+        <Placement id="eed10ef9df0c4996a8cf0cc92b5b6ec0" clipId="8a7265da00c246e29efcb355093a23d3" start="0" length="1920"/>
+      </Placements>
+      <AutomationLanes>
+        <AutomationLane id="74b768c9ea2d4601883c7cea682b4ab4" name="Filter">
+          <Placement id="f102b691874147c3a77915c01a0b1614" clipId="39082a28602248e08004f0f839be55e8" start="960" length="960"/>
+        </AutomationLane>
+      </AutomationLanes>
+      <Knobs/>
+      <Slots/>
+    </Track>
+  </Tracks>
+  <Session/>
+  <UiState/>
+</Project>

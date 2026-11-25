@@ -1,0 +1,28 @@
+# An AutomationLane overriding (docs/RENDERING.md -> AutomationLane merge).
+#
+# The track's clip is 1920 long and placed from 0 to 3840, two passes: note
+# 60 at 0 (480 long), cc 74 = 20 at 0, cc 74 = 40 at 960.
+#
+# The lane's clip is 1920 long too and sends cc 74 only: 100 at 0, 110 at
+# 480, 120 at 1440. Its placement lies from 1920 to 3840, over the second
+# pass, and owns cc 74 for all of it.
+#
+# First pass, nothing owned: the clip's 20 at 0 and 40 at 960.
+#
+# Second pass: the clip's cc 74 is held back, the 20 of 1920 and the 40 of
+# 2880, and the lane's values go out instead, at 1920, 2400 and 3360. The
+# note is no controller and plays as before. At 1920 the lane's event comes
+# before the note-on, like any event that is no note; at 2400 the note-off
+# that is due comes first.
+#
+# The lane placement ends with the arrangement, so nothing is restored inside
+# the range.
+0 0 1 cc 74 20
+0 0 1 noteOn 60 100
+480 0 1 noteOff 60 64
+960 0 1 cc 74 40
+1920 0 1 cc 74 100
+1920 0 1 noteOn 60 100
+2400 0 1 noteOff 60 64
+2400 0 1 cc 74 110
+3360 0 1 cc 74 120

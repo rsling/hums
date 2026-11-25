@@ -524,3 +524,28 @@ TEST_CASE ("golden: transport loop wrap with a held note", "[render][golden]")
 {
     checkGoldenCase ("transport_loop_wrap_with_held_note");
 }
+
+TEST_CASE ("golden: AutomationLane overriding", "[render][golden]")
+{
+    checkGoldenCase ("automation_lane_overriding");
+}
+
+TEST_CASE ("golden: AutomationLane passing through", "[render][golden]")
+{
+    checkGoldenCase ("automation_lane_passing_through");
+}
+
+TEST_CASE ("golden: AutomationLane restoring the underlying value at exit", "[render][golden]")
+{
+    checkGoldenCase ("automation_lane_restoring_at_exit");
+}
+
+TEST_CASE ("golden: a lane whose first event comes after its placement start", "[render][golden]")
+{
+    checkGoldenCase ("automation_lane_first_event_after_placement_start");
+}
+
+TEST_CASE ("golden: two lanes overriding the same CC", "[render][golden]")
+{
+    checkGoldenCase ("automation_two_lanes_one_cc");
+}

@@ -1,0 +1,46 @@
+<!-- Golden case: an AutomationLane restoring the underlying value at exit. The lane owns cc 1, cc 71 and cc 74 from 960 to 1920; the track's clip has sent cc 71 before the lane placement, cc 74 also under it, and cc 1 never. -->
+<Project schemaVersion="1" name="AutomationLane restoring at exit" ppq="960">
+  <Routing>
+    <Player id="e59e25ee1f0948ccabcc3c9aaac906b5" name="Synth"/>
+    <PadMap/>
+  </Routing>
+  <Timeline>
+    <TempoEvent tick="0" bpm="120"/>
+    <TimeSigEvent tick="0" numerator="4" denominator="4"/>
+  </Timeline>
+  <ClipPool>
+    <Clip id="e527c991e270454cbba0d00e96f22b7e" name="Four beats of controllers" kind="event" loopLength="3840">
+      <Events>
+        <Event tick="0" kind="cc" a="74" b="20"/>
+        <Event tick="0" kind="cc" a="71" b="50"/>
+        <Event tick="1440" kind="cc" a="74" b="30"/>
+        <Event tick="1920" kind="cc" a="71" b="60"/>
+        <Event tick="2880" kind="cc" a="74" b="40"/>
+      </Events>
+    </Clip>
+    <Clip id="2877e0577de6426c932579c5ada948d5" name="Three controllers" kind="event" loopLength="960">
+      <Events>
+        <Event tick="0" kind="cc" a="74" b="100"/>
+        <Event tick="0" kind="cc" a="71" b="110"/>
+        <Event tick="0" kind="cc" a="1" b="120"/>
+        <Event tick="480" kind="cc" a="74" b="105"/>
+      </Events>
+    </Clip>
+  </ClipPool>
+  <Tracks>
+    <Track id="b1253cba17384128adde6e9c29f04aa9" name="Lead" playerId="e59e25ee1f0948ccabcc3c9aaac906b5" channel="1">
+      <Placements>
+        <Placement id="26f4c717678d4a8da6596885dd581307" clipId="e527c991e270454cbba0d00e96f22b7e" start="0" length="3840"/>
+      </Placements>
+      <AutomationLanes>
+        <AutomationLane id="469a8a36a1ec4015bd9a49b1bcf7c755" name="Sweep">
+          <Placement id="d56d74c1929640ff9189fea68e4aeb2c" clipId="2877e0577de6426c932579c5ada948d5" start="960" length="960"/>
+        </AutomationLane>
+      </AutomationLanes>
+      <Knobs/>
+      <Slots/>
+    </Track>
+  </Tracks>
+  <Session/>
+  <UiState/>
+</Project>

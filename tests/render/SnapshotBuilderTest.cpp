@@ -1,6 +1,6 @@
 // render::SnapshotBuilder: document -> Snapshot (docs/RENDERING.md ->
-// Pipeline). An event clip becomes a ClipTemplate, a track's placements its
-// TrackPlan, the Timeline's tempos a TempoMap.
+// Pipeline). A clip becomes a ClipTemplate, a track's placements and those
+// of its AutomationLanes its TrackPlan, the Timeline's tempos a TempoMap.
 //
 // Every document here is held to the Validator first: the builder is only
 // ever handed a valid one.
@@ -1068,6 +1068,110 @@ TEST_CASE ("A plan's placements are in the order of their starts and name their 
     CHECK (placements[2].length == 500);
     CHECK (placements[2].offset == 0);
     CHECK (placements[2].templateIndex == 1);
+}
+
+TEST_CASE ("A plan has the track's AutomationLanes in their order, each with its placements in the order of their starts", "[render][SnapshotBuilder]")
+{
+    // Two lanes on one track. The first holds two placements of one clip,
+    // stored out of time order, the second none; a second track has no lane.
+    const auto project = projectWith (
+        oneTempo,
+        R"(<Clip id="aaaaaaaaaaaa4aaa8aaaaaaaaaaaaaaa" kind="event" loopLength="1000"><Events/></Clip>
+           <Clip id="cccccccccccc4ccc8ccccccccccccccc" kind="event" loopLength="3000">
+             <Events><Event tick="0" kind="cc" a="74" b="1"/></Events>
+           </Clip>
+           <Clip id="dddddddddddd4ddd8ddddddddddddddd" kind="event" loopLength="4000">
+             <Events><Event tick="0" kind="cc" a="71" b="1"/></Events>
+           </Clip>)",
+        R"(<Track id="10000000000040008000000000000001">
+             <Placements>
+               <Placement id="20000000000040008000000000000001" clipId="aaaaaaaaaaaa4aaa8aaaaaaaaaaaaaaa" start="0" length="500"/>
+             </Placements>
+             <AutomationLanes>
+               <AutomationLane id="30000000000040008000000000000001">
+                 <Placement id="20000000000040008000000000000002" clipId="cccccccccccc4ccc8ccccccccccccccc" start="6000" length="700" offset="20"/>
+                 <Placement id="20000000000040008000000000000003" clipId="cccccccccccc4ccc8ccccccccccccccc" start="100" length="900"/>
+               </AutomationLane>
+               <AutomationLane id="30000000000040008000000000000002"/>
+               <AutomationLane id="30000000000040008000000000000003">
+                 <Placement id="20000000000040008000000000000004" clipId="dddddddddddd4ddd8ddddddddddddddd" start="0" length="50"/>
+               </AutomationLane>
+             </AutomationLanes>
+             <Knobs/><Slots/>
+           </Track>
+           <Track id="10000000000040008000000000000002">
+             <Placements/><AutomationLanes/><Knobs/><Slots/>
+           </Track>)");
+
+    const auto snapshot = SnapshotBuilder::build (model::ProjectModel (project));
+
+    REQUIRE (snapshot.trackPlans.size() == 2);
+    const auto& lanes = snapshot.trackPlans[0].automationLanes;
+
+    // The track's own placement is not among them, and a lane without
+    // placements keeps its place.
+    CHECK (snapshot.trackPlans[0].placements.size() == 1);
+    REQUIRE (lanes.size() == 3);
+
+    REQUIRE (lanes[0].placements.size() == 2);
+    CHECK (lanes[0].placements[0].start == 100);
+    CHECK (lanes[0].placements[0].length == 900);
+    CHECK (lanes[0].placements[0].offset == 0);
+    CHECK (lanes[0].placements[0].templateIndex == 1);
+    CHECK (lanes[0].placements[1].start == 6000);
+    CHECK (lanes[0].placements[1].length == 700);
+    CHECK (lanes[0].placements[1].offset == 20);
+    CHECK (lanes[0].placements[1].templateIndex == 1);
+
+    CHECK (lanes[1].placements.empty());
+
+    REQUIRE (lanes[2].placements.size() == 1);
+    CHECK (lanes[2].placements[0].templateIndex == 2);
+
+    CHECK (snapshot.trackPlans[1].automationLanes.empty());
+}
+
+TEST_CASE ("A template's controllers are those of its enabled cc events inside the loop: what a lane placement of the clip owns", "[render][SnapshotBuilder]")
+{
+    const auto clipTemplate = templateOfEventClip ("1000", R"(
+        <Event tick="0" kind="cc" a="74" b="1"/>
+        <Event tick="500" kind="cc" a="74" b="2"/>
+        <Event tick="999" kind="cc" a="0" b="3"/>
+        <Event tick="10" kind="cc" a="127" b="4"/>
+        <Event tick="10" kind="cc" a="71" b="5" enabled="0"/>
+        <Event tick="1000" kind="cc" a="7" b="6"/>
+        <Event tick="20" kind="programChange" a="10"/>
+        <Event tick="30" kind="polyPressure" a="11" b="1"/>)");
+
+    // Not 71, whose only event is disabled; not 7, whose only event lies at
+    // the loop length and is never played, so that it must own nothing
+    // either (docs/SCHEMA.md -> AutomationLanes); not 10 and 11, which are
+    // no controllers here.
+    CHECK (clipTemplate.controllers.count() == 3);
+    CHECK (clipTemplate.controllers.test (0));
+    CHECK (clipTemplate.controllers.test (74));
+    CHECK (clipTemplate.controllers.test (127));
+
+    // One for one the controllers that have a chase table.
+    REQUIRE (clipTemplate.controllerChases.size() == 3);
+
+    for (const auto& controllerChase : clipTemplate.controllerChases)
+        CHECK (clipTemplate.controllers.test (static_cast<std::size_t> (controllerChase.controller)));
+}
+
+TEST_CASE ("A clip without cc events has no controllers, and a step clip has those of its cells", "[render][SnapshotBuilder]")
+{
+    CHECK (templateOfEventClip ("1000", R"(<Note tick="0" length="10" pitch="60"/>)").controllers.none());
+
+    const auto stepTemplate = templateOfStepClip (R"(stepCount="2")", R"(
+        <Lane id="22222222222242228222222222222222">
+          <Cell><CcValue cc="74" value="1"/></Cell>
+          <Cell on="1"><CcValue cc="71" value="2"/></Cell>
+        </Lane>)");
+
+    CHECK (stepTemplate.controllers.count() == 2);
+    CHECK (stepTemplate.controllers.test (71));
+    CHECK (stepTemplate.controllers.test (74));
 }
 
 TEST_CASE ("Without hardware the tracks of one Player share a destination, and a track without a Player has its own", "[render][SnapshotBuilder]")

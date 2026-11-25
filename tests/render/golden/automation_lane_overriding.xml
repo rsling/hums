@@ -1,0 +1,43 @@
+<!-- Golden case: an AutomationLane overriding. The lane placement lies over the second pass of the track's clip and owns cc 74 there. -->
+<Project schemaVersion="1" name="AutomationLane overriding" ppq="960">
+  <Routing>
+    <Player id="4acb13ebf2ca455ba9b0d78fcfadd5cf" name="Synth"/>
+    <PadMap/>
+  </Routing>
+  <Timeline>
+    <TempoEvent tick="0" bpm="120"/>
+    <TimeSigEvent tick="0" numerator="4" denominator="4"/>
+  </Timeline>
+  <ClipPool>
+    <Clip id="fd16c197dc764a4f8ae567380558af8f" name="Two beats of filter" kind="event" loopLength="1920">
+      <Events>
+        <Note tick="0" length="480" pitch="60"/>
+        <Event tick="0" kind="cc" a="74" b="20"/>
+        <Event tick="960" kind="cc" a="74" b="40"/>
+      </Events>
+    </Clip>
+    <Clip id="3bd5e2cbe2834e5cb58950ebea6afd78" name="Filter sweep" kind="event" loopLength="1920">
+      <Events>
+        <Event tick="0" kind="cc" a="74" b="100"/>
+        <Event tick="480" kind="cc" a="74" b="110"/>
+        <Event tick="1440" kind="cc" a="74" b="120"/>
+      </Events>
+    </Clip>
+  </ClipPool>
+  <Tracks>
+    <Track id="ea555960964941d8b6696372c67f26dc" name="Lead" playerId="4acb13ebf2ca455ba9b0d78fcfadd5cf" channel="1">
+      <Placements>
+        <Placement id="e8228d504f914758ad481f073765f9c1" clipId="fd16c197dc764a4f8ae567380558af8f" start="0" length="3840"/>
+      </Placements>
+      <AutomationLanes>
+        <AutomationLane id="95d1b5b8091e4a019533827fa8cba6c5" name="Filter">
+          <Placement id="a004a3a3a7f44f78a2e04b4ad70a4317" clipId="3bd5e2cbe2834e5cb58950ebea6afd78" start="1920" length="1920"/>
+        </AutomationLane>
+      </AutomationLanes>
+      <Knobs/>
+      <Slots/>
+    </Track>
+  </Tracks>
+  <Session/>
+  <UiState/>
+</Project>

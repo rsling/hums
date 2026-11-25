@@ -1,0 +1,26 @@
+# A lane whose first event comes after its placement start (docs/RENDERING.md
+# -> AutomationLane merge): the placement owns its controllers from its first
+# tick, not from its first event.
+#
+# The track's clip is 960 long and placed from 0 to 2880, three passes. In
+# each pass: cc 74 = 20 at 0, cc 74 = 30 at 480.
+#
+# The lane's clip is 1920 long and sends one event, cc 74 = 100 at 1200. Its
+# placement lies from 480 to 2640, 2160 long: one pass of the lane's clip
+# and 240 ticks of a second, which does not come to the event again.
+#
+# 0: the clip's 20, before the lane placement.
+#
+# 480 to 1680: the lane owns cc 74 and has sent nothing yet. The clip's 30 of
+# 480, its 20 of 960 and its 30 of 1440 are held back all the same, and the
+# synth stays at the 20 of tick 0.
+#
+# 1680: the lane's event, 1200 ticks into its placement.
+#
+# 1920 and 2400: the clip's 20 and 30, held back.
+#
+# 2640: the lane placement ends. The clip's last value before that tick is
+# the 30 of 2400, held back under the lane, and is restored.
+0 0 1 cc 74 20
+1680 0 1 cc 74 100
+2640 0 1 cc 74 30

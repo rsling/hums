@@ -69,7 +69,7 @@ ClipTemplate::Event programChangeAt (std::int64_t tick, int program)
 
 // A template with the chase tables that SnapshotBuilder makes from its
 // events: the cc events by controller, in the order of the controller
-// numbers, and the program changes.
+// numbers, with the set of those controllers, and the program changes.
 ClipTemplate withChaseTables (ClipTemplate clipTemplate)
 {
     for (int controller = 0; controller < 128; ++controller)
@@ -82,7 +82,10 @@ ClipTemplate withChaseTables (ClipTemplate clipTemplate)
                 controllerChase.points.push_back ({ event.tick, event.b });
 
         if (! controllerChase.points.empty())
+        {
             clipTemplate.controllerChases.push_back (controllerChase);
+            clipTemplate.controllers.set (static_cast<std::size_t> (controller));
+        }
     }
 
     for (const auto& event : clipTemplate.events)
@@ -522,4 +525,33 @@ TEST_CASE ("A seek gives the same events through a buffer of any size", "[render
 
         CHECK (playback.seek (500, 300) == expected);
     }
+}
+
+TEST_CASE ("A seek and the playback behind it leave a controller that a lane owns as playing through would have", "[render][renderer][seek][automation]")
+{
+    // The clip sends cc 74 = 10 at 0 and 11 at 500. A lane has cc 74 from
+    // 400 to 800 and sends 90 at 600.
+    auto snapshot = oneTrackPerTemplate ({ withChaseTables (templateWith (1000, {}, { ccAt (0, 74, 10), ccAt (500, 74, 11) })) }, 1000);
+    snapshot.clipTemplates.push_back (withChaseTables (templateWith (400, {}, { ccAt (200, 74, 90) })));
+    snapshot.trackPlans[0].automationLanes.push_back ({ { { 400, 400, 0, 1 } } });
+
+    // Played through: the 11 of 500 is held back and comes at the lane
+    // placement's end.
+    Playback playedThrough (snapshot, { 0 }, 1);
+    CHECK (playedThrough.render (0, 1000) == Texts { "0 0 cc 74 10", "600 0 cc 74 90", "800 0 cc 74 11" });
+
+    // Into the lane placement before its event: what the synth held when it
+    // began. Then the lane's event and the restored value, as above.
+    Playback intoTheLane (snapshot, { 0 }, 1);
+    CHECK (intoTheLane.seek (0, 550) == Texts { "550 0 cc 74 10" });
+    CHECK (intoTheLane.render (550, 1000) == Texts { "600 0 cc 74 90", "800 0 cc 74 11" });
+
+    // Behind its event: the lane's value. Out of it: the clip's.
+    CHECK (intoTheLane.seek (1000, 700) == Texts { "700 0 cc 74 90" });
+    CHECK (intoTheLane.seek (700, 900) == Texts { "900 0 cc 74 11" });
+
+    // On the tick at which the lane placement ends, the lane's value is
+    // chased and the restored one is played.
+    CHECK (intoTheLane.seek (900, 800) == Texts { "800 0 cc 74 90" });
+    CHECK (intoTheLane.render (800, 1000) == Texts { "800 0 cc 74 11" });
 }

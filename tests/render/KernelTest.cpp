@@ -1,6 +1,7 @@
 // render::Kernel: a Snapshot over a window of ticks (docs/RENDERING.md -> Per
-// track, Note windows). The Snapshots here are made by hand; the rules
-// themselves have their golden files (tests/render/golden/).
+// track, Note windows, AutomationLane merge, Chase). The Snapshots here are
+// made by hand; the rules themselves have their golden files
+// (tests/render/golden/).
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -14,6 +15,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <random>
+#include <tuple>
 #include <vector>
 
 using render::ClipTemplate;
@@ -146,7 +149,10 @@ ClipTemplate chasedTemplateWith (std::int64_t loopLength, std::vector<ClipTempla
                 controllerChase.points.push_back ({ event.tick, event.b });
 
         if (! controllerChase.points.empty())
+        {
             clipTemplate.controllerChases.push_back (controllerChase);
+            clipTemplate.controllers.set (static_cast<std::size_t> (controller));
+        }
     }
 
     for (const auto& event : clipTemplate.events)
@@ -163,6 +169,111 @@ int chasedController (const Snapshot& snapshot, int controller, std::int64_t tic
 }
 
 const int none = Kernel::ChasedValues::none;
+
+// A track on channel 1 with its own placements and its AutomationLanes, each
+// lane given as its placements.
+TrackPlan planWithLanes (std::vector<TrackPlan::Placement> placements, std::vector<std::vector<TrackPlan::Placement>> lanes)
+{
+    TrackPlan plan = planWith (1, std::move (placements));
+
+    for (auto& lanePlacements : lanes)
+        plan.automationLanes.push_back ({ std::move (lanePlacements) });
+
+    return plan;
+}
+
+// A cc event as a test writes it down: tick, controller, value.
+using Cc = std::tuple<std::int64_t, int, int>;
+
+// The cc events among what the Kernel gave, in the order it gave them.
+std::vector<Cc> ccsOf (const std::vector<Kernel::Event>& events)
+{
+    std::vector<Cc> ccs;
+
+    for (const auto& event : events)
+        if (event.kind == Kernel::EventKind::cc)
+            ccs.push_back ({ event.tick, event.a, event.b });
+
+    return ccs;
+}
+
+// The cc events of every track from `start` up to `end`.
+std::vector<Cc> ccsOf (const Snapshot& snapshot, std::int64_t start, std::int64_t end)
+{
+    return ccsOf (expandAll (snapshot, start, end));
+}
+
+// A snapshot made from numbers a seeded generator gives: one track with a
+// few placements of clips that send controllers 1 to 3 and program changes,
+// and up to three AutomationLanes with placements of clips that send some
+// of those controllers. Loops are short and offsets arbitrary, placements
+// begin and end on any tick, and now and then one is cut in two that
+// continue each other, as a split leaves them. Everything lies before tick
+// 60.
+Snapshot randomSnapshotWithLanes (std::mt19937& numbers)
+{
+    const auto upTo = [&numbers] (int limit) {
+        return static_cast<int> (numbers() % static_cast<unsigned int> (limit));
+    };
+
+    std::vector<ClipTemplate> clipTemplates;
+
+    const auto addTemplate = [&] (bool isLaneClip) {
+        const std::int64_t loopLength = 2 + upTo (10);
+        std::vector<ClipTemplate::Event> events;
+
+        for (std::int64_t tick = 0; tick < loopLength; ++tick)
+        {
+            for (int controller = 1; controller <= 3; ++controller)
+                if (upTo (6) == 0)
+                    events.push_back (ccAt (tick, controller, upTo (128)));
+
+            if (! isLaneClip && upTo (12) == 0)
+                events.push_back (programChangeAt (tick, upTo (128)));
+        }
+
+        clipTemplates.push_back (chasedTemplateWith (loopLength, std::move (events)));
+        return clipTemplates.size() - 1;
+    };
+
+    const auto placementsOf = [&] (bool onLane) {
+        std::vector<TrackPlan::Placement> placements;
+        std::int64_t tick = upTo (10);
+
+        for (int count = upTo (4); count > 0 && tick < 50; --count)
+        {
+            const std::size_t templateIndex = addTemplate (onLane);
+            const std::int64_t loopLength = clipTemplates[templateIndex].loopLength;
+            const std::int64_t length = 1 + upTo (20);
+            const std::int64_t offset = upTo (static_cast<int> (loopLength));
+
+            if (length > 1 && upTo (3) == 0)
+            {
+                const std::int64_t firstLength = 1 + upTo (static_cast<int> (length - 1));
+
+                placements.push_back ({ tick, firstLength, offset, templateIndex });
+                placements.push_back ({ tick + firstLength, length - firstLength, (offset + firstLength) % loopLength, templateIndex });
+            }
+            else
+            {
+                placements.push_back ({ tick, length, offset, templateIndex });
+            }
+
+            // Often the next one follows at once.
+            tick += length + (upTo (2) == 0 ? 0 : upTo (8));
+        }
+
+        return placements;
+    };
+
+    auto trackPlacements = placementsOf (false);
+    std::vector<std::vector<TrackPlan::Placement>> lanes;
+
+    for (int count = upTo (4); count > 0; --count)
+        lanes.push_back (placementsOf (true));
+
+    return snapshotWith (std::move (clipTemplates), { planWithLanes (std::move (trackPlacements), std::move (lanes)) });
+}
 
 // Two tracks, several placements, notes and events that share ticks: enough
 // for the ways of asking to differ if they could.
@@ -666,4 +777,374 @@ TEST_CASE ("The largest ticks a document can hold are chased without overflow", 
     CHECK (chasedController (snapshot, 74, 1005) == 20);
     CHECK (chasedController (snapshot, 74, 1006) == 10);
     CHECK (chasedController (snapshot, 74, largestTick) == 10);
+}
+
+// Template 0 is the track's own clip in what follows, the others are the
+// lanes' clips.
+
+TEST_CASE ("While a lane placement owns a controller, the clip's values for it are held back and the lane's are played", "[render][kernel][automation]")
+{
+    // The clip sends cc 74 at every 100th tick; the lane has it from 150 to
+    // 450 and sends its own at 200 and 300.
+    const auto snapshot = snapshotWith (
+        { chasedTemplateWith (100, { ccAt (0, 74, 10) }),
+          chasedTemplateWith (300, { ccAt (50, 74, 90), ccAt (150, 74, 91) }) },
+        { planWithLanes ({ { 0, 600, 0, 0 } }, { { { 150, 300, 0, 1 } } }) });
+
+    CHECK (ccsOf (snapshot, 0, 600) == std::vector<Cc> { { 0, 74, 10 }, { 100, 74, 10 }, { 200, 74, 90 }, { 300, 74, 91 },
+                                                         // At the end the clip's value of 400 is restored; from then on the clip
+                                                         // has the controller again.
+                                                         { 450, 74, 10 },
+                                                         { 500, 74, 10 } });
+}
+
+TEST_CASE ("What a lane's clip does not send passes: other controllers, other kinds of event, and notes", "[render][kernel][automation]")
+{
+    auto trackTemplate = chasedTemplateWith (100, { ccAt (0, 74, 10), ccAt (0, 71, 20), programChangeAt (0, 5) });
+    trackTemplate.notes = { noteAt (0, 10, 60) };
+
+    const auto snapshot = snapshotWith (
+        { trackTemplate, chasedTemplateWith (200, { ccAt (10, 74, 90) }) },
+        { planWithLanes ({ { 0, 200, 0, 0 } }, { { { 0, 200, 0, 1 } } }) });
+
+    const auto events = expandAll (snapshot, 0, 200);
+
+    CHECK (ccsOf (events) == std::vector<Cc> { { 0, 71, 20 }, { 10, 74, 90 }, { 100, 71, 20 } });
+
+    CHECK (std::count_if (events.begin(), events.end(), [] (const Kernel::Event& event) {
+               return event.kind == Kernel::EventKind::programChange;
+           })
+           == 2);
+    CHECK (std::count_if (events.begin(), events.end(), [] (const Kernel::Event& event) {
+               return event.kind == Kernel::EventKind::noteOn;
+           })
+           == 2);
+}
+
+TEST_CASE ("A lane owns its controllers from the first tick of its placement to the last, whenever its own events come", "[render][kernel][automation]")
+{
+    // The lane's only event comes 250 ticks into its placement. The clip's
+    // values of 100 and 200 are held back all the same; that of 400, the
+    // tick at which the placement ends, is not.
+    const auto snapshot = snapshotWith (
+        { chasedTemplateWith (100, { ccAt (0, 74, 10) }),
+          chasedTemplateWith (300, { ccAt (250, 74, 90) }) },
+        { planWithLanes ({ { 0, 500, 0, 0 } }, { { { 100, 300, 0, 1 } } }) });
+
+    CHECK (ccsOf (snapshot, 0, 500) == std::vector<Cc> { { 0, 74, 10 }, { 350, 74, 90 }, { 400, 74, 10 }, { 400, 74, 10 } });
+}
+
+TEST_CASE ("A lane's events carry the track's channel and the track's place, and a track that is not heard plays none", "[render][kernel][automation]")
+{
+    TrackPlan plan = planWithLanes ({}, { { { 0, 100, 0, 0 } } });
+    plan.channel = 7;
+
+    const auto snapshot = snapshotWith ({ chasedTemplateWith (100, { ccAt (10, 74, 90) }) }, { planWith (1, {}), plan });
+
+    const auto events = expandAll (snapshot, 0, 100);
+
+    REQUIRE (events.size() == 1);
+    CHECK (events[0].tick == 10);
+    CHECK (events[0].track == 1);
+    CHECK (events[0].channel == 7);
+    CHECK (events[0].kind == Kernel::EventKind::cc);
+
+    CHECK (expandAll (snapshot, { true, false }, 0, 100).empty());
+}
+
+TEST_CASE ("A lane plays where the track has no placement of its own", "[render][kernel][automation]")
+{
+    const auto snapshot = snapshotWith (
+        { chasedTemplateWith (100, { ccAt (0, 74, 10) }),
+          chasedTemplateWith (50, { ccAt (0, 74, 90) }) },
+        { planWithLanes ({ { 0, 100, 0, 0 } }, { { { 300, 100, 0, 1 } } }) });
+
+    // At 400 the clip's value of tick 0 is restored: it is the track's last.
+    CHECK (ccsOf (snapshot, 0, 500) == std::vector<Cc> { { 0, 74, 10 }, { 300, 74, 90 }, { 350, 74, 90 }, { 400, 74, 10 } });
+}
+
+TEST_CASE ("At a lane placement's end the track's last value goes out: one from before the placement as one held back under it", "[render][kernel][automation]")
+{
+    // cc 74 is sent by the clip at 0 only, before the lane placement; cc 71
+    // at 0 and at 250, under it. The lane has both from 200 to 300.
+    const auto snapshot = snapshotWith (
+        { chasedTemplateWith (1000, { ccAt (0, 74, 10), ccAt (0, 71, 20), ccAt (250, 71, 21) }),
+          chasedTemplateWith (100, { ccAt (0, 74, 90), ccAt (0, 71, 91) }) },
+        { planWithLanes ({ { 0, 1000, 0, 0 } }, { { { 200, 100, 0, 1 } } }) });
+
+    CHECK (ccsOf (snapshot, 0, 1000) == std::vector<Cc> { { 0, 74, 10 }, { 0, 71, 20 }, { 200, 74, 90 }, { 200, 71, 91 },
+                                                          // By controller number.
+                                                          { 300, 71, 21 },
+                                                          { 300, 74, 10 } });
+}
+
+TEST_CASE ("Nothing goes out at a lane placement's end when the track's clips have sent no value of the controller", "[render][kernel][automation]")
+{
+    // The clip sends cc 74 only at 500, behind the lane placement.
+    const auto snapshot = snapshotWith (
+        { chasedTemplateWith (1000, { ccAt (500, 74, 10) }),
+          chasedTemplateWith (100, { ccAt (0, 74, 90) }) },
+        { planWithLanes ({ { 0, 1000, 0, 0 } }, { { { 200, 100, 0, 1 } } }) });
+
+    CHECK (ccsOf (snapshot, 0, 1000) == std::vector<Cc> { { 200, 74, 90 }, { 500, 74, 10 } });
+}
+
+TEST_CASE ("A restored value comes before what the track plays at that tick", "[render][kernel][automation]")
+{
+    // The lane placement ends at 300, where the clip sends cc 74 anew and a
+    // second lane placement begins with a value for cc 71.
+    auto trackTemplate = chasedTemplateWith (300, { ccAt (0, 74, 10), ccAt (0, 71, 20) });
+    trackTemplate.notes = { noteAt (0, 10, 60) };
+
+    const auto snapshot = snapshotWith (
+        { trackTemplate,
+          chasedTemplateWith (100, { ccAt (50, 74, 90) }),
+          chasedTemplateWith (100, { ccAt (0, 71, 95) }) },
+        { planWithLanes ({ { 0, 600, 0, 0 } }, { { { 200, 100, 0, 1 }, { 300, 100, 0, 2 } } }) });
+
+    const auto events = expandAll (snapshot, 300, 301);
+
+    REQUIRE (events.size() == 4);
+
+    // Restored: the clip's cc 74 of tick 0.
+    CHECK (ccsOf (events) == std::vector<Cc> { { 300, 74, 10 }, { 300, 74, 10 }, { 300, 71, 95 } });
+    CHECK (events[3].kind == Kernel::EventKind::noteOn);
+}
+
+TEST_CASE ("A lane placement that is continued without a break does not end: nothing is restored at the seam", "[render][kernel][automation]")
+{
+    const auto whole = snapshotWith (
+        { chasedTemplateWith (1000, { ccAt (0, 74, 10) }),
+          chasedTemplateWith (80, { ccAt (10, 74, 90) }) },
+        { planWithLanes ({ { 0, 1000, 0, 0 } }, { { { 100, 300, 30, 1 } } }) });
+
+    // The same placement split at 250: 150 ticks in, at tick (30 + 150) mod
+    // 80 = 20 of the loop.
+    auto split = whole;
+    split.trackPlans[0].automationLanes[0].placements = { { 100, 150, 30, 1 }, { 250, 150, 20, 1 } };
+
+    CHECK (ccsOf (split, 0, 1000) == ccsOf (whole, 0, 1000));
+
+    // A second placement that begins the loop anew is another placement, but
+    // it owns the controller from the tick at which the first ends: nothing
+    // is restored there either.
+    auto restarted = whole;
+    restarted.trackPlans[0].automationLanes[0].placements = { { 100, 150, 30, 1 }, { 250, 150, 0, 1 } };
+
+    const auto ccs = ccsOf (restarted, 250, 251);
+    CHECK (ccs.empty());
+}
+
+TEST_CASE ("Of two lanes that own a controller at once the later one has it", "[render][kernel][automation]")
+{
+    // Lane 0 has cc 74 from 0 to 400, lane 1 from 100 to 300. Both send it
+    // at every 50th tick.
+    const auto snapshot = snapshotWith (
+        { chasedTemplateWith (1000, { ccAt (0, 74, 10) }),
+          chasedTemplateWith (50, { ccAt (0, 74, 40) }),
+          chasedTemplateWith (50, { ccAt (0, 74, 90) }) },
+        { planWithLanes ({ { 0, 1000, 0, 0 } }, { { { 0, 400, 0, 1 } }, { { 100, 200, 0, 2 } } }) });
+
+    CHECK (ccsOf (snapshot, 0, 1000) == std::vector<Cc> { { 0, 74, 40 }, { 50, 74, 40 }, { 100, 74, 90 }, { 150, 74, 90 }, { 200, 74, 90 }, { 250, 74, 90 },
+                                                          // Lane 1 ends: lane 0's value of 250, which was held back, and then
+                                                          // lane 0's event of 300 itself.
+                                                          { 300, 74, 40 },
+                                                          { 300, 74, 40 },
+                                                          { 350, 74, 40 },
+                                                          // Lane 0 ends: the clip's value.
+                                                          { 400, 74, 10 } });
+}
+
+TEST_CASE ("When the later lane's placement ends over an earlier lane that has sent nothing yet, nothing goes out", "[render][kernel][automation]")
+{
+    // Lane 0 has cc 74 from 0 to 400 and sends it at 350 only.
+    const auto snapshot = snapshotWith (
+        { chasedTemplateWith (1000, { ccAt (0, 74, 10), ccAt (50, 74, 11) }),
+          chasedTemplateWith (400, { ccAt (350, 74, 40) }),
+          chasedTemplateWith (100, { ccAt (0, 74, 90) }) },
+        { planWithLanes ({ { 0, 1000, 0, 0 } }, { { { 0, 400, 0, 1 } }, { { 100, 100, 0, 2 } } }) });
+
+    // Not the clip's 11 at 200: lane 0 still owns the controller.
+    CHECK (ccsOf (snapshot, 0, 1000) == std::vector<Cc> { { 100, 74, 90 }, { 350, 74, 40 }, { 400, 74, 11 } });
+}
+
+TEST_CASE ("When the earlier lane's placement ends under a later lane that has the controller, nothing goes out", "[render][kernel][automation]")
+{
+    const auto snapshot = snapshotWith (
+        { chasedTemplateWith (1000, { ccAt (0, 74, 10) }),
+          chasedTemplateWith (100, { ccAt (0, 74, 40) }),
+          chasedTemplateWith (400, { ccAt (0, 74, 90) }) },
+        { planWithLanes ({ { 0, 1000, 0, 0 } }, { { { 100, 100, 0, 1 } }, { { 50, 400, 0, 2 } } }) });
+
+    CHECK (ccsOf (snapshot, 0, 1000) == std::vector<Cc> { { 0, 74, 10 }, { 50, 74, 90 }, { 450, 74, 10 } });
+}
+
+TEST_CASE ("Two lanes that own different controllers leave each other alone", "[render][kernel][automation]")
+{
+    const auto snapshot = snapshotWith (
+        { chasedTemplateWith (1000, { ccAt (0, 74, 10), ccAt (0, 71, 20) }),
+          chasedTemplateWith (100, { ccAt (0, 74, 40) }),
+          chasedTemplateWith (100, { ccAt (0, 71, 90) }) },
+        { planWithLanes ({ { 0, 1000, 0, 0 } }, { { { 100, 100, 0, 1 } }, { { 100, 100, 0, 2 } } }) });
+
+    CHECK (ccsOf (snapshot, 0, 1000) == std::vector<Cc> { { 0, 74, 10 }, { 0, 71, 20 },
+                                                          // At one tick the lanes come in their order.
+                                                          { 100, 74, 40 },
+                                                          { 100, 71, 90 },
+                                                          { 200, 71, 20 },
+                                                          { 200, 74, 10 } });
+}
+
+TEST_CASE ("A track with lanes gives the same events through a buffer of any size and in windows of any length", "[render][kernel][automation]")
+{
+    const auto snapshot = snapshotWith (
+        { chasedTemplateWith (100, { ccAt (0, 74, 10), ccAt (0, 71, 20), ccAt (0, 1, 30) }),
+          chasedTemplateWith (50, { ccAt (0, 74, 40), ccAt (0, 71, 41) }),
+          chasedTemplateWith (70, { ccAt (0, 74, 90), ccAt (0, 1, 91) }) },
+        { planWithLanes ({ { 0, 1000, 0, 0 } }, { { { 0, 400, 0, 1 }, { 400, 100, 0, 1 } }, { { 100, 200, 0, 2 }, { 300, 100, 60, 2 } } }) });
+
+    const std::vector<bool> allTracks { true };
+    const auto inOnePiece = expandAll (snapshot, allTracks, 0, 1000, 256);
+
+    for (const std::size_t bufferSize : { 1u, 2u, 3u, 5u })
+    {
+        INFO ("buffer of " << bufferSize);
+        CHECK (areTheSame (expandAll (snapshot, allTracks, 0, 1000, bufferSize), inOnePiece));
+    }
+
+    for (const std::int64_t windowLength : { 1, 7, 100, 333 })
+    {
+        INFO ("windows of " << windowLength);
+        std::vector<Kernel::Event> inWindows;
+
+        for (std::int64_t start = 0; start < 1000; start += windowLength)
+        {
+            const auto window = expandAll (snapshot, start, std::min<std::int64_t> (start + windowLength, 1000));
+            inWindows.insert (inWindows.end(), window.begin(), window.end());
+        }
+
+        CHECK (areTheSame (inWindows, inOnePiece));
+    }
+}
+
+TEST_CASE ("The chase asks the lane that owns a controller at the tick: its last value, not the clip's", "[render][kernel][automation][chase]")
+{
+    const auto snapshot = snapshotWith (
+        { chasedTemplateWith (100, { ccAt (0, 74, 10), ccAt (0, 71, 20) }),
+          chasedTemplateWith (300, { ccAt (50, 74, 90), ccAt (150, 74, 91) }) },
+        { planWithLanes ({ { 0, 1000, 0, 0 } }, { { { 200, 300, 0, 1 } } }) });
+
+    CHECK (chasedController (snapshot, 74, 300) == 90);
+    CHECK (chasedController (snapshot, 74, 351) == 91);
+    // At the event's own tick it is not yet sent.
+    CHECK (chasedController (snapshot, 74, 350) == 90);
+
+    // A controller the lane does not own is the clip's throughout.
+    CHECK (chasedController (snapshot, 71, 300) == 20);
+
+    // The clip's value is restored at 500, where the placement ends: it is
+    // sent at that tick, so before it the lane's still stands. Before the
+    // placement the lane has no say.
+    CHECK (chasedController (snapshot, 74, 500) == 91);
+    CHECK (chasedController (snapshot, 74, 501) == 10);
+    CHECK (chasedController (snapshot, 74, 200) == 10);
+    CHECK (chasedController (snapshot, 74, 0) == none);
+}
+
+TEST_CASE ("A seek into a lane placement before its first event finds what the synth held when the placement began", "[render][kernel][automation][chase]")
+{
+    // The clip sends cc 74 = 10 at 0 and 11 at 150; the lane has it from 100
+    // to 400 and sends it at 300 only. Playing through, the 11 is held back
+    // and the synth stays at 10 until 300.
+    const auto snapshot = snapshotWith (
+        { chasedTemplateWith (1000, { ccAt (0, 74, 10), ccAt (150, 74, 11) }),
+          chasedTemplateWith (300, { ccAt (200, 74, 90) }) },
+        { planWithLanes ({ { 0, 1000, 0, 0 } }, { { { 100, 300, 0, 1 } } }) });
+
+    CHECK (chasedController (snapshot, 74, 100) == 10);
+    CHECK (chasedController (snapshot, 74, 200) == 10);
+    CHECK (chasedController (snapshot, 74, 300) == 10);
+    CHECK (chasedController (snapshot, 74, 301) == 90);
+
+    // At the end the clip's 11 is restored.
+    CHECK (chasedController (snapshot, 74, 400) == 90);
+    CHECK (chasedController (snapshot, 74, 401) == 11);
+}
+
+TEST_CASE ("A seek behind a lane placement on a track whose clips never send the controller finds the lane's last value", "[render][kernel][automation][chase]")
+{
+    const auto snapshot = snapshotWith (
+        { chasedTemplateWith (1000, { ccAt (0, 71, 20), ccAt (900, 74, 10) }),
+          chasedTemplateWith (100, { ccAt (0, 74, 90), ccAt (50, 74, 91) }),
+          chasedTemplateWith (100, { ccAt (99, 74, 95) }) },
+        { planWithLanes ({ { 0, 1000, 0, 0 } }, { { { 100, 100, 0, 1 }, { 400, 50, 0, 2 } } }) });
+
+    CHECK (chasedController (snapshot, 74, 100) == none);
+    CHECK (chasedController (snapshot, 74, 200) == 91);
+    CHECK (chasedController (snapshot, 74, 300) == 91);
+
+    // The second placement ends before its clip's only event: it has sent
+    // nothing, and the first one's value still stands, inside it and behind
+    // it.
+    CHECK (chasedController (snapshot, 74, 425) == 91);
+    CHECK (chasedController (snapshot, 74, 800) == 91);
+
+    // Once the clip has sent one, that one counts.
+    CHECK (chasedController (snapshot, 74, 901) == 10);
+}
+
+TEST_CASE ("The chase with two lanes: the later lane's value while it runs, the earlier lane's once the later has ended", "[render][kernel][automation][chase]")
+{
+    const auto snapshot = snapshotWith (
+        { chasedTemplateWith (1000, { ccAt (0, 74, 10) }),
+          chasedTemplateWith (50, { ccAt (0, 74, 40) }),
+          chasedTemplateWith (50, { ccAt (10, 74, 90) }) },
+        { planWithLanes ({ { 0, 1000, 0, 0 } }, { { { 0, 400, 0, 1 } }, { { 100, 200, 0, 2 } } }) });
+
+    CHECK (chasedController (snapshot, 74, 50) == 40);
+    // Lane 1 has begun and sent nothing yet: lane 0's value of 100 stands.
+    CHECK (chasedController (snapshot, 74, 105) == 40);
+    CHECK (chasedController (snapshot, 74, 111) == 90);
+    CHECK (chasedController (snapshot, 74, 300) == 90);
+    // Restored at 300: lane 0's value.
+    CHECK (chasedController (snapshot, 74, 301) == 40);
+    CHECK (chasedController (snapshot, 74, 401) == 10);
+}
+
+TEST_CASE ("The chase finds for every tick what playing from tick 0 has last sent before it", "[render][kernel][automation][chase]")
+{
+    // Decided 25 Nov 2026: a seek leaves the controllers as playing through
+    // would have. Held here for many small snapshots with lanes, at every
+    // tick: the chase against the last value among the events of expand.
+    std::mt19937 numbers (20261125);
+
+    for (int round = 0; round < 2000; ++round)
+    {
+        const auto snapshot = randomSnapshotWithLanes (numbers);
+        const auto events = expandAll (snapshot, 0, 100);
+
+        int lastOfController[4] = { none, none, none, none };
+        int lastProgram = none;
+        auto event = events.begin();
+
+        for (std::int64_t tick = 0; tick <= 100; ++tick)
+        {
+            // Everything before the tick has been played.
+            for (; event != events.end() && event->tick < tick; ++event)
+            {
+                if (event->kind == Kernel::EventKind::cc)
+                    lastOfController[event->a] = event->b;
+                else if (event->kind == Kernel::EventKind::programChange)
+                    lastProgram = event->a;
+            }
+
+            const auto chased = Kernel::chase (snapshot, 0, tick);
+
+            INFO ("snapshot " << round << ", tick " << tick);
+            REQUIRE (chased.controllerValues[1] == lastOfController[1]);
+            REQUIRE (chased.controllerValues[2] == lastOfController[2]);
+            REQUIRE (chased.controllerValues[3] == lastOfController[3]);
+            REQUIRE (chased.program == lastProgram);
+        }
+    }
 }

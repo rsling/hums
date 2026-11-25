@@ -1,0 +1,37 @@
+# Two lanes overriding the same CC (docs/RENDERING.md -> AutomationLane
+# merge): later lanes win over earlier ones.
+#
+# The track's clip is 3840 long, placed from 0 to 3840, and sends cc 74 = 20
+# at 0.
+#
+# The earlier lane's clip is 960 long: cc 74 = 60 at 0, cc 74 = 70 at 480.
+# Its placement lies from 480 to 2880, so its events fall on 480 (60), 960
+# (70), 1440 (60), 1920 (70) and 2400 (60).
+#
+# The later lane's clip is 480 long: cc 74 = 100 at 240. Its placement lies
+# from 960 to 1920, so its events fall on 1200 and 1680.
+#
+# 0: the clip's 20.
+# 480: the earlier lane alone owns cc 74: its 60.
+#
+# 960 to 1920: both lanes own cc 74, and the later one has it. The earlier
+# lane's 70 of 960 and its 60 of 1440 are held back; the later lane's 100
+# goes out at 1200 and 1680.
+#
+# 1920: the later lane's placement ends while the earlier lane's still runs.
+# The controller goes back to the earlier lane, not to the track's clip
+# (decided 25 Nov 2026): its last value before 1920, the 60 of 1440 that was
+# held back, is restored. Then the earlier lane's own event of 1920, the 70.
+#
+# 2400: the earlier lane's 60.
+#
+# 2880: the earlier lane's placement ends, and no lane owns cc 74 any more:
+# the clip's last value, the 20 of tick 0, is restored.
+0 0 1 cc 74 20
+480 0 1 cc 74 60
+1200 0 1 cc 74 100
+1680 0 1 cc 74 100
+1920 0 1 cc 74 60
+1920 0 1 cc 74 70
+2400 0 1 cc 74 60
+2880 0 1 cc 74 20

@@ -1,0 +1,48 @@
+<!-- Golden case: two AutomationLanes overriding the same CC. Both own cc 74; the later lane wins where both lie, and where it ends the earlier lane has the controller again. -->
+<Project schemaVersion="1" name="Two AutomationLanes on one CC" ppq="960">
+  <Routing>
+    <Player id="5ae5cca23a7d4f29b60aac16b6ffda60" name="Synth"/>
+    <PadMap/>
+  </Routing>
+  <Timeline>
+    <TempoEvent tick="0" bpm="120"/>
+    <TimeSigEvent tick="0" numerator="4" denominator="4"/>
+  </Timeline>
+  <ClipPool>
+    <Clip id="c1be7037bf6b4dba98bc01cde679c909" name="Filter once" kind="event" loopLength="3840">
+      <Events>
+        <Event tick="0" kind="cc" a="74" b="20"/>
+      </Events>
+    </Clip>
+    <Clip id="c0128bd63d9d42bbbe56829f528626cb" name="Earlier lane" kind="event" loopLength="960">
+      <Events>
+        <Event tick="0" kind="cc" a="74" b="60"/>
+        <Event tick="480" kind="cc" a="74" b="70"/>
+      </Events>
+    </Clip>
+    <Clip id="a25275bac22e4c65b4d48d0f5259478c" name="Later lane" kind="event" loopLength="480">
+      <Events>
+        <Event tick="240" kind="cc" a="74" b="100"/>
+      </Events>
+    </Clip>
+  </ClipPool>
+  <Tracks>
+    <Track id="1554784efa3d456c948bdbb3ca5c6d56" name="Lead" playerId="5ae5cca23a7d4f29b60aac16b6ffda60" channel="1">
+      <Placements>
+        <Placement id="75471fd1442f45ac98c678311199af22" clipId="c1be7037bf6b4dba98bc01cde679c909" start="0" length="3840"/>
+      </Placements>
+      <AutomationLanes>
+        <AutomationLane id="674f542af47f4b498c7321a11315b12b" name="Earlier">
+          <Placement id="097e2e8e06cb4de891d85da284c4b1b9" clipId="c0128bd63d9d42bbbe56829f528626cb" start="480" length="2400"/>
+        </AutomationLane>
+        <AutomationLane id="b4c4173854fb479bb9146d399012176a" name="Later">
+          <Placement id="a5c3ad9572df43ba844a4da3f70be9d8" clipId="a25275bac22e4c65b4d48d0f5259478c" start="960" length="960"/>
+        </AutomationLane>
+      </AutomationLanes>
+      <Knobs/>
+      <Slots/>
+    </Track>
+  </Tracks>
+  <Session/>
+  <UiState/>
+</Project>
