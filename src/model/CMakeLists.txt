@@ -92,6 +92,8 @@ hums_add_layer(hums_model
         commands/PlacementCommands.h
         commands/PlacementOffsets.cpp
         commands/PlacementOffsets.h
+        commands/ProjectCommands.cpp
+        commands/ProjectCommands.h
         commands/RefcountGate.cpp
         commands/RefcountGate.h
         commands/RoutingCommands.cpp

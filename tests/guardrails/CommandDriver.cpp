@@ -10,6 +10,7 @@
 #include "model/commands/NodeLookup.h"
 #include "model/commands/PadMapCommands.h"
 #include "model/commands/PlacementCommands.h"
+#include "model/commands/ProjectCommands.h"
 #include "model/commands/RoutingCommands.h"
 #include "model/commands/SessionCommands.h"
 #include "model/commands/SlotCommands.h"
@@ -63,6 +64,7 @@ namespace
 const std::vector<CommandDriver::TableEntry>& CommandDriver::table()
 {
     static const std::vector<TableEntry> entries {
+        { "setProjectName", &CommandDriver::setProjectName, false },
         { "addPerformer", &CommandDriver::addPerformer, true },
         { "removePerformer", &CommandDriver::removePerformer, true },
         { "setPerformerName", &CommandDriver::setPerformerName, true },
@@ -380,6 +382,16 @@ std::vector<juce::ValueTree> CommandDriver::clips() const
 int CommandDriver::refcountOf (const juce::ValueTree& clip) const
 {
     return model::TracksModel (project.getChildWithName (ids::Tracks)).getRefcount (PropertyReader::getRequiredString (clip, ids::id));
+}
+
+//==============================================================================
+// Project.
+
+CommandChecks::Attempt CommandDriver::setProjectName()
+{
+    // Any text is a name, so the command has no invalid form.
+    const auto name = text();
+    return made ("setProjectName (" + quoted (name) + ")", true, commands::setProjectName (project, name, undoManager));
 }
 
 //==============================================================================

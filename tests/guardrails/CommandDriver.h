@@ -154,6 +154,9 @@ private:
     model::commands::CellValues cellValues();
     model::commands::CellValues noCellValues();
 
+    // Project.
+    Attempt setProjectName();
+
     // Routing.
     Attempt addPerformer();
     Attempt removePerformer();

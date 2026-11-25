@@ -33,6 +33,7 @@ hums_add_test_executable(model_tests
     PlacementModelTest.cpp
     PlayerModelTest.cpp
     ProjectModelTest.cpp
+    ProjectCommandsTest.cpp
     PropertyReaderTest.cpp
     RefcountGateTest.cpp
     RoutingCommandsTest.cpp
