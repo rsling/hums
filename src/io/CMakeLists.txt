@@ -1,18 +1,25 @@
-# io/: ProjectFile, XmlWellFormedness, SmfExport, SmfImport, Migrations.
+# io/: ProjectFile, XmlWellFormedness, Migrations, and the Standard MIDI File:
+# SmfFile, SmfTrack and SmfEvent (what a file holds), SmfReader and SmfWriter
+# (its bytes), SmfExport, SmfImport.
 #
-# io/ may include render/ (CLAUDE.md -> Layers and dependencies), but only SMF
-# export and import need it, and they arrive at milestone 2 together with
-# render/'s first sources. Until then hums_render is not a target, and naming
-# it here would stop configure. Milestone 1's io/ (ProjectFile, XmlWellFormedness, Migrations)
-# includes model/ only. Add hums_render to LAYERS with the first Smf* source
-# (docs/MILESTONES.md, milestone 2).
+# io/ may include render/ (CLAUDE.md -> Layers and dependencies), and
+# hums_render is among its layers since the first Smf* source
+# (docs/MILESTONES.md, milestone 2), although only SMF export and import will
+# need it.
 hums_add_layer(hums_io
     SOURCES
         Migrations.cpp
         Migrations.h
         ProjectFile.cpp
         ProjectFile.h
+        SmfEvent.h
+        SmfFile.h
+        SmfReader.cpp
+        SmfReader.h
+        SmfTrack.h
+        SmfWriter.cpp
+        SmfWriter.h
         XmlWellFormedness.cpp
         XmlWellFormedness.h
-    LAYERS hums_model
+    LAYERS hums_model hums_render
     JUCE)

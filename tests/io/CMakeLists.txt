@@ -5,6 +5,8 @@ hums_add_test_executable(io_tests
     MigrationsTest.cpp
     ProjectFileTest.cpp
     SaveBackupTest.cpp
+    SmfReaderTest.cpp
+    SmfWriterTest.cpp
     XmlWellFormednessTest.cpp)
 target_link_libraries(io_tests PRIVATE
     hums_io

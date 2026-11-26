@@ -152,7 +152,9 @@ src/
                        PlacementOffsets what every change of a clip's loop length does to the offsets of its placements,
                        NoteValues, EventValues and CellValues what a note, an event and a cell are made of, as the content commands take them
   io/                  ProjectFile (XML, canonical writer, load sequence, atomic save), XmlWellFormedness (what the load asks of a file's text
-                       that JUCE's parser does not), SmfExport, SmfImport, Migrations (ordered step table)
+                       that JUCE's parser does not), Migrations (ordered step table); for the Standard MIDI File SmfFile, SmfTrack and
+                       SmfEvent (what a file holds, as plain data in file order), SmfReader and SmfWriter (its bytes, ours and not
+                       juce::MidiFile, whose reader reorders), SmfExport, SmfImport
   render/              document → plain data, and the playback kernel shared by engine and export
     snapshot/          plain structs only: Snapshot, ClipTemplate, TrackPlan, chase tables — std only
     TempoMap           the one tick ↔ time authority — std only
